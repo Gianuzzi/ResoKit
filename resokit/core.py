@@ -5,9 +5,9 @@ import attrs
 # ####--------------------- FORMATOS DE VARIABLES
 _SEQUENCE_TYPES = (list, tuple, np.ndarray)
 _TIME_SERIES_KWARGS = {
-    "validator": attrs.validators.instance_of(_SEQUENCE_TYPES),
-    "converter": np.asarray,
-    "default": [np.nan],
+    # "validator": attrs.validators.instance_of(_SEQUENCE_TYPES),
+    # "converter": np.asarray,
+    "default": None,
 }
 
 _TABLE_KWARGS = {
@@ -42,26 +42,34 @@ class DynamicPlanet:
     """Time series for the evolution of a planet"""
     
     # input parameters
+    
     time_series_table: pd.DataFrame = attrs.field(**_TABLE_KWARGS)
-    name: str = attrs.field(**_PLNAME_KWARGS)
 
     times: list = attrs.field(**_TIME_SERIES_KWARGS)  # days
     a: list = attrs.field(**_TIME_SERIES_KWARGS)  # AU
     e: list = attrs.field(**_TIME_SERIES_KWARGS)  #
     inc: list = attrs.field(**_TIME_SERIES_KWARGS)  # deg
-    m_anom: list = attrs.field(**_TIME_SERIES_KWARGS)  # M , deg
+    m_an: list = attrs.field(**_TIME_SERIES_KWARGS)  # M , deg
     w: list = attrs.field(**_TIME_SERIES_KWARGS)  # deg
     Omega: list = attrs.field(**_TIME_SERIES_KWARGS)  # deg
     
     mass: float = attrs.field(**_CONSTANT_KWARGS)  # earth masses
     radius: float = attrs.field(**_CONSTANT_KWARGS)  # earth radii
 
-    is_star: bool = attrs.field(**_BOOL_KWARGS)
+    is_star: bool = attrs.field(**_BOOL_KWARGS) # is_star flag
 
-    # def __attrs_post_init__(self):
-    #     table_elems = self.time_series_table.columns
-    #     for elem in table_elems:
-    #         setattr(self, elem, self.time_series_table[elem])
+    name: str = attrs.field(**_PLNAME_KWARGS) # planets name
+    
+    M : list = attrs.field(**_TIME_SERIES_KWARGS)  # mean anomaly, only for usr
+    lam : list = attrs.field(**_TIME_SERIES_KWARGS) # mean longitude
+    
+    def __attrs_post_init__(self):
+        if self.m_an is not None: self.M = self.m_an
+        if self.M is not None and \
+           self.w is not None and \
+           self.Omega is not None:
+            lam = (self.M+self.w+self.Omega)%360
+            self.lam = lam
 
     def planet_method(self): ...
 
@@ -121,5 +129,5 @@ class DynamicSystem:
 
         # Additional calculated attributes
         self.npl = len(self.planets)
-
+        
     def system_method(self): ...
