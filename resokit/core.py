@@ -1,76 +1,84 @@
 import numpy as np
-import pandas as pd
 import attrs
 
-# ####--------------------- FORMATOS DE VARIABLES
-_SEQUENCE_TYPES = (list, tuple, np.ndarray)
-_TIME_SERIES_KWARGS = {
-    # "validator": attrs.validators.instance_of(_SEQUENCE_TYPES),
-    # "converter": np.asarray,
-    "default": None,
-}
+# Custom validators
+def _validate_sequence(instance, attribute, value):
+    if value is not None and not isinstance(value, (list, tuple, np.ndarray)):
+        raise TypeError(f"{attribute.name} must be a list, tuple, np.ndarray, \
+                        or None.")
 
-_TABLE_KWARGS = {
-    "validator": attrs.validators.instance_of(pd.DataFrame),
-    "factory": pd.DataFrame,
-}
+def _validate_constant(instance, attribute, value):
+    if value is not None and not isinstance(value, (int, float)):
+        raise TypeError(f"{attribute.name} must be an int, float, or None.")
 
-_PLNAME_KWARGS = {
-    "validator": attrs.validators.instance_of(str),
-    "default": "",
-}
+# Converter to ensure sequences are converted to numpy arrays if not None
+def _to_numpy_array(value):
+    return np.array(value) if value is not None else None
 
-_CONSTANT_KWARGS = {
-    "validator": attrs.validators.instance_of((int,float,type(None))),
-    "default": np.nan,
-}
+# Join validator and converter
+_TIME_SEQ_VALID_AND_CONV={
+    'validator':_validate_sequence,
+    'converter':_to_numpy_array}
 
-_BOOL_KWARGS = {
-    "validator": attrs.validators.instance_of(bool),
-    "default": False,
-}
+# Utility functions
+def _exists(var):
+    return var is not None
 
-_INTEGER_KWARGS = {
-    "validator": attrs.validators.instance_of(int),
-    "default": 0,
-}
-
-
+def _everything_exists(*variables):
+    return(all([_exists(var) for var in variables]))
+    
 #####--------------------- DynamicPlanet
 @attrs.define(frozen=False, slots=True, repr=False)
 class DynamicPlanet:
     """Time series for the evolution of a planet"""
     
-    # input parameters
+    # Input time arrays
+    times: list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) # yr
+    a:     list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) # AU
+    e:     list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) #
+    inc:   list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) # deg
+    M:     list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) # deg
+    w:     list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) # deg
+    Omega: list = attrs.field(default=None,**_TIME_SEQ_VALID_AND_CONV) # deg
     
-    time_series_table: pd.DataFrame = attrs.field(**_TABLE_KWARGS)
-
-    times: list = attrs.field(**_TIME_SERIES_KWARGS)  # days
-    a: list = attrs.field(**_TIME_SERIES_KWARGS)  # AU
-    e: list = attrs.field(**_TIME_SERIES_KWARGS)  #
-    inc: list = attrs.field(**_TIME_SERIES_KWARGS)  # deg
-    m_an: list = attrs.field(**_TIME_SERIES_KWARGS)  # M , deg
-    w: list = attrs.field(**_TIME_SERIES_KWARGS)  # deg
-    Omega: list = attrs.field(**_TIME_SERIES_KWARGS)  # deg
+    # Input constants
+    mass:   float = attrs.field(default=None,validator=_validate_constant)  # earth masses
+    radius: float = attrs.field(default=None,validator=_validate_constant)  # earth radii
     
-    mass: float = attrs.field(**_CONSTANT_KWARGS)  # earth masses
-    radius: float = attrs.field(**_CONSTANT_KWARGS)  # earth radii
-
-    is_star: bool = attrs.field(**_BOOL_KWARGS) # is_star flag
-
-    name: str = attrs.field(**_PLNAME_KWARGS) # planets name
+    # Flags
+    is_star: bool = attrs.field(default=False) # is_star flag
     
-    M : list = attrs.field(**_TIME_SERIES_KWARGS)  # mean anomaly, only for usr
-    lam : list = attrs.field(**_TIME_SERIES_KWARGS) # mean longitude
+    # Additional info
+    name: str = attrs.field(default="", # planets name
+                            validator=attrs.validators.instance_of(str)) 
     
-    def __attrs_post_init__(self):
-        if self.m_an is not None: self.M = self.m_an
-        if self.M is not None and \
-           self.w is not None and \
-           self.Omega is not None:
-            lam = (self.M+self.w+self.Omega)%360
-            self.lam = lam
-
+    # Calculated arrays
+    _varpi : list = attrs.field(init=False,
+                                default=None,
+                                validator=_validate_sequence) # mean longitude
+    _lam : list = attrs.field(init=False,
+                              default=None,
+                              validator=_validate_sequence) # mean longitude
+  
+    @property
+    def varpi(self):
+        if not _everything_exists(self.w,self.Omega):
+            raise TypeError("'w' and 'Omega' are \
+                            required to calculate 'varpi'")
+        elif self._varpi is None:
+            self._varpi=(self.w+self.Omega)%360
+        return(self._varpi)            
+    
+    @property
+    def lam(self):
+        if not _everything_exists(self.M,self.w,self.Omega):
+            raise TypeError("'M', 'w' and 'Omega' are\
+                            required to calculate 'varpi'")
+        elif self._lam is None:
+            self._lam = (self.M+self.w+self.Omega)%360
+        return(self._lam)
+        
+    
     def planet_method(self): ...
 
 
@@ -82,52 +90,41 @@ class Star:
 
     """
 
-    mass: float = attrs.field(init=False,**_CONSTANT_KWARGS)  # solar masses
-    radius: float = attrs.field(init=False,**_CONSTANT_KWARGS)  # solar radii
-    teff: float = attrs.field(init=False,**_CONSTANT_KWARGS)  # kelvin
-    met: float = attrs.field(init=False,**_CONSTANT_KWARGS)
+    mass: float = attrs.field(default=None,validator=_validate_constant)  # solar masses
+    radius: float = attrs.field(default=None,validator=_validate_constant)  # solar radii
 
     def star_method(self): ...
 
 
-#####--------------------- DynamicSystem
-#####--------------------- FORMATO DE VARIABLES
-_STAR_OBJECT_KWARGS = {
-    "validator": attrs.validators.instance_of(Star),
-    "default": Star(),  # empty star
-}
-
-_PLANET_OBJECT_KWARGS = {
-    "validator": attrs.validators.instance_of((list, tuple, np.ndarray)),
-    "default": [np.nan],
-}
-
+_LIST_OF_PLANETS_VALID = attrs.validators.deep_iterable(
+    member_validator=attrs.validators.instance_of(DynamicPlanet)
+    )
 
 @attrs.define(repr=False)
 class DynamicSystem:
     """Global properties of the system"""
 
-    nstars: int = attrs.field(**_INTEGER_KWARGS)
-    star: Star = attrs.field(**_STAR_OBJECT_KWARGS)
-    planets: list = attrs.field(**_PLANET_OBJECT_KWARGS)
-    npl: int = attrs.field(init=False, **_INTEGER_KWARGS)
+    nstars: int = attrs.field(default=1,
+                              validator=attrs.validators.instance_of(int))
+    star: Star = attrs.field(default=Star(),
+                             validator=attrs.validators.instance_of(Star))
+    planets: list = attrs.field(default=[],validator=_LIST_OF_PLANETS_VALID)
+    npl: int = attrs.field(init=False)
+    times: list = attrs.field(init=False,
+                              default=None,
+                              **_TIME_SEQ_VALID_AND_CONV)
 
     def __attrs_post_init__(self):
-        """Validate types of star and planets,
-        AND add calculated attributes.
-
-        """
-        # Validation
-        if not isinstance(self.star, Star):
-            raise TypeError("star must be of type Star")
-
-        for ith, planet in enumerate(self.planets):
-            if not isinstance(planet, DynamicPlanet):
-                raise TypeError(
-                    f"planet {ith+1} must be of type DynamicPlanet"
-                )
-
-        # Additional calculated attributes
+        self.times = self.planets[0].times
         self.npl = len(self.planets)
         
-    def system_method(self): ...
+    def prat(self):
+        masses = np.asarray([pli.mass for pli in self.planets])
+        if not all(masses):
+            mu_l = 1
+            Warning('Assuming mass=0 for planets in calculating prat')
+        else:
+            mu_l = (self.star.mass + masses) # neglect factor G because of ratios
+        nl = np.asarray([(mu_l/pli.a**3)**0.5 for pli in self.planets])
+        prat = nl[:-1]/nl[1:]
+        return(prat)

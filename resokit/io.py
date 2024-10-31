@@ -10,7 +10,7 @@ ELEM_SPACE = {
     "a": None,
     "e": None,
     "inc": None,
-    "m_an": None,
+    "M": None,
     "w": None,
     "Omega": None,
     "_": None,
@@ -28,12 +28,14 @@ def _my_get_key(df,key):
 def load_integration(
     file,
     npl,
-    names=["time", "ibody", "a", "e", "inc", "m_an", "w", "Omega"],
+    names=["time", "ibody", "a", "e", "inc", "M", "w", "Omega"],
     mass=None,
     radius=None,
     usecols=None,
-    plname=None,
-    is_star=None
+    plnames=None,
+    is_star=None,
+    st_m=None,
+    st_r=None
 ):
     """
     Load integration from file.
@@ -46,8 +48,8 @@ def load_integration(
         Number of planets.
     names : list of str, optional
         Contents of the columns. Can only include the terms ["time", "ibody",
-        "a", "e", "inc", "m_an", "w", "Omega", "mass", "_"]. Use "_" for 
-        throwaways. The default is ["time", "ibody", "a", "e", "inc", "m_an", 
+        "a", "e", "inc", "M", "w", "Omega", "mass", "_"]. Use "_" for 
+        throwaways. The default is ["time", "ibody", "a", "e", "inc", "M", 
         "w", "Omega"].
     mass : list of floats, optional
         Planet masses in Earth masses.
@@ -85,6 +87,9 @@ def load_integration(
             is_star = is_star_list[1:]
         else:
             raise Exception('bad use of is_star')
+    
+    if plnames and len(plnames)!=npl:
+            raise ValueError('Shape of plnames mismatch')
             
     # =============== READ DATA =============== #
     # select parameters with usecols
@@ -123,49 +128,41 @@ def load_integration(
     # set default values of mass and radius to list of nones
     if mass is None: mass = [None]*npl
     if radius is None: radius = [None]*npl
-    if plname is None: plname = [""]*npl
+    if plnames is None: plnames = [""]*npl
+    if is_star is None: is_star = [False]*npl
     
     # always use a list of masses
     if ('mass' in names):
         mass=data['mass'].values[:npl]
-
-    # # fill empty columns
-    # for namei in ELEM_SPACE:
-    #     if (namei not in names) and (namei!='_'):
-    #         dummy_col=np.ones(nrows)*np.nan
-    #         data[namei] = dummy_col
-
-    # =============== CREATE DYNAMICPLANETS =============== #
-    # data = _mod_dataframe(data)
-    # return(data)
+        
+    # construct DynamicPlanets objects
     planets = []
     for ipl in range(npl):
         ith_pl = data[data["ibody"] == ipl + 1]
         ith_pl_obj = DynamicPlanet(
-            times=_my_get_key(ith_pl, 'times'),
-            a =   _my_get_key(ith_pl, 'times'),
-            e =   _my_get_key(ith_pl, 'e'),
-            inc=  _my_get_key(ith_pl, 'inc'),
-            m_an= _my_get_key(ith_pl, 'm_an'),
-            w =   _my_get_key(ith_pl, 'w'),
-            Omega=_my_get_key(ith_pl, 'Omega'),
+            times = _my_get_key(ith_pl, 'times'),
+            a =     _my_get_key(ith_pl, 'a'),
+            e =     _my_get_key(ith_pl, 'e'),
+            inc =   _my_get_key(ith_pl, 'inc'),
+            M =     _my_get_key(ith_pl, 'M'),
+            w =     _my_get_key(ith_pl, 'w'),
+            Omega = _my_get_key(ith_pl, 'Omega'),
             mass=mass[ipl],
             radius=radius[ipl],
-            name=plname[ipl],
+            name=plnames[ipl],
             is_star=is_star[ipl]
             )
         planets.append(ith_pl_obj)
 
     # =============== CREATE STAR =============== #
-    star = Star()
+    star = Star(mass=st_m,radius=st_r)
     return DynamicSystem(star=star, planets=planets)
 
 
 sys1 = load_integration(
     "datasets/2planet_example.dat",
     npl=2,
-    names=["times", "ibody", "a", "e", "_", "m_an", "w", "Omega", "_", "_"],
-    is_star=[1,2]
+    names=["times", "ibody", "a", "e", "_", "_", "w", "Omega", "_", "_"],
 )
 
 pl1 = sys1.planets[0]
