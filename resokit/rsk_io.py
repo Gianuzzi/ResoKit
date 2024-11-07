@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import attrs
-from core import DynamicPlanet, Star, DynamicSystem
+from rsk_core import DynamicPlanet, Star, DynamicSystem
 
 # allowed inputs
 ELEM_SPACE = {
