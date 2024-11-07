@@ -28,8 +28,10 @@ __version__ = "0.1.0"
 # IMPORTS
 # =============================================================================
 
-from . import tools  # noqa
+# from . import tools  # noqa
 from . import datasets  # noqa
+from . import core  # noqa
+from . import io  # noqa
 
 # =============================================================================
 # FUNCTIONS

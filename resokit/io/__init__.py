@@ -13,15 +13,14 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.datasets module includes tools for loading datasets."""
+"""The ResoKit.io module includes tools for input/output operations."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-from .databases import (  # noqa
-    download_dataset,  # noqa
-    load_dataset,  # noqa
-    clear_memory,  # noqa
+from .io import (  # noqa
+    load_system_from_eu,  # noqa
+    load_system_from_nasa,  # noqa
+    load_reso_dataset,  # noqa
 )  # noqa
-from .query import query_exoplanet_data  # noqa

@@ -8,224 +8,252 @@
 # DOCS
 # ============================================================================
 
-"""Module to query exoplanet.eu and nasa datasets."""
+"""Module to query exoplanet.eu and NASA datasets with optimized structure."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
 from io import BytesIO
-
-import requests
 import pandas as pd
-from astropy.io.votable import parse_single_table
-from astropy.table import Table
+from resokit.utils import __assert_module_imported
+from resokit.io.io import _convert_to_resokit_format
 
-# from .databases import PATH
+try:
+    import requests
 
-# ============================================================================
+    requests_imported = True
+except ImportError:
+    requests_imported = False
+
+try:
+    from astropy.table import Table
+    from astropy.io.votable import parse_single_table
+
+    astropy_imported = True
+except ImportError:
+    astropy_imported = False
+
+# =============================================================================
 # CONSTANTS
-# ============================================================================
+# =============================================================================
 
-EU_QUERY_URL = "http://voparis-tap-planeto.obspm.fr/tap/sync?lang=ADQL&"
-NASA_QUERY_URL = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?"
+QUERY_URL = {
+    "eu": "http://voparis-tap-planeto.obspm.fr/tap/sync?lang=ADQL&",
+    "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?",
+}
 
-
-# ============================================================================
+# =============================================================================
 # FUNCTIONS
-# ============================================================================
+# =============================================================================
 
 
-def _create_query(
+def _build_query(
     source: str,
     select: str = "*",
-    alias: str = None,
-    where: list = None,
-    order_by: str = None,
-) -> str:
+    alias: str = "",
+    conditions: str = "",
+    order_by: str = "",
+):
     """
-    Create the query for the exoplanet.eu or nasa datasets
+    Construct a query for the specified dataset source.
 
     Parameters
     ----------
     source : str
-        The source from which to download the dataset.
-        The options are "eu" or "nasa".
-    select : str
-        The columns to select.
-        Default is "*".
-    alias : str
-        The alias (as) for the the column/table.
-        Default is None.
-    where : list
-        The conditions to filter the data.
-        Default is None.
-    order_by : str
-        The column to order the data by.
-        Default is None.
+        Data source identifier ('eu' or 'nasa').
+    select : str, optional
+        Columns to select in the query (default is '*').
+    alias : str, optional
+        Optional alias for the table or columns.
+    conditions : list of str, optional
+        List of conditions for WHERE clause.
+    order_by : str, optional
+        Column name for ORDER BY clause.
 
     Returns
     -------
-    The query as a string.
+    str
+        Constructed query string.
     """
+    source = source.lower()
 
-    # Check the input
     if not isinstance(select, str):
         raise ValueError("Select must be a string.")
 
-    # Create the query
-    query = f"select {select} "
-
-    # Add the alias
-    if alias is not None:
+    query = f"SELECT {select} "
+    if alias:
         if not isinstance(alias, str):
             raise ValueError("Alias must be a string.")
-        query += f"as {alias} "
+        query += f"AS {alias} "
 
-    # Add the table
-    if source == "nasa":
-        query += " from ps"
-    elif source == "eu":
-        query += " from exoplanet.epn_core"
-    else:
-        raise ValueError("Source must be 'eu' or 'nasa'.")
+    query += "FROM ps" if source == "nasa" else "FROM exoplanet.epn_core"
 
-    # Add the where clause
-    if where is not None:
-        if isinstance(where, str):
-            query += f" where {where}"
-        elif isinstance(where, list):
-            query += " where ("
-            for condition in where:
-                query += f"({condition}) and "
-            query = query[:-5]
-            query += ")"
-        else:
-            raise ValueError("Where must be a string or a list.")
+    # WHERE clause
+    if conditions:
+        where_conditions = [f"({condition})" for condition in conditions]
+        query += f" WHERE {' AND '.join(where_conditions)}"
 
-    # Add the order by clause
-    if order_by is not None:
+    # ORDER BY clause
+    if order_by:
         if not isinstance(order_by, str):
             raise ValueError("Order by must be a string.")
-        query += f" order by {order_by}"
+        query += f" ORDER BY {order_by}"
 
     return query
 
 
-def query_from_db(
-    source: str,
-    target_name: str = None,
-    star_name: str = None,
-    default_flag: int = 1,
-) -> pd.DataFrame:
+def _execute_query(query: str, source: str):
     """
-    Query the exoplanet.eu dataset
+    Execute a query on the specified dataset source.
 
     Parameters
     ----------
+    query : str
+        Query string to execute.
     source : str
-        The source from which to download the dataset.
-        The options are "eu" or "nasa".
-    system_name : str
-        The name of the system.
-        Default is None.
-    star_name : str
-        The name of the star.
-        Default is None.
-    default_flag : int
-        Return only default system values.
-        Default is 1.
+        Data source identifier ('eu' or 'nasa').
 
     Returns
     -------
-    The dataset as a pandas DataFrame.
+    pd.DataFrame
+        Resulting dataset as a pandas DataFrame.
     """
+    __assert_module_imported(requests_imported, "requests")
+    source = source.lower()
+    url = QUERY_URL[source]
+    query_url = (
+        "query="
+        + query.replace(" ", "+")
+        + ("&format=csv" if source == "nasa" else "")
+    )
 
-    # Check the input
-    if target_name is None and star_name is None:
-        raise ValueError(
-            "At least one of system_name or star_name must be provided."
-        )
+    try:
+        response = requests.get(url + query_url)
+        response.raise_for_status()
 
-    # Create the query
-    if target_name is not None:
-        target = "target_name" if source == "eu" else "pl_name"
-        query = _create_query(
-            source=source,
-            where=[f"{target}='{target_name}'"],
-        )
-    else:
-        star = "star_name" if source == "eu" else "hostname"
-        query = _create_query(
-            source=source,
-            where=[f"{star}='{star_name}'"],
-        )
-
-    # Add the default flag
-    if default_flag and source == "nasa":
-        query += " and default_flag=1"
-
-    # Format the query
-    query = "query=" + query.replace(" ", "+")
-
-    # Query the dataset
-    if source == "nasa":
-        # Extra format to the query
-        query += "&format=csv"
-        print(f"Running table query: {query}...")
-        print(f" from NASA dataset: {NASA_QUERY_URL}...")
-        # Fetch the data
-        with requests.get(NASA_QUERY_URL + query) as response:
-            data = pd.read_csv(BytesIO(response.content))
-
-    elif source == "eu":
-        print(f"Running table query: {query}...")
-        print(f" from EU dataset: {EU_QUERY_URL}...")
-        # Fetch the data
-        with requests.get(EU_QUERY_URL + query) as response:
-            # votable: astropy + pandas
-            data = Table.read(BytesIO(response.content)).to_pandas()
-
-    else:
-        raise ValueError("Source must be 'eu' or 'nasa'.")
-
-    return data
-
-
-def __query_dataset_length(source: str) -> int:
-    """
-    Query the dataset length
-
-    Parameters
-    ----------
-    source : str
-        The source from which to download the dataset.
-        This should be a string identifier for the source.
-        Options are "eu" or "nasa".
-
-    Returns
-    -------
-    The length of the dataset.
-    """
-
-    if source == "nasa":
-        url = NASA_QUERY_URL
-        query = "query=select+count(*)+from+ps&format=csv"
-    elif source == "eu":
-        url = EU_QUERY_URL
-        query = "query=select+count(*)+from+exoplanet.epn_core"
-    else:
-        raise ValueError("Source must be 'eu' or 'nasa'.")
-
-    print(f"Fetching table length from {url}...")
-    with requests.get(url + query) as response:
         if source == "nasa":
-            # Split the response by lines and get the second line
-            data = response.text.splitlines()
-            lines = int(data[1])
+            return pd.read_csv(BytesIO(response.content))
         else:
-            # Parse the votable and get the first value
-            data = parse_single_table(BytesIO(response.content))  # BytesIO
-            lines = data.array[0][0]
+            return Table.read(BytesIO(response.content)).to_pandas()
 
-    return lines
+    except requests.RequestException as e:
+        print(f"Error querying {source.upper()} database: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
+
+
+def query_exoplanet_data(
+    source: str,
+    star_name: str = "",
+    planet_name: str = "",
+    default_flag: int = 1,
+    controversial_flag: int = 0,
+    to_resokit: bool = True,
+):
+    """
+    Query the exoplanet dataset based on specified filters.
+
+    Parameters
+    ----------
+    source : str
+        Data source identifier ('eu' or 'nasa').
+    star_name : str, optional
+        Host star or system name.
+    planet_name : str, optional
+        Planet name.
+    default_flag : int, optional
+        Restrict to default values in NASA dataset (default is 1).
+    controversial_flag : int, optional
+        Restrict to controversial planets in NASA dataset (default is 0).
+    to_resokit : bool, optional
+        Convert the dataset to ResoKit format (default is True).
+
+    Returns
+    -------
+    pd.DataFrame
+        Resulting dataset as a pandas DataFrame.
+    """
+    __assert_module_imported(requests_imported, "requests")
+    if not planet_name and not star_name:
+        raise ValueError(
+            "Either 'planet_name' or 'star_name' must be provided."
+        )
+    if planet_name and star_name:
+        raise ValueError(
+            "Only one of 'planet_name' or 'star_name' can be provided."
+        )
+
+    # Define the target or star field based on the source
+    if source not in ["eu", "nasa"]:
+        raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
+    if source == "eu":
+        field_name = "target_name" if planet_name else "star_name"
+        __assert_module_imported(
+            astropy_imported, "astropy", "Not needed for NASA."
+        )
+    else:
+        field_name = "pl_name" if planet_name else "hostname"
+    filter_value = star_name or planet_name
+    query = _build_query(source, conditions=[f"{field_name}='{filter_value}'"])
+
+    # Add default_flag condition for NASA source
+    if default_flag and source == "nasa":
+        query += " AND default_flag=1"
+    if controversial_flag is not None and source == "nasa":
+        query += f" AND pl_controv_flag={controversial_flag}"
+
+    print(f"Querying {source.upper()} database with query: {query}")
+
+    # Execute query and get results
+    df = _execute_query(query, source)
+
+    if not to_resokit or df.empty:
+        return df
+
+    # Convert to ResoKit format
+    return _convert_to_resokit_format(df, source=source, drop=True)
+
+
+def get_dataset_length(source: str):
+    """
+    Query the length (count) of the dataset from the specified source.
+
+    Parameters
+    ----------
+    source : str
+        Data source identifier ('eu' or 'nasa').
+
+    Returns
+    -------
+    int
+        Number of entries in the dataset.
+    """
+    __assert_module_imported(requests_imported, "requests")
+    source = source.lower()
+    if source == "nasa":
+        query = "query=SELECT+COUNT(*)+FROM+ps&format=csv"
+    elif source == "eu":
+        query = "query=SELECT+COUNT(*)+FROM+exoplanet.epn_core"
+        __assert_module_imported(
+            astropy_imported, "astropy", "Not needed for NASA."
+        )
+    else:
+        raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
+
+    url = QUERY_URL[source]
+
+    try:
+        response = requests.get(url + query)
+        response.raise_for_status()
+
+        # For NASA, parse CSV response
+        if source == "nasa":
+            return int(response.text.splitlines()[1])
+
+        # For EU, parse as VOTable
+        votable = parse_single_table(BytesIO(response.content))
+        return int(votable.array[0][0])
+
+    except requests.RequestException as e:
+        print(f"Error querying {source.upper()} dataset length: {e}")
+        return 0  # Return 0 on error
