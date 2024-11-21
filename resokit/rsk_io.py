@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import attrs
-from rsk_core import DynamicPlanet, Star, DynamicSystem
+import warnings
+from rsk_core import DynamicPlanet, Star, DynamicSystem, Angles
 
 # allowed inputs
 ELEM_SPACE = {
@@ -18,11 +19,15 @@ ELEM_SPACE = {
 }
 
 
-def _my_get_key(df, key):
+def _try_getting(df, key):
     if key in df.columns:
         return df[key].values
-    else:
+    return None
+
+def _set_angle(angls):
+    if angls is None: 
         return None
+    return(Angles(angls))
 
 
 #####--------------------- LOAD INTEGRATION
@@ -141,22 +146,43 @@ def load_integration(
     if "mass" in names:
         mass = data["mass"].values[:npl]
 
-    # construct DynamicPlanets objects
+    # =============== CREATE DYNAMIC PLANETS =============== #
     planets = []
     for ipl in range(npl):
         ith_pl = data[data["ibody"] == ipl + 1]
+        
+        # get everything
+        times_i   = _try_getting(ith_pl, "times")
+        a_i       = _try_getting(ith_pl, "a")
+        e_i       = _try_getting(ith_pl, "e")
+        inc_i     = _try_getting(ith_pl, "inc")
+        M_i       = _try_getting(ith_pl, "M")
+        w_i       = _try_getting(ith_pl, "w")
+        Omega_i   = _try_getting(ith_pl, "Omega")
+        mass_i    = mass[ipl]
+        radius_i  = radius[ipl]
+        name_i    = plnames[ipl]
+        is_star_i = is_star[ipl]
+        
+        # convert angles
+        inc_i   = _set_angle(inc_i)
+        M_i     = _set_angle(M_i)
+        w_i     = _set_angle(w_i)
+        Omega_i = _set_angle(Omega_i)
+        
+        # create the object
         ith_pl_obj = DynamicPlanet(
-            times=_my_get_key(ith_pl, "times"),
-            a=_my_get_key(ith_pl, "a"),
-            e=_my_get_key(ith_pl, "e"),
-            inc=_my_get_key(ith_pl, "inc"),
-            M=_my_get_key(ith_pl, "M"),
-            w=_my_get_key(ith_pl, "w"),
-            Omega=_my_get_key(ith_pl, "Omega"),
-            mass=mass[ipl],
-            radius=radius[ipl],
-            name=plnames[ipl],
-            is_star=is_star[ipl],
+            times   = times_i,
+            a       = a_i,
+            e       = e_i,
+            inc     = inc_i,
+            M       = M_i,
+            w       = w_i,
+            Omega   = Omega_i,
+            mass    = mass_i,
+            radius  = radius_i,
+            name    = name_i,
+            is_star = is_star_i,
         )
         planets.append(ith_pl_obj)
 

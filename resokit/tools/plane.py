@@ -72,9 +72,7 @@ dtype = [
     "int",
 ]
 dtype = dict(zip(cols, dtype))
-data = pd.read_fwf(
-    "geneva.txt", widths=widths, header=None, dtype=dtype, names=cols
-)
+data = pd.read_fwf("geneva.txt", widths=widths, header=None, dtype=dtype, names=cols)
 
 
 # SISTEMA EN CUESTION -- ELEGIR SOLO 1 METODO 1) O 2) Y COMENTAR EL OTRO!!
@@ -85,9 +83,7 @@ data = pd.read_fwf(
 name = "V1298 Tau"
 plnames = data["plname"].values
 if "sysi" in locals():
-    raise Exception(
-        "Ambos métodos de selección de sistemas activados. COMENTAREAR UNO"
-    )
+    raise Exception("Ambos métodos de selección de sistemas activados. COMENTAREAR UNO")
 for i in range(len(plnames)):
     if plnames[i][: len(name)] != name:
         continue
@@ -136,9 +132,7 @@ for r2yi in r2y:
 
 # ---------
 for i in range(npl - 2):
-    plt.scatter(
-        nnl[i], nnl[i + 1], label=str(i + 1) + str(i + 2) + str(i + 3), **pk
-    )
+    plt.scatter(nnl[i], nnl[i + 1], label=str(i + 1) + str(i + 2) + str(i + 3), **pk)
 
 
 plt.xlabel("$n_i / n_{i+1}$      -     " + sys_name)

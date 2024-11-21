@@ -18,9 +18,7 @@ def r3p(x, res):
     return r3p
 
 
-def rmm_in_area(
-    lims, r3p_order=0, r3p_maxint=10, r2p=True, r2p_order=2, r2p_maxint=10
-):
+def rmm_in_area(lims, r3p_order=0, r3p_maxint=10, r2p=True, r2p_order=2, r2p_maxint=10):
     """
     Returns list of 3P-MMR as well as 2P-MMR in the
     x- and y- axes, respectively.
@@ -67,19 +65,13 @@ def rmm_in_area(
                 if [i, j, k] in r3pl:
                     continue
 
-                if (-j / i < l1x) or (
-                    -j / i > l2x
-                ):  # without singularities in domain
+                if (-j / i < l1x) or (-j / i > l2x):  # without singularities in domain
                     # si cruza el eje izquierdo
-                    if (-k / (i * l1x + j) >= l1y) and (
-                        -k / (i * l1x + j) <= l2y
-                    ):
+                    if (-k / (i * l1x + j) >= l1y) and (-k / (i * l1x + j) <= l2y):
                         pass
 
                     # si cruza el eje derecho
-                    elif (-k / (i * l2x + j) >= l1y) and (
-                        -k / (i * l2x + j) <= l2y
-                    ):
+                    elif (-k / (i * l2x + j) >= l1y) and (-k / (i * l2x + j) <= l2y):
                         pass
 
                     # si cruza el eje de abajo
@@ -293,9 +285,7 @@ def mindist_r3p(nnx, nny, mmr3p, return_coords=False, res=1e-6):
 
         if xstuck == "no_conv":
             dom = np.linspace(1, singu - 1e-5, 1000000)
-            mindistl = np.sqrt(
-                (nnxi - dom) ** 2 + (nnyi - r3p(dom, [a, b, c])) ** 2
-            )
+            mindistl = np.sqrt((nnxi - dom) ** 2 + (nnyi - r3p(dom, [a, b, c])) ** 2)
             argmin = np.argmin(mindistl)
             mindist = mindistl[argmin]
             x0 = dom[argmin]
