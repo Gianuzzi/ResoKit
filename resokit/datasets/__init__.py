@@ -19,9 +19,7 @@
 # IMPORTS
 # =============================================================================
 
-from .databases import (  # noqa
-    download_dataset,  # noqa
-    load_dataset,  # noqa
-    clear_memory,  # noqa
-)  # noqa
-from .query import query_exoplanet_data  # noqa
+from .databases import clear_memory  # noqa
+from .databases import download_dataset  # noqa
+from .databases import load_dataset  # noqa
+from .query import query_online_data  # noqa

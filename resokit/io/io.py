@@ -17,25 +17,48 @@
 # IMPORTS
 # =============================================================================
 
+from difflib import SequenceMatcher
+from typing import Union
+
 import pandas as pd
-from resokit.io.utils import _EU_MAPPING, _NASA_MAPPING, __n_close, __similar
-from resokit.datasets import load_dataset
-from resokit.datasets.databases import (
-    _load_dataset_expanded,
-    IN_MEMORY_DATASETS,
-    IN_MEMORY_INDEXES,
+
+from resokit.core import (
+    ResokitDataFrame,
+    StaticPlanet,
+    StaticSystem,
+    df_to_resokit,
+    resokit_to_planet,
+    resokit_to_system,
 )
+from resokit.datasets import load_dataset
+from resokit.utils import DEFAULT_METADATA
 
 # =============================================================================
 # CONSTANTS
 # =============================================================================
 
-MAPPINGS = {"eu": _EU_MAPPING, "nasa": _NASA_MAPPING}
 RATIOS_THRESHOLD = 0.94
 
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
+
+
+def _similar(a: str, b: str) -> float:
+    """
+    Calculate the similarity ratio between two strings.
+    """
+    return SequenceMatcher(None, str(a), b).ratio()
+
+
+def _n_close(a: any, b: str, length: int, n=0) -> bool:
+    """
+    Check if two strings are n spaces-close.
+    """
+    stra = str(a)  # Convert to string
+    return (stra[:length] == str(b)) and (
+        (len(stra) == length + n) or stra[length] == " "
+    )
 
 
 def _search_system_index(
@@ -55,14 +78,14 @@ def _search_system_index(
         Source of the dataset. Either 'eu' or 'nasa'.
     name : str
         Name of the system or planet.
-    is_planet : bool, optional
+    is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
-    store_index : bool, optional
+    store_index : bool, optional. Default: True.
         Whether to store the index in memory.
-    verbose : bool, optional
+    verbose : bool, optional. Default: False.
         Whether to print information.
-    raw_df : pd.DataFrame, optional
-        Raw dataset.
+    raw_df : pd.DataFrame, optional. Default: None.
+        Raw dataset used for the search, instead of loading it.
 
     Returns
     -------
@@ -82,17 +105,13 @@ def _search_system_index(
 
     # Load the dataset if not in memory
     raw_series = (
-        IN_MEMORY_INDEXES[source]
-        if IN_MEMORY_INDEXES[source] is not None
-        else (
-            raw_df
-            if raw_df is not None
-            else _load_dataset_expanded(
-                source=source,
-                only_index=True,
-                verbose=verbose,
-                store=store_index,
-            )
+        raw_df
+        if raw_df is not None
+        else load_dataset(
+            source=source,
+            only_index=True,
+            verbose=verbose,
+            store=store_index,
         )
     )
     raw_series = raw_series[column]  # Get the column
@@ -104,17 +123,17 @@ def _search_system_index(
 
     # If no exact matches, search for 1 space-close names
     length = len(name)
-    close_matches = raw_series.apply(lambda x: __n_close(x, name, length, 1))
+    close_matches = raw_series.apply(lambda x: _n_close(x, name, length, 1))
     if close_matches.any():
         return raw_series[close_matches].index, raw_series[close_matches], 0.9
 
     # If no 1 space-close names, search for 2 space-close names
-    close_matches = raw_series.apply(lambda x: __n_close(x, name, length, 2))
+    close_matches = raw_series.apply(lambda x: _n_close(x, name, length, 2))
     if close_matches.any():
         return raw_series[close_matches].index, raw_series[close_matches], 0.8
 
     # If no 2 space-close names, search for similar names
-    similarity_ratios = raw_series.apply(lambda x: __similar(x, name))
+    similarity_ratios = raw_series.apply(lambda x: _similar(x, name))
     good_matches = similarity_ratios >= RATIOS_THRESHOLD
     similarity_ratios = similarity_ratios[good_matches]
 
@@ -129,135 +148,13 @@ def _search_system_index(
     )
 
 
-def load_system_from_eu(
-    name: str,
-    is_planet: bool = False,
-    load_dataset_kwargs: dict = {},
-    drop: bool = True,
-    store: bool = False,
-    store_index: bool = True,
-    verbose: bool = True,
-    low_memory: bool = False,
-) -> pd.DataFrame:
-    """
-    Load system from ExoplanetEU.
-
-    Parameters
-    ----------
-    name : str
-        System/planet name.
-        (Remember case sensitivity)
-    is_planet : bool, optional
-        Whether to search for a planet or a star.
-    load_dataset_kwargs : dict, optional
-        Keyword arguments for the load_dataset function.
-    drop : bool, optional
-        Whether to drop extra columns.
-    store : bool, optional
-        Whether to store the whole dataset in memory.
-    store_index : bool, optional
-        Whether to store the whole dataset index in memory.
-        Automatically set to True if store is True.
-    verbose : bool, optional
-        Whether to print information.
-    low_memory : bool, optional
-        Whether to avoid loading the whole dataset into memory.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing the system data.
-    """
-    return _load_system_from_db(
-        name=name,
-        is_planet=is_planet,
-        source="eu",
-        load_dataset_kwargs=load_dataset_kwargs,
-        drop=drop,
-        store=store,
-        store_index=store_index,
-        verbose=verbose,
-        low_memory=low_memory,
-    )
-
-
-def load_system_from_nasa(
-    name: str,
-    is_planet: bool = False,
-    load_dataset_kwargs: dict = {},
-    drop: bool = True,
-    store: bool = False,
-    store_index: bool = True,
-    verbose: bool = True,
-    low_memory: bool = False,
-    controversial_set: bool = False,
-    default_set: bool = True,
-) -> pd.DataFrame:
-    """
-    Load system from NASA.
-
-    Parameters
-    ----------
-    name : str
-        System/planet name.
-        (Remember case sensitivity)
-    is_planet : bool, optional
-        Whether to search for a planet or a star.
-    load_dataset_kwargs : dict, optional
-        Keyword arguments for the load_dataset function.
-    drop : bool, optional
-        Whether to drop extra columns.
-    store : bool, optional
-        Whether to store the whole dataset in memory.
-    store_index : bool, optional
-        Whether to store the whole dataset index in memory.
-        Automatically set to True if store is True.
-    verbose : bool, optional
-        Whether to print information.
-    low_memory : bool, optional
-        Whether to avoid loading the whole dataset into memory.
-    controversial_set : bool, optional
-        Whether to include controversial data.
-        None to include all data.
-    default_set : bool, optional
-        Whether to include default data.
-        None to include all data.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame containing the system data.
-    """
-    df = _load_system_from_db(
-        name=name,
-        is_planet=is_planet,
-        source="nasa",
-        load_dataset_kwargs=load_dataset_kwargs,
-        drop=drop,
-        store=store,
-        store_index=store_index,
-        verbose=verbose,
-        low_memory=low_memory,
-    )
-
-    if df.empty:
-        return df
-
-    if controversial_set is not None:  # Filter controversial data
-        df = df[df["controversial"] == int(controversial_set)]
-    if default_set is not None:  # Filter default data
-        df = df[df["default_set"] == int(default_set)]
-    return df
-
-
 def _load_system_from_db(
     name: str,
     is_planet: bool = False,
     source: str = None,
-    load_dataset_kwargs: dict = {},
-    drop: bool = True,
     store: bool = False,
     store_index: bool = True,
+    load_dataset_kwargs: dict = {},
     verbose: bool = True,
     low_memory: bool = False,
 ) -> pd.DataFrame:
@@ -268,41 +165,39 @@ def _load_system_from_db(
     ----------
     name : str
         System/planet name.
-    is_planet : bool, optional
+    is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
-    source : str, optional
+    source : str, optional. Default: None.
         Source of the dataset. Either 'eu' or 'nasa'.
-    load_dataset_kwargs : dict, optional
-        Keyword arguments for the load_dataset function.
-    drop : bool, optional
-        Whether to drop extra columns.
-    store : bool, optional
+    store : bool, optional. Default: False.
         Whether to store the whole dataset in memory.
-    store_index : bool, optional
+    store_index : bool, optional. Default: True.
         Whether to store the whole dataset index in memory.
         Automatically set to True if store is True.
-    verbose : bool, optional
+    load_dataset_kwargs : dict, optional. Default: {}.
+        Extra keyword arguments for the load_dataset function.
+    verbose : bool, optional. Default: True.
         Whether to print information.
-    low_memory : bool, optional
+    low_memory : bool, optional. Default: False.
         Whether to avoid loading the whole dataset into memory.
+        Instead, first loads only the index,
+        and then only the system data.
 
     Returns
     -------
     pd.DataFrame
         DataFrame containing the system data.
     """
+    # Update the keyword arguments
+    load_dataset_kwargs.update({"store": store, "verbose": verbose})
+    # If storing, then load the whole dataset
     if store:
-        store_index = True
-
-    raw_df = IN_MEMORY_DATASETS[source]
-
-    # Load the dataset if not in memory
-    if store or not low_memory:
-        load_dataset_kwargs.update({"store": store, "verbose": verbose})
+        store_index = True  # Store the index if the dataset will be stored
+        low_memory = False  # Load the whole dataset if it will be stored
+    if not low_memory:  # Load the whole dataset
         raw_df = load_dataset(source=source, **load_dataset_kwargs)
-
-    if store and verbose:
-        print(f"Run load_reso_dataset(source='{source}') to load it.")
+    else:
+        raw_df = None
 
     # Search for the system
     idx, values, ratio = _search_system_index(
@@ -317,111 +212,183 @@ def _load_system_from_db(
     # Check if the system was found
     if ratio < 1:
         if is_planet:
-            print(f"Planet {name} not found in {source} dataset.")
+            print(f" Planet {name} not found in {source} dataset.")
         else:
-            print(f"Star {name} not found in {source} dataset.")
+            print(f" Star {name} not found in {source} dataset.")
         if ratio == 0:  # No similar names found
             return pd.DataFrame()
-        # Similar names found
-        print(f"Similar names found in {source} dataset:")
-        print(set(values.values))
-        return pd.DataFrame()
+        # Show similar names found
+        print(f" Similar names found in {source} dataset:")
+        print(f" {set(values.values)}")
+        return pd.DataFrame()  # Return an empty DataFrame
 
     # Load the system
     if raw_df is None:
-        raw_df = _load_dataset_expanded(
-            source=source, only_rows=idx, verbose=verbose
-        )
-        return _convert_to_resokit_format(df=raw_df, source=source, drop=drop)
+        return load_dataset(source=source, only_rows=idx, verbose=verbose)
     else:
-        return _convert_to_resokit_format(
-            df=raw_df.loc[idx], source=source, drop=drop
-        )
+        return raw_df.loc[idx]
 
 
-def _convert_to_resokit_format(
-    df: pd.DataFrame,
-    source: str,
+def load_system_from_eu(
+    name: str,
+    is_planet: bool = False,
+    load_dataset_kwargs: dict = {},
     drop: bool = True,
-    copy: bool = False,
-) -> pd.DataFrame:
-    """
-    Convert ExoplanetEU or NASA dataset to ResoKit format.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input dataset.
-    source : str
-        Source of the dataset. Either 'eu' or 'nasa'.
-    drop : bool
-        Whether to drop columns not in the mapping.
-    copy : bool
-        Whether to return a copy of the DataFrame.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame in ResoKit format.
-    """
-    # Get the new columns dictionary
-    new_cols_dict = MAPPINGS[source]
-
-    # Copy the DataFrame
-    if copy:
-        df = df.copy()
-    # Rename columns
-    df = df.rename(columns=new_cols_dict)
-    # Drop columns not in the mapping
-    if drop:
-        df = df.drop(columns=set(df.columns) - set(new_cols_dict.values()))
-    return df
-
-
-def load_reso_dataset(
-    source: str = "eu",
-    check_age: bool = False,
-    download_if_missing: bool = False,
-    extract: bool = False,
-    verbose: bool = True,
     store: bool = False,
-    drop: bool = True,
-) -> pd.DataFrame:
+    store_index: bool = True,
+    verbose: bool = True,
+    low_memory: bool = False,
+    as_resokit: bool = False,
+) -> Union[ResokitDataFrame, StaticPlanet, StaticSystem]:
     """
-    Load the ExoplanetEU or NASA dataset.
+    Load system from ExoplanetEU.
 
     Parameters
     ----------
-    source : str, optional
-        Source of the dataset. Either 'eu' or 'nasa'.
-    check_age : bool, optional
-        Whether to check the age of the dataset.
-    download_if_missing : bool, optional
-        Whether to download the dataset if missing.
-    extract : bool, optional
-        Whether to extract the dataset.
-    verbose : bool, optional
-        Whether to print information.
-    store : bool, optional
-        Whether to store the whole dataset in memory.
-    drop : bool, optional
+    name : str
+        System/planet name.
+        (Remember case sensitivity)
+    is_planet : bool, optional. Default: False.
+        Whether to search for a planet or a star.
+    load_dataset_kwargs : dict, optional. Default: {}.
+        Keyword arguments for the load_dataset function.
+    drop : bool, optional. Default: True.
         Whether to drop extra columns.
+    store : bool, optional. Default: False.
+        Whether to store the whole dataset in memory.
+    store_index : bool, optional. Default: True.
+        Whether to store the whole dataset index in memory.
+        Automatically set to True if store is True.
+    verbose : bool, optional. Default: True.
+        Whether to print information.
+    low_memory : bool, optional. Default: False.
+        Whether to avoid loading the whole dataset into memory.
+    as_resokit : bool, optional. Default: False.
+        Whether to return the dataset in ResoKit format.
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame containing the dataset.
+    Union[ResokitDataFrame, StaticPlanet, StaticSystem]
+        ResoKit DataFrame (if as_resokit is True),
+        StaticPlanet (if is_planet is True),
+        or StaticSystem (if is_planet is False).
     """
-    source = source.lower()
-
-    df_raw = load_dataset(
-        source=source,
-        check_age=check_age,
-        download_if_missing=download_if_missing,
-        extract=extract,
-        verbose=verbose,
+    df = _load_system_from_db(
+        name=name,
+        is_planet=is_planet,
+        source="eu",
+        load_dataset_kwargs=load_dataset_kwargs,
         store=store,
+        store_index=store_index,
+        verbose=verbose,
+        low_memory=low_memory,
     )
-    df = _convert_to_resokit_format(df=df_raw, source=source, drop=drop)
 
-    return df
+    # Convert the DataFrame to ResoKit format
+    # Note: Metadata is set from default values
+    meta = DEFAULT_METADATA.copy()
+    meta.update({f"load_{'planet' if is_planet else 'system'}": name})
+    reso = df_to_resokit(
+        df=df,
+        source="eu",
+        drop=drop,
+        copy=False,
+        metadata=meta,
+    )
+
+    if not as_resokit:  # Return StaticPlanet or StaticSystem
+        if is_planet:
+            return resokit_to_planet(reso)
+        return resokit_to_system(reso)
+
+    return reso  # Return ResoKit DataFrame
+
+
+def load_system_from_nasa(
+    name: str,
+    is_planet: bool = False,
+    load_dataset_kwargs: dict = {},
+    drop: bool = True,
+    store: bool = False,
+    store_index: bool = True,
+    verbose: bool = True,
+    low_memory: bool = False,
+    controversial_set: bool = False,
+    default_set: bool = True,
+    as_resokit: bool = False,
+) -> Union[ResokitDataFrame, StaticPlanet, StaticSystem]:
+    """
+    Load system from NASA.
+
+    Parameters
+    ----------
+    name : str
+        System/planet name.
+        (Remember case sensitivity)
+    is_planet : bool, optional. Default: False.
+        Whether to search for a planet or a star.
+    load_dataset_kwargs : dict, optional. Default: {}.
+        Keyword arguments for the load_dataset function.
+    drop : bool, optional. Default: True.
+        Whether to drop extra columns.
+    store : bool, optional. Default: False.
+        Whether to store the whole dataset in memory.
+    store_index : bool, optional. Default: True.
+        Whether to store the whole dataset index in memory.
+        Automatically set to True if store is True.
+    verbose : bool, optional. Default: True.
+        Whether to print information.
+    low_memory : bool, optional. Default: False.
+        Whether to avoid loading the whole dataset into memory.
+    controversial_set : bool, optional. Default: False.
+        Whether to include controversial data.
+        None to include all data.
+    default_set : bool, optional. Default: True.
+        Whether to include default data.
+        None to include all data.
+    as_resokit : bool, optional. Default: False.
+        Whether to return the dataset in ResoKit format.
+
+    Returns
+    -------
+    Union[ResokitDataFrame, StaticPlanet, StaticSystem]
+        ResoKit DataFrame (if as_resokit is True),
+        StaticPlanet (if is_planet is True),
+        or StaticSystem (if is_planet is False).
+    """
+    df = _load_system_from_db(
+        name=name,
+        is_planet=is_planet,
+        source="nasa",
+        load_dataset_kwargs=load_dataset_kwargs,
+        store=store,
+        store_index=store_index,
+        verbose=verbose,
+        low_memory=low_memory,
+    )
+
+    # If the DataFrame is empty, return it
+    if not df.empty:
+        if controversial_set is not None:  # Filter controversial data
+            df = df[df["pl_controv_flag"] == int(controversial_set)]
+        if default_set is not None:  # Filter default data
+            df = df[df["default_flag"] == int(default_set)]
+
+    # Convert the DataFrame to ResoKit format
+    # Note: Metadata is set from default values
+    meta = DEFAULT_METADATA.copy()
+    meta.update({f"load_{'planet' if is_planet else 'system'}": name})
+    reso = df_to_resokit(
+        df=df,
+        source="nasa",
+        drop=drop,
+        copy=False,
+        metadata=meta,
+    )
+
+    if not as_resokit:  # Return StaticPlanet or StaticSystem
+        if is_planet:
+            return resokit_to_planet(reso)
+        return resokit_to_system(reso)
+
+    return reso  # Return ResoKit DataFrame

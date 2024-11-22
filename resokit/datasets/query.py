@@ -15,9 +15,19 @@
 # =============================================================================
 
 from io import BytesIO
+from typing import Union
+
 import pandas as pd
-from resokit.utils import __assert_module_imported
-from resokit.io.io import _convert_to_resokit_format
+
+from resokit.core import (
+    ResokitDataFrame,
+    StaticPlanet,
+    StaticSystem,
+    df_to_resokit,
+    resokit_to_planet,
+    resokit_to_system,
+)
+from resokit.utils import assert_module_imported, DEFAULT_METADATA
 
 try:
     import requests
@@ -27,8 +37,8 @@ except ImportError:
     requests_imported = False
 
 try:
-    from astropy.table import Table
     from astropy.io.votable import parse_single_table
+    from astropy.table import Table
 
     astropy_imported = True
 except ImportError:
@@ -54,7 +64,7 @@ def _build_query(
     alias: str = "",
     conditions: str = "",
     order_by: str = "",
-):
+) -> str:
     """
     Construct a query for the specified dataset source.
 
@@ -62,13 +72,13 @@ def _build_query(
     ----------
     source : str
         Data source identifier ('eu' or 'nasa').
-    select : str, optional
+    select : str, optional. Default: '*'.
         Columns to select in the query (default is '*').
-    alias : str, optional
+    alias : str, optional. Default: ''.
         Optional alias for the table or columns.
-    conditions : list of str, optional
+    conditions : list of str, optional. Default: ''.
         List of conditions for WHERE clause.
-    order_by : str, optional
+    order_by : str, optional. Default: ''.
         Column name for ORDER BY clause.
 
     Returns
@@ -119,7 +129,7 @@ def _execute_query(query: str, source: str):
     pd.DataFrame
         Resulting dataset as a pandas DataFrame.
     """
-    __assert_module_imported(requests_imported, "requests")
+    assert_module_imported(requests_imported, "requests")
     source = source.lower()
     url = QUERY_URL[source]
     query_url = (
@@ -138,42 +148,52 @@ def _execute_query(query: str, source: str):
             return Table.read(BytesIO(response.content)).to_pandas()
 
     except requests.RequestException as e:
-        print(f"Error querying {source.upper()} database: {e}")
+        print(f" Error querying {source} database: {e}")
         return pd.DataFrame()  # Return empty DataFrame on error
 
 
-def query_exoplanet_data(
+def query_online_data(
     source: str,
     star_name: str = "",
     planet_name: str = "",
     default_flag: int = 1,
     controversial_flag: int = 0,
-    to_resokit: bool = True,
-):
+    verbose: bool = True,
+    as_resokit: bool = False,
+) -> Union[ResokitDataFrame, StaticPlanet, StaticSystem]:
     """
-    Query the exoplanet dataset based on specified filters.
+    Query the online dataset based on specified filters.
 
     Parameters
     ----------
     source : str
         Data source identifier ('eu' or 'nasa').
-    star_name : str, optional
+    star_name : str, optional. Default: ''.
         Host star or system name.
-    planet_name : str, optional
+    planet_name : str, optional. Default: ''.
         Planet name.
-    default_flag : int, optional
-        Restrict to default values in NASA dataset (default is 1).
-    controversial_flag : int, optional
-        Restrict to controversial planets in NASA dataset (default is 0).
-    to_resokit : bool, optional
-        Convert the dataset to ResoKit format (default is True).
+    default_flag : int, optional. Default: 1.
+        Restrict to default values in NASA dataset.
+    controversial_flag : int, optional. Default: 0.
+        Restrict to controversial planets in NASA dataset.
+    verbose : bool, optional. Default: True.
+        Print query information.
+    as_resokit : bool, optional. Default: False.
+        Whether to return the dataset in ResoKit format.
+
+    Returns
+    -------
+    Union[ResokitDataFrame, StaticPlanet, StaticSystem]
+        ResoKit DataFrame (if as_resokit is True),
+        StaticPlanet (if is_planet is True),
+        or StaticSystem (if is_planet is False).
 
     Returns
     -------
     pd.DataFrame
         Resulting dataset as a pandas DataFrame.
     """
-    __assert_module_imported(requests_imported, "requests")
+    assert_module_imported(requests_imported, "requests")
     if not planet_name and not star_name:
         raise ValueError(
             "Either 'planet_name' or 'star_name' must be provided."
@@ -188,7 +208,7 @@ def query_exoplanet_data(
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
     if source == "eu":
         field_name = "target_name" if planet_name else "star_name"
-        __assert_module_imported(
+        assert_module_imported(
             astropy_imported, "astropy", "Not needed for NASA."
         )
     else:
@@ -202,19 +222,33 @@ def query_exoplanet_data(
     if controversial_flag is not None and source == "nasa":
         query += f" AND pl_controv_flag={controversial_flag}"
 
-    print(f"Querying {source.upper()} database with query: {query}")
+    if verbose:
+        print(f" Querying {source} database with query: {query}")
 
     # Execute query and get results
     df = _execute_query(query, source)
 
-    if not to_resokit or df.empty:
-        return df
-
     # Convert to ResoKit format
-    return _convert_to_resokit_format(df, source=source, drop=True)
+    # Note: Metadata is set from default values
+    meta = DEFAULT_METADATA.copy()
+    meta.update({"query": query})
+    reso = df_to_resokit(
+        df=df,
+        source=source,
+        drop=False,
+        copy=False,
+        metadata=meta,
+    )
+
+    if not as_resokit:  # Return StaticPlanet or StaticSystem
+        if planet_name:
+            return resokit_to_planet(reso)
+        return resokit_to_system(reso)
+
+    return reso  # Return ResoKit DataFrame
 
 
-def get_dataset_length(source: str):
+def get_dataset_length(source: str) -> int:
     """
     Query the length (count) of the dataset from the specified source.
 
@@ -228,13 +262,13 @@ def get_dataset_length(source: str):
     int
         Number of entries in the dataset.
     """
-    __assert_module_imported(requests_imported, "requests")
+    assert_module_imported(requests_imported, "requests")
     source = source.lower()
     if source == "nasa":
         query = "query=SELECT+COUNT(*)+FROM+ps&format=csv"
     elif source == "eu":
         query = "query=SELECT+COUNT(*)+FROM+exoplanet.epn_core"
-        __assert_module_imported(
+        assert_module_imported(
             astropy_imported, "astropy", "Not needed for NASA."
         )
     else:
@@ -255,5 +289,5 @@ def get_dataset_length(source: str):
         return int(votable.array[0][0])
 
     except requests.RequestException as e:
-        print(f"Error querying {source.upper()} dataset length: {e}")
+        print(f" Error querying {source} dataset length: {e}")
         return 0  # Return 0 on error

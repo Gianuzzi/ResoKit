@@ -17,8 +17,14 @@
 # IMPORTS
 # =============================================================================
 
-import attrs
 import warnings
+from collections.abc import Mapping
+from typing import Union
+
+import attrs
+import pandas as pd
+
+from resokit.utils import MAPPINGS, RESO_OB_TYPES, RESO_PL_TYPES, RESO_SR_TYPES
 
 # =============================================================================
 # CONSTANTS
@@ -30,298 +36,949 @@ DEFAULT_FLOAT_ATTRS = {
     "default": None,
 }
 
-# ============================================================================
+# =============================================================================
 # CLASSES
-# ============================================================================
-
-
-@attrs.define(repr=False)
-class Planet:
-    """
-    Planet class representing a planet with various attributes.
-
-    Attributes
-    ----------
-    name : str
-        Name of the planet.
-    mass : float
-        Mass of the planet in Jupiter masses.
-    radius : float
-        Radius of the planet in Jupiter radii.
-    semi_major_axis : float
-        Semi-major axis of the planet's orbit in AU.
-    eccentricity : float
-        Eccentricity of the planet's orbit.
-    inclination : float
-        Inclination of the planet's orbit in degrees.
-    mean_anomaly : float
-        Mean anomaly of the planet in degrees.
-    argument_of_pericenter : float
-        Argument of pericenter in degrees.
-    longitude_of_ascending_node : float
-        Longitude of the ascending node in degrees.
-    star_name : str
-        Name of the star the planet orbits.
-    metadata : dict
-        Additional metadata about the planet.
-    """
-
-    name: str = attrs.field(
-        validator=attrs.validators.instance_of((str, type(None))), default=None
-    )
-
-    mass: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    radius: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    semi_major_axis: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    eccentricity: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    inclination: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    mean_anomaly: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    argument_of_pericenter: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    longitude_of_ascending_node: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-
-    # Calculated properties
-    longitude_of_pericenter_: float = attrs.field(init=False, default=None)
-    mean_longitude_: float = attrs.field(init=False, default=None)
-
-    star_name: str = attrs.field(
-        validator=attrs.validators.instance_of((str, type(None))), default=None
-    )
-
-    metadata: dict = attrs.field(
-        validator=attrs.validators.instance_of(dict), default={}
-    )
-
-    def __attrs_post_init__(self):
-        """Post-initialization hook."""
-        return
-
-    @property
-    def longitude_of_pericenter(self):
-        """Calculate and return the longitude of pericenter."""
-        if (
-            self.argument_of_pericenter is None
-            or self.longitude_of_ascending_node is None
-        ):
-            raise TypeError(
-                "Longitude of pericenter calculation requires "
-                + "argument_of_pericenter and longitude_of_ascending_node."
-            )
-        if self.longitude_of_pericenter_ is None:
-            self.longitude_of_pericenter_ = (
-                self.argument_of_pericenter + self.longitude_of_ascending_node
-            ) % 360
-        return self.longitude_of_pericenter_
-
-    @property
-    def mean_longitude(self):
-        """Calculate and return the mean longitude."""
-        if self.mean_longitude_ is not None:
-            return self.mean_longitude_
-        if (
-            self.mean_anomaly is None
-            or self.argument_of_pericenter is None
-            or self.longitude_of_ascending_node is None
-        ):
-            raise TypeError(
-                "Mean longitude calculation requires mean_anomaly, "
-                + "argument_of_pericenter, and longitude_of_ascending_node."
-            )
-        self.mean_longitude_ = (
-            self.mean_anomaly
-            + self.argument_of_pericenter
-            + self.longitude_of_ascending_node
-        ) % 360
-        return self.mean_longitude_
-
-    @property
-    def has_star_name(self):
-        """Check if the planet has a star name."""
-        return self.star_name is not None
-
-    def __repr__(self):
-        """String representation of the Planet instance."""
-        if self.has_star_name:
-            return f"Planet[{self.name}] orbiting Star[{self.star_name}]"
-        return f"Planet[{self.name}]"
-
-    def __len__(self):
-        """Length of the Planet instance, always 1."""
-        return 1
-
-
-@attrs.define(repr=False)
-class Star:
-    """
-    Star class representing a star with various attributes.
-
-    Attributes
-    ----------
-    name : str
-        Name of the star.
-    mass : float
-        Mass of the star in solar masses.
-    radius : float
-        Radius of the star in solar radii.
-    effective_temperature : float
-        Effective temperature of the star in Kelvin.
-    luminosity : float
-        Luminosity of the star in solar luminosities.
-    age : float
-        Age of the star in Gyr.
-    system_name : str
-        Name of the system the star belongs to.
-    metadata : dict
-        Additional metadata about the star.
-    """
-
-    name: str = attrs.field(
-        validator=attrs.validators.instance_of((str, type(None))), default=None
-    )
-
-    mass: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    radius: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    effective_temperature: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    luminosity: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-    age: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
-
-    system_name: str = attrs.field(
-        validator=attrs.validators.instance_of((str, type(None))), default=None
-    )
-
-    metadata: dict = attrs.field(
-        validator=attrs.validators.instance_of(dict), default={}
-    )
-
-    def __repr__(self):
-        """String representation of the Star instance."""
-        return f"Star[{self.name}]"
-
-    def __len__(self):
-        """Length of the Star instance, always 1."""
-        return 1
-
-
-@attrs.define(repr=False)
-class System:
-    """
-    System class representing a planetary system with a central star
-    and bodies.
-
-    Attributes
-    ----------
-    name : str
-        Name of the system.
-    star : Star
-        Central star of the system.
-    bodies : list
-        List of planets and other bodies in the system.
-    """
-
-    name: str = attrs.field()
-    star: Star = attrs.field(validator=attrs.validators.instance_of(Star))
-    bodies: list = attrs.field(
-        validator=attrs.validators.instance_of((list, tuple, Star, Planet))
-    )
-
-    def __attrs_post_init__(self):
-        """Post-initialization hook."""
-        if isinstance(self.bodies, (list, tuple)):
-            for body in self.bodies:
-                if not isinstance(body, (Star, Planet)):
-                    raise TypeError(
-                        "bodies must be a list of Star or Planet instances. "
-                        + f"Got: {type(body)} instead"
-                    )
-        if isinstance(self.bodies, (Star, Planet)):
-            self.bodies = [self.bodies]
-        if len(self.bodies) == 0:
-            raise ValueError(
-                "System must have at least one body "
-                + "(apart from the central star)."
-            )
-        if (
-            self.star.system_name is not None
-            and self.star.system_name != self.name
-        ):
-            warnings.warn(
-                f"Star({self.star.name}) system name is different from "
-                + f"System({self.name})."
-            )
-        return
-
-    def __repr__(self):
-        """String representation of the System instance."""
-        return f"System[{self.name}]"
-
-    def __len__(self):
-        """Length of the System instance, number of bodies plus the star."""
-        return len(self.bodies) + 1
-
-
-# =============================================================================
-# FUNCTIONS
 # =============================================================================
 
 
-def create_planet(
-    name,
-    mass=None,
-    radius=None,
-    period=None,
-    semi_major_axis=None,
-    eccentricity=None,
-    inclination=None,
-    mean_anomaly=None,
-    argument_of_pericenter=None,
-    longitude_of_ascending_node=None,
-    star_name=None,
-    metadata=None,
-):
+@attrs.define(frozen=True, repr=False)
+class MetaData(Mapping):
+    """Implements an inmutable dict-like to store the metadata.
+
+    Also provides attribute like access to the keys.
+
+    Example
+    -------
+    >>> metadata = MetaData({"a": 1, "b": 2})
+    >>> metadata.a
+    1
+
+    >>> metadata["a"]
+    1
     """
-    Create a Planet instance.
+
+    _data = attrs.field(converter=dict, factory=dict)
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        return f"Metadata({repr(self._data)})"
+
+    def __getitem__(self, k):
+        """x[k] <=> x.__getitem__(k)."""
+        return self._data[k]
+
+    def __iter__(self):
+        """iter(x) <=> x.__iter__()."""
+        return iter(self._data)
+
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return len(self._data)
+
+    def __getattr__(self, a):
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        return self[a]
+
+
+@attrs.define(frozen=True, slots=True, repr=False)
+class ResokitDataFrame:
+    """
+    Initialize a ResoKit DataFrame class.
 
     Parameters
     ----------
+    data_df : pd.DataFrame or pd.Series
+        DataFrame containing the data.
+    source : str
+        Source of the dataset. Either 'eu' or 'nasa' or 'user'.
+    metadata : dict
+        Metadata of the dataset.
+    """
+
+    data_df: Union[pd.DataFrame, pd.Series] = attrs.field(
+        validator=attrs.validators.instance_of((pd.DataFrame, pd.Series))
+    )
+    source: str = attrs.field(
+        validator=attrs.validators.in_({"eu", "nasa", "user"}),
+        converter=str.lower,
+    )
+    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+    n_objects_: int = attrs.field(init=False)
+
+    @n_objects_.default
+    def _n_objects__default(self):
+        """Default value for n_objects_."""
+        return (
+            self.data_df.shape[0]
+            if isinstance(self.data_df, pd.DataFrame)
+            else 1
+        )
+
+    def __attrs_post_init__(self):
+        """Post-initialization hook."""
+        if self.data_df.empty:
+            warnings.warn("Empty DataFrame.")
+        if "name" not in self.data_df.columns:
+            warnings.warn("Missing 'name' column in the DataFrame.")
+        return
+
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return self.n_objects_
+
+    def __getitem__(self, slice):
+        """x[y] <==> x.__getitem__(y)."""
+        sliced = self.data_df.__getitem__(slice)
+        return (
+            sliced.copy()
+            if isinstance(sliced, (pd.DataFrame, pd.Series))
+            else sliced
+        )
+
+    def __dir__(self):
+        """dir(pdf) <==> pdf.__dir__()."""
+        return super().__dir__() + dir(self.data_df)
+
+    def __getattr__(self, a):
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        return getattr(self.data_df, a)
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        with pd.option_context("display.show_dimensions", False):
+            df_body = repr(self.data_df).splitlines()
+        df_dim = list(self.data_df.shape)
+        sdf_dim = f"{df_dim[0]} rows x {df_dim[1]} columns"
+
+        fotter = f"\nResokitDataFrame - {sdf_dim}"
+        resokit_data_repr = "\n".join(df_body + [fotter])
+        return resokit_data_repr
+
+    def _repr_html_(self):
+        ad_id = id(self)
+
+        with pd.option_context("display.show_dimensions", False):
+            df_html = self.data_df._repr_html_()
+
+        rows = f"{self.data_df.shape[0]} rows"
+        columns = f"{self.data_df.shape[1]} columns"
+
+        footer = f"ResokitDataFrame - {rows} x {columns}"
+
+        parts = [
+            f'<div class="resokit-data-container" id={ad_id}>',
+            df_html,
+            footer,
+            "</div>",
+        ]
+
+        html = "".join(parts)
+        return html
+
+    def to_dataframe(self, columns=None, copy=False):
+        """
+        Return the data_df as a new DataFrame.
+
+        Parameters
+        ----------
+        columns : list, optional. Default: None.
+            Columns to return.
+        copy : bool, optional. Default: False.
+            Whether to return a copy of the DataFrame.
+        """
+        if columns is not None:
+            used_cols = [col for col in columns if col in self.data_df.columns]
+            df = self.data_df[used_cols]
+        else:
+            df = self.data_df
+        return df.copy() if copy else df
+
+    def to_dict(self):
+        """Return a copy of the metadata as a dictionary."""
+        return dict(self.metadata)
+
+    # def iloc(self, *args, **kwargs):
+    #     """Return the i-th row of the data, as a ResokitDataFrame."""
+    #     return ResokitDataFrame(
+    #         data_df=self.data_df.iloc(*args, **kwargs),
+    #         source=self.source,
+    #         metadata=dict(self.metadata),
+    #     )
+
+
+def df_to_resokit(
+    df: pd.DataFrame,
+    source: str,
+    drop: bool = True,
+    copy: bool = False,
+    metadata: dict = {},
+) -> ResokitDataFrame:
+    """
+    Convert ExoplanetEU or NASA dataset to ResoKit format.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataset.
+    source : str
+        Source of the dataset. Either 'eu' or 'nasa'.
+    drop : bool, optional. Default: True.
+        Whether to drop columns not in the mapping.
+    copy : bool, optional. Default: False.
+        Whether to return a copy of the DataFrame.
+    metadata : dict, optional. Default: {}.
+        Metadata of the dataset.
+
+    Returns
+    -------
+    ResokitDataFrame
+        DataFrame in ResoKit format.
+    """
+    # Get the new columns dictionary
+    new_cols_dict = MAPPINGS[source]
+
+    # Copy the DataFrame
+    if copy:
+        df = df.copy()
+    # Rename columns
+    df = df.rename(columns=new_cols_dict)
+    # Drop columns not in the mapping
+    if drop:
+        df = df.drop(columns=set(df.columns) - set(new_cols_dict.values()))
+    # Order by P[eriod] column
+    if not df.empty:
+        df = df.sort_values(by="P", ascending=True)
+
+    return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
+
+
+# @attrs.define(repr=False, slots=True)
+# class Planet:
+#     """
+#     Planet class representing a planet with various attributes.
+
+#     Attributes
+#     ----------
+#     name : str
+#         Name of the planet.
+#     mass : float
+#         Mass of the planet in Jupiter masses.
+#     radius : float
+#         Radius of the planet in Jupiter radii.
+#     semi_major_axis : float
+#         Semi-major axis of the planet's orbit in AU.
+#     eccentricity : float
+#         Eccentricity of the planet's orbit.
+#     inclination : float
+#         Inclination of the planet's orbit in degrees.
+#     mean_anomaly : float
+#         Mean anomaly of the planet in degrees.
+#     argument_of_pericenter : float
+#         Argument of pericenter in degrees.
+#     longitude_of_ascending_node : float
+#         Longitude of the ascending node in degrees.
+#     star_name : str
+#         Name of the star the planet orbits.
+#     metadata : dict
+#         Additional metadata about the planet.
+#     """
+
+#     name: str = attrs.field(
+#         validator=attrs.validators.instance_of((str, type(None))),
+#         default=None
+#     )
+
+#     mass: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     radius: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     semi_major_axis: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     eccentricity: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     inclination: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     mean_anomaly: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     argument_of_pericenter: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+#     longitude_of_ascending_node: float = attrs.field(**DEFAULT_FLOAT_ATTRS)
+
+#     # Calculated properties
+#     _longitude_of_pericenter: float = attrs.field(init=False, default=None)
+#     _mean_longitude: float = attrs.field(init=False, default=None)
+
+#     star_name: str = attrs.field(
+#         validator=attrs.validators.instance_of((str, type(None))),
+#         default=None
+#     )
+
+#     metadata: dict = attrs.field(
+#         validator=attrs.validators.instance_of(dict), default={}
+#     )
+
+#     def __attrs_post_init__(self):
+#         """Post-initialization hook."""
+#         return
+
+#     @property
+#     def longitude_of_pericenter_(self):
+#         """Calculate and return the longitude of pericenter."""
+#         if (
+#             self.argument_of_pericenter is None
+#             or self.longitude_of_ascending_node is None
+#         ):
+#             raise TypeError(
+#                 "Longitude of pericenter calculation requires "
+#                 + "argument_of_pericenter and longitude_of_ascending_node."
+#             )
+#         if self._longitude_of_pericenter is None:
+#             self._longitude_of_pericenter = (
+#                 self.argument_of_pericenter +
+#                 self.longitude_of_ascending_node
+#             ) % 360
+#         return self._longitude_of_pericenter
+
+#     @property
+#     def mean_longitude_(self):
+#         """Calculate and return the mean longitude."""
+#         if (
+#             self.mean_anomaly is None
+#             or self.argument_of_pericenter is None
+#             or self.longitude_of_ascending_node is None
+#         ):
+#             raise TypeError(
+#                 "Mean longitude calculation requires mean_anomaly, "
+#                 + "argument_of_pericenter, and longitude_of_ascending_node."
+#             )
+#         if self._mean_longitude is None:
+#             self._mean_longitude = (
+#                 self.mean_anomaly
+#                 + self.argument_of_pericenter
+#                 + self.longitude_of_ascending_node
+#             ) % 360
+#         return self._mean_longitude
+
+# NEW CODE
+
+
+@attrs.define(repr=False, frozen=True)
+class StaticPlanet(ResokitDataFrame):
+    """
+    StaticPlanet class representing a static planet.
+
+    Attributes
+    ----------
+
+    data_df : pd.Series
+        Series containing the data.
+    source : str
+        Source of the dataset. Either 'eu' or 'nasa' or 'user'.
+    metadata : dict
+        Metadata of the dataset.
     name : str
         Name of the planet.
-    mass : float
-        Mass of the planet in Jupiter masses.
-    radius : float
-        Radius of the planet in Jupiter radii.
-    period : float
-        Orbital period of the planet in days.
-    semi_major_axis : float
-        Semi-major axis of the planet's orbit in AU.
-    eccentricity : float
-        Eccentricity of the planet's orbit.
-    inclination : float
-        Inclination of the planet's orbit in degrees.
-    mean_anomaly : float
-        Mean anomaly of the planet in degrees.
-    argument_of_pericenter : float
-        Argument of pericenter in degrees.
-    longitude_of_ascending_node : float
-        Longitude of the ascending node in degrees.
-    star_name : str
-        Name of the star the planet orbits.
+    user_defined_ : bool
+        Flag indicating if the planet is user-defined.
+    suffix_ : str
+        Suffix for the planet name.
+    """
+
+    name: str = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
+    suffix_: str = attrs.field(init=False)
+
+    @name.default
+    def _name_default(self):
+        """Default value for name."""
+        return self.data_df["name"]  # ["name"] because .name is a df method
+
+    @user_defined_.default
+    def _user_defined__default(self):
+        """Default value for user_defined_."""
+        return self.source not in ["eu", "nasa"]
+
+    @suffix_.default
+    def _suffix__default(self):
+        """Default value for suffix_."""
+        return self.data_df["name"].split(" ")[-1]
+
+    def __attrs_post_init__(self):
+        """Post-initialization hook."""
+        # Assert data_series is a Series
+        if not isinstance(self.data_df, pd.Series):
+            raise TypeError(
+                "StaticPlanet must have a pd.Series. "
+                + f"Got: {type(self.data_df)} instead."
+            )
+        if not self.user_defined_:
+            for col in self.data_df.index:
+                if col not in RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {
+                    "star_name"
+                }:
+                    warnings.warn(
+                        "Found columns not in the default planet mapping."
+                    )
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        return (
+            f"StaticPlanet [{self.data_df['name']}]"
+            + f" from {self.source} data source."
+            if not self.user_defined_
+            else "user defined."
+        )
+
+
+@attrs.define(repr=False, frozen=True)
+class StaticStar(ResokitDataFrame):
+    """
+    StaticStar class representing a static star.
+
+    Attributes
+    ----------
+    data_df : pd.Series
+        Series containing the data.
+    source : str
+        Source of the dataset. Either 'eu' or 'nasa' or 'user'.
     metadata : dict
+        Metadata of the dataset.
+    name : str
+        Name of the star.
+    user_defined_ : bool
+        Flag indicating if the star is user-defined.
+    """
+
+    name: str = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
+
+    @name.default
+    def _name_default(self):
+        """Default value for name."""
+        if "star_name" in self.data_df.index:
+            return self.data_df["star_name"]
+        return self.data_df["name"]  # ["name"] because .name is a df method
+
+    @user_defined_.default
+    def _user_defined__default(self):
+        """Default value for user_defined_."""
+        return self.source not in ["eu", "nasa"]
+
+    def __attrs_post_init__(self):
+        """Post-initialization hook."""
+        # Assert data_series is a Series
+        if not isinstance(self.data_df, pd.Series):
+            raise TypeError(
+                "StaticStar must have a pd.Series. "
+                + f"Got: {type(self.data_df)} instead."
+            )
+        if not self.user_defined_:
+            AUX_COLS = {
+                col.replace("star_", "") for col in RESO_SR_TYPES.keys()
+            }
+            for col in self.data_df.index:
+                if col not in AUX_COLS | RESO_OB_TYPES.keys():
+                    warnings.warn(
+                        "Found columns not in the default star mapping."
+                    )
+                    print(col)
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        return (
+            f"StaticStar [{self.name}]" + f" from {self.source} data source."
+            if not self.user_defined_
+            else "user defined."
+        )
+
+
+@attrs.define(repr=False, frozen=True)
+class StaticSystem:
+    """
+    StaticSystem class representing a static system.
+
+    Attributes
+    ----------
+    star : StaticStar
+        StaticStar instance.
+    planets : list, tuple, StaticPlanet
+        List of StaticPlanet instances.
+    name : str
+        Name of the system.
+    metadata : dict
+        Metadata of the dataset.
+    n_planets_ : int
+        Number of planets in this static system.
+    source_ : str
+        Source of the data.
+    user_defined_ : bool
+        Flag indicating if the system is user-defined.
+    planet_names_ : list
+        List of planet names.
+    """
+
+    star: StaticStar = attrs.field(
+        validator=attrs.validators.instance_of(StaticStar),
+    )
+    planets: Union[list[StaticPlanet], tuple[StaticPlanet], StaticPlanet] = (
+        attrs.field(
+            validator=attrs.validators.instance_of(
+                (list, tuple, StaticPlanet)
+            ),
+            factory=list,
+        )
+    )
+    name: str = attrs.field(
+        validator=attrs.validators.instance_of(str), default="unnamed"
+    )
+    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    n_planets_: int = attrs.field(init=False)
+    source_: str = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
+    planet_names_: list = attrs.field(init=False)
+
+    @n_planets_.default
+    def _n_planets__default(self):
+        """Default value for n_planets_."""
+        return len(self.planets)
+
+    @source_.default
+    def _source__default(self):
+        """Default value for source_."""
+        main_source = getattr(self.star, "source", "unknown")
+        return (
+            main_source
+            if all(
+                [
+                    getattr(planet, "source", "unknown") == main_source
+                    for planet in self.planets
+                ]
+            )
+            else "user"
+        )
+
+    @user_defined_.default
+    def _user_defined__default(self):
+        """Default value for user_defined_."""
+        return self.source_ not in ["eu", "nasa"]
+
+    @planet_names_.default
+    def _planet_names__default(self):
+        """Default value for planet_names_."""
+        return [getattr(planet, "name") for planet in self.planets]
+
+    def __attrs_post_init__(self):
+        """Post-initialization hook."""
+        star_name = self.star.name
+        for planet in self.planets:
+            if not isinstance(planet, StaticPlanet):
+                raise TypeError(
+                    " planets must be a StaticPlanet instance,"
+                    + " or a list|tuple of StaticPlanet instances."
+                    + f" Got: {type(planet)} instead"
+                )
+            if planet.star_name != star_name:
+                warnings.warn(
+                    f"Planet({planet.name}) star name({planet.star_name})"
+                    + f" is different from Star({star_name})."
+                )
+        if self.n_planets_ != len(set(self.planet_names_)):
+            warnings.warn("Planets must have unique names.")
+        return
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        star_msg = "\n" + f" Star: {self.star.name}"
+        planets_msg = (
+            "\n"
+            + f" Planet{'s' if self.n_planets_ > 1 else ''}:"
+            + "\n  "
+            + "\n  ".join(self.planet_names_)
+        )
+        return (
+            "StaticSystem: "
+            + f"{star_msg} "
+            + f"{planets_msg}"
+            + "\n"
+            + f" from {self.source_} data source."
+            if not self.user_defined_
+            else ""
+        )
+
+    def __getitem__(self, slice):
+        """x[y] <==> x.__getitem__(y)."""
+        if isinstance(slice, int):
+            sliced = self.planets[slice]
+            # Return a new StaticPlanet
+            return StaticPlanet(
+                data_df=sliced.data_df,
+                source=sliced.source,
+                metadata=dict(sliced.metadata),
+            )
+        if isinstance(slice, str) and slice.startswith("star_"):
+            return self.star.__getitem__(slice.replace("star_", ""))
+        return self.get_system_items(slice)
+
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return self.n_planets_ + 1
+
+    def _get_star_items(self, items: list[str] | str):
+        """Return the specified items of the star."""
+        items = list(items)
+        items = [item.replace("star_", "") for item in items]
+        return self.star[items]
+
+    def _get_planets_items(self, items: str):
+        """Return the specified items of the planets."""
+        return [planet[items] for planet in self.planets]
+
+    def get_system_items(self, items: list[str] | str):
+        """Return the specified items of the system."""
+        items = list(set(items))
+        # Get star and planets items
+        star_items = [item for item in items if item.startswith("star_")]
+        planet_items = list(set(items) - set(star_items))
+        # Get values
+        star_vals = []
+        planet_vals = []
+        if star_items:
+            star_vals = list(self._get_star_items(star_items))
+        if planet_items:
+            planet_vals = list(self._get_planets_items(planet_items))
+        # Return values
+        if self.n_planets_ == 1:
+            return list(star_vals + planet_vals)[0]
+        if not planet_vals:
+            return pd.Series(star_vals, index=star_items, name=self.star.name)
+        df = pd.DataFrame(
+            planet_vals,
+            columns=planet_items,
+            index=self.planet_names_,
+        )
+        if star_vals:
+            for col, val in zip(star_items, star_vals):
+                df[col] = val
+        return df
+
+    def remove_planet(self, index: int | str):
+        """
+        Remove a planet from the system.
+
+        Parameters
+        ----------
+        index : int, str
+            Index or suffix (1 char) or name of the planet to remove.
+        """
+        if isinstance(index, str):
+            if len(index) == 1:
+                indexes = [planet.suffix_ for planet in self.planets]
+                if len(indexes) != len(set(indexes)):
+                    raise ValueError("Suffixes must be unique to remove.")
+                if index not in indexes:
+                    raise ValueError(f"Suffix '{index}' not found in planets.")
+                index = indexes.index(index)
+            else:
+                if self.n_planets_ != len(set(self.planet_names_)):
+                    raise ValueError(
+                        "Planets must have unique names to remove."
+                    )
+                if index not in self.planet_names_:
+                    raise ValueError(f"Name '{index}' not found in planets.")
+                index = self.planet_names_.index(index)
+        if index < 0 or index >= self.n_planets_:
+            raise IndexError("Index out of range.")
+        new_planets = self.planets[:index] + self.planets[index+1:]
+        return StaticSystem(
+            star=self.star,
+            planets=new_planets,
+            name=self.name,
+            metadata=dict(self.metadata),
+        )
+
+    def add_planet(self, planet: StaticPlanet, sort: bool = True):
+        """
+        Add a planet to the system.
+
+        Parameters
+        ----------
+        planet : StaticPlanet
+            StaticPlanet instance to add.
+        sort : bool, optional. Default: True.
+            Whether to sort the planets by period.
+
+        Returns
+        -------
+        StaticSystem
+            A new StaticSystem instance.
+        """
+        if not isinstance(planet, StaticPlanet):
+            raise TypeError(
+                "planet must be a StaticPlanet instance."
+                + f" Got: {type(planet)} instead."
+            )
+        new_planets = self.planets + [planet]
+        if sort:
+            new_planets = sorted(new_planets, key=lambda x: x["P"])
+        return StaticSystem(
+            star=self.star,
+            planets=new_planets,
+            name=self.name,
+            metadata=dict(self.metadata),
+        )
+
+    def to_dataframe(self, columns=None, copy=False):
+        """
+        Return the data_df as a new DataFrame.
+
+        Parameters
+        ----------
+        columns : list, optional. Default: None.
+            Columns to return.
+        copy : bool, optional. Default: False.
+            Whether to return a copy of the DataFrame.
+        """
+        df = pd.DataFrame()
+        for planet in self.planets:
+            df = df.append(planet.data_df)
+        df = pd.concat([self.star.data_df, df], axis=0)
+        if columns is not None:
+            used_cols = [col for col in columns if col in df.columns]
+            df = df[used_cols]
+        return df
+
+
+# =============================================================================
+# NEW FUNCTIONS
+# =============================================================================
+
+
+def _create_static_system(
+    star,
+    planets,
+    name,
+    metadata={},
+) -> StaticSystem:
+    """
+    Create a StaticSystem instance.
+
+    Parameters
+    ----------
+    star : StaticStar
+        StaticStar instance.
+    planets : list, tuple, StaticPlanet
+        List of StaticPlanet instances.
+    name : str
+        Name of the system.
+    metadata : dict, optional. Default: {}.
+        Metadata of the dataset.
+
+    Returns
+    -------
+    StaticSystem
+        A new StaticSystem instance.
+    """
+    return StaticSystem(
+        star=star,
+        planets=planets,
+        name=name,
+        metadata=metadata,
+    )
+
+
+def _create_static_star(
+    star_data,
+    source="user",
+    metadata={},
+) -> StaticStar:
+    """
+    Create a StaticStar instance.
+
+    Parameters
+    ----------
+    star_data : pd.Series
+        Series with the star data.
+    source : str, optional. Default: 'user'.
+        Source of the data.
+    metadata : dict, optional. Default: {}.
+        Additional metadata about the star.
+
+    Returns
+    -------
+    StaticStar
+        A new StaticStar instance.
+    """
+    return StaticStar(data_df=star_data, source=source, metadata=metadata)
+
+
+def _create_static_planet(
+    planet_data,
+    source="user",
+    metadata={},
+) -> StaticPlanet:
+    """
+    Create a StaticPlanet instance.
+
+    Parameters
+    ----------
+    planet_data : pd.Series
+        Series with the planet data.
+    source : str, optional. Default: 'user'.
+        Source of the data.
+    metadata : dict, optional. Default: {}.
         Additional metadata about the planet.
 
     Returns
     -------
-    Planet
-        A new Planet instance.
+    StaticPlanet
+        A new StaticPlanet instance.
     """
-    return Planet(
-        name=name,
-        mass=mass,
-        radius=radius,
-        semi_major_axis=semi_major_axis,
-        eccentricity=eccentricity,
-        inclination=inclination,
-        mean_anomaly=mean_anomaly,
-        argument_of_pericenter=argument_of_pericenter,
-        longitude_of_ascending_node=longitude_of_ascending_node,
-        star_name=star_name,
-        metadata=metadata,
+    return StaticPlanet(data_df=planet_data, source=source, metadata=metadata)
+
+
+def resokit_to_planet(
+    resokit_data: ResokitDataFrame,
+    row: int = 0,
+) -> StaticPlanet:
+    """
+    Convert a ResokitDataFrame to a StaticPlanet instance.
+
+    Parameters
+    ----------
+    resokit_data : ResokitDataFrame
+        ResokitDataFrame instance.
+    row : int, optional. Default: 0.
+        Row index to convert.
+    Returns
+    -------
+    StaticPlanet
+        StaticPlanet instance.
+    """
+    if not isinstance(resokit_data, ResokitDataFrame):
+        raise TypeError(
+            "resokit_data must be a ResokitDataFrame instance."
+            + f" Got: {type(resokit_data)} instead."
+        )
+
+    # Get planet columns df from resokit
+    columns = RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {"star_name"}
+    planet_df = resokit_data.to_dataframe(columns=columns)
+    source = resokit_data.source
+    meta = resokit_data.to_dict()
+
+    # Get the row if multiple lines
+    if len(resokit_data) > 1:
+        planet_df = planet_df.iloc[row]
+
+    return _create_static_planet(
+        planet_data=planet_df, source=source, metadata=meta
+    )
+
+
+def resokit_to_star(
+    resokit_data: ResokitDataFrame,
+    row: int = 0,
+) -> StaticStar:
+    """
+    Convert a ResokitDataFrame to a StaticStar instance.
+
+    Parameters
+    ----------
+    resokit_data : ResokitDataFrame
+        ResokitDataFrame instance.
+    row : int, optional. Default: 0.
+        Row index to convert.
+        None to get the row with the most recent rowupdate date.
+
+    Returns
+    -------
+    StaticStar
+        StaticStar instance.
+    """
+    # Get planet columns df from resokit
+    cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
+    columns = {col.replace("star_", "") for col in cols}
+    star_df = resokit_data.to_dataframe(columns=columns)
+    source = resokit_data.source
+    meta = resokit_data.to_dict()
+
+    # Get the row if multiple lines.
+    # Use the most recent rowupdate date, if row not specified
+    if len(resokit_data) > 1:
+        if row < 0 or row is None:
+            star_df["rowupdate"] = pd.to_datetime(star_df["rowupdate"])
+            row = star_df["rowupdate"].idxmax()
+        star_df = star_df.iloc[row]
+
+    return _create_static_star(star_data=star_df, source=source, metadata=meta)
+
+
+def resokit_to_system(
+    resokit_data: ResokitDataFrame,
+) -> StaticSystem:
+    """
+    Convert a ResokitDataFrame to a StaticSystem instance.
+
+    Parameters
+    ----------
+    resokit_data : ResokitDataFrame
+        ResokitDataFrame instance.
+
+    Returns
+    -------
+    StaticSystem
+        StaticSystem instance.
+    """
+    resokit_df = resokit_data.to_dataframe()
+
+    # Stars
+    aux_star_cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
+    star_cols = list(set(aux_star_cols).intersection(resokit_df.columns))
+    star_df = resokit_df[star_cols]
+
+    # Planets
+    aux_planet_cols = (
+        RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {"star_name"}
+    )
+    planet_cols = list(set(aux_planet_cols).intersection(resokit_df.columns))
+    planet_df = resokit_df[planet_cols]
+
+    # Assert unique star
+    star_names = set(star_df["star_name"])
+    if len(star_names) > 1:
+        raise ValueError("All planets must have the same star name.")
+
+    # Assert no duplicated planets
+    planet_names = set(planet_df["name"])
+    if len(planet_names) < len(planet_df):
+        raise ValueError("Duplicated planet names found.")
+
+    # If multiple lines (i.e. multiple planets), then create a star
+    # from the star_df line with less null or NaN values
+    # if len(star_df) > 1:
+    #     star_df = star_df.loc[star_df.notnull().sum(axis=1).idxmax()]
+
+    # Option2: preserve the row with most recent rowupdate column date
+    # To get this, check the date from rowupdate column
+    # and get the row with the most recent date
+    rowupdate = pd.to_datetime(star_df["rowupdate"])
+    star_df = star_df.loc[rowupdate.idxmax()]
+
+    # Redefine star columns to avoid "star_"
+    star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
+
+    # Create stars and planets
+    star = _create_static_star(
+        star_data=star_df,
+        source=resokit_data.source,
+        metadata=resokit_data.metadata,
+    )
+    planets = [
+        _create_static_planet(
+            planet_data=planet,
+            source=resokit_data.source,
+            metadata=resokit_data.metadata,
+        )
+        for _, planet in planet_df.iterrows()
+    ]
+
+    return _create_static_system(
+        star=star,
+        planets=planets,
+        name=star.name,
+        metadata=resokit_data.metadata,
     )

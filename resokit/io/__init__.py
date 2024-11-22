@@ -19,8 +19,5 @@
 # IMPORTS
 # =============================================================================
 
-from .io import (  # noqa
-    load_system_from_eu,  # noqa
-    load_system_from_nasa,  # noqa
-    load_reso_dataset,  # noqa
-)  # noqa
+from .io import load_system_from_eu  # noqa
+from .io import load_system_from_nasa  # noqa
