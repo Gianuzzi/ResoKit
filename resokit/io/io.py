@@ -218,8 +218,13 @@ def _load_system_from_db(
         if ratio == 0:  # No similar names found
             return pd.DataFrame()
         # Show similar names found
+        # Note: get most probable by whitespace separation
+        most_prob = list(set(val for val in values if name + " " in val))
+        others = list(set(val for val in values if val not in most_prob))
+        most_prob.sort()
+        others.sort()
         print(f" Similar names found in {source} dataset:")
-        print(f" {set(values.values)}")
+        print(f" - {most_prob + others}")
         return pd.DataFrame()  # Return an empty DataFrame
 
     # Load the system
