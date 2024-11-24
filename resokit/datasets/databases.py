@@ -229,6 +229,7 @@ def load_dataset(
     only_rows: list | int = [],
     verbose: bool = True,
     store: bool = False,
+    store_index: bool = True,
 ) -> pd.DataFrame:
     """
     Loads the dataset from a specified source and optionally extracts from ZIP.
@@ -251,6 +252,8 @@ def load_dataset(
         If True, prints messages about the process.
     store : bool, optional. Default: False.
         If True, stores the dataset in memory.
+    store_index : bool, optional. Default: True.
+        If True, stores the dataset index in memory.
 
     Returns
     -------
@@ -368,13 +371,15 @@ def load_dataset(
             raise error
             # return
 
-    if store:
-        if not only_index and whole:
+    if not whole:  # Can't store just part of the dataset
+        return data
+    if store_index:
+        if store and not only_index:
             if verbose:
                 print(" Storing the entire dataset into memory.")
             IN_MEMORY_DATASETS[source] = data.copy()
             IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]]
-        elif only_index:
+        else:
             if verbose:
                 print(" Storing the index columns into memory.")
             IN_MEMORY_INDEXES[source] = data.copy()

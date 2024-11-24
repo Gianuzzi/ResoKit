@@ -135,10 +135,12 @@ def _search_system_index(
     # If no 2 space-close names, search for similar names
     similarity_ratios = raw_series.apply(lambda x: _similar(x, name))
     good_matches = similarity_ratios >= RATIOS_THRESHOLD
-    similarity_ratios = similarity_ratios[good_matches]
 
-    if similarity_ratios.empty:  # No similar names found
-        return pd.Index([]), pd.Series([]), 0
+    if not good_matches.any():  # No similar names found
+        top_3_indices = similarity_ratios.nlargest(3).index
+        good_matches = similarity_ratios.index.isin(top_3_indices)
+
+    similarity_ratios = similarity_ratios[good_matches]
 
     # Return the index, values, and the minimum similarity ratio
     return (
@@ -188,12 +190,19 @@ def _load_system_from_db(
     pd.DataFrame
         DataFrame containing the system data.
     """
-    # Update the keyword arguments
-    load_dataset_kwargs.update({"store": store, "verbose": verbose})
     # If storing, then load the whole dataset
+    if verbose:
+        print(
+            f"Loading {name} {'planet' if is_planet else 'star system'} from {source}."
+        )
     if store:
         store_index = True  # Store the index if the dataset will be stored
         low_memory = False  # Load the whole dataset if it will be stored
+
+    # Update the keyword arguments
+    load_dataset_kwargs.update(
+        {"store": store, "verbose": verbose, "store_index": store_index}
+    )
     if not low_memory:  # Load the whole dataset
         raw_df = load_dataset(source=source, **load_dataset_kwargs)
     else:
@@ -289,6 +298,10 @@ def load_system_from_eu(
         low_memory=low_memory,
     )
 
+    # Can't work with empty DataFrame
+    if df.empty:
+        return df
+
     # Convert the DataFrame to ResoKit format
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
@@ -378,6 +391,8 @@ def load_system_from_nasa(
             df = df[df["pl_controv_flag"] == int(controversial_set)]
         if default_set is not None:  # Filter default data
             df = df[df["default_flag"] == int(default_set)]
+    else:
+        return df
 
     # Convert the DataFrame to ResoKit format
     # Note: Metadata is set from default values

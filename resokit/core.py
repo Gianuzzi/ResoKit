@@ -96,14 +96,33 @@ class ResokitDataFrame:
     """
 
     data_df: Union[pd.DataFrame, pd.Series] = attrs.field(
-        validator=attrs.validators.instance_of((pd.DataFrame, pd.Series))
+        validator=attrs.validators.instance_of((pd.DataFrame, pd.Series)),
+        converter=lambda df: df.squeeze(),
     )
     source: str = attrs.field(
         validator=attrs.validators.in_({"eu", "nasa", "user"}),
         converter=str.lower,
     )
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    columns_: list = attrs.field(init=False)
+    n_columns_: int = attrs.field(init=False)
     n_objects_: int = attrs.field(init=False)
+
+    @columns_.default
+    def _columns__default(self):
+        """Default value for columns_."""
+        cols = (
+            self.data_df.index
+            if isinstance(self.data_df, pd.Series)
+            else self.data_df.columns
+        )
+        return cols.to_list()
+
+    @n_columns_.default
+    def _n_columns__default(self):
+        """Default value for n_objects_."""
+        return len(self.columns_)
 
     @n_objects_.default
     def _n_objects__default(self):
@@ -118,8 +137,12 @@ class ResokitDataFrame:
         """Post-initialization hook."""
         if self.data_df.empty:
             warnings.warn("Empty DataFrame.")
-        if "name" not in self.data_df.columns:
+        if "name" not in self.columns_:
             warnings.warn("Missing 'name' column in the DataFrame.")
+        if (self.n_objects_ == 1) and not isinstance(self.data_df, pd.Series):
+            raise TypeError(
+                "With only one object, data_df must be a Series (not a DataFrame)"
+            )
         return
 
     def __len__(self):
@@ -147,10 +170,12 @@ class ResokitDataFrame:
         """repr(x) <=> x.__repr__()."""
         with pd.option_context("display.show_dimensions", False):
             df_body = repr(self.data_df).splitlines()
-        df_dim = list(self.data_df.shape)
-        sdf_dim = f"{df_dim[0]} rows x {df_dim[1]} columns"
-
-        fotter = f"\nResokitDataFrame - {sdf_dim}"
+        if self.n_objects_ > 1:
+            sdf_dim = f"{self.n_objects_} rows x {self.n_columns_} columns"
+            fotter = f"\nResokitDataFrame - {sdf_dim}"
+        else:
+            sdf_dim = f"1 row x {self.n_columns_} columns"
+            fotter = f"\nResokitSeries - {sdf_dim}"
         resokit_data_repr = "\n".join(df_body + [fotter])
         return resokit_data_repr
 
@@ -160,10 +185,13 @@ class ResokitDataFrame:
         with pd.option_context("display.show_dimensions", False):
             df_html = self.data_df._repr_html_()
 
-        rows = f"{self.data_df.shape[0]} rows"
-        columns = f"{self.data_df.shape[1]} columns"
-
-        footer = f"ResokitDataFrame - {rows} x {columns}"
+        if self.n_objects_ > 1:
+            rows = f"{self.n_objects_} rows"
+            columns = f"{self.n_columns_} columns"
+            footer = f"ResokitDataFrame - {rows} x {columns}"
+        else:
+            rows = f"1 row"
+            columns = f"{self.n_columns_} columns"
 
         parts = [
             f'<div class="resokit-data-container" id={ad_id}>',
@@ -187,7 +215,7 @@ class ResokitDataFrame:
             Whether to return a copy of the DataFrame.
         """
         if columns is not None:
-            used_cols = [col for col in columns if col in self.data_df.columns]
+            used_cols = [col for col in list(columns) if col in self.columns_]
             df = self.data_df[used_cols]
         else:
             df = self.data_df
@@ -245,8 +273,13 @@ def df_to_resokit(
     # Drop columns not in the mapping
     if drop:
         df = df.drop(columns=set(df.columns) - set(new_cols_dict.values()))
+
+    # Assert no empty DataFrame
+    if df.empty:
+        raise ValueError("Cannot create an empty ResokitDataFrame")
+
     # Order by P[eriod] column
-    if not df.empty:
+    if "P" in df.columns:
         df = df.sort_values(by="P", ascending=True)
 
     return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
@@ -518,7 +551,9 @@ class StaticSystem:
             validator=attrs.validators.instance_of(
                 (list, tuple, StaticPlanet)
             ),
-            factory=list,
+            converter=lambda x: (
+                [x] if isinstance(x, StaticPlanet) else list(x)
+            ),
         )
     )
     name: str = attrs.field(
@@ -617,6 +652,10 @@ class StaticSystem:
         """len(x) <=> x.__len__()."""
         return self.n_planets_ + 1
 
+    def planet(self, idx: int = 0) -> StaticPlanet:
+        """Return the specified planet"""
+        return self.planets[idx]
+
     def _get_star_items(self, items: list[str] | str):
         """Return the specified items of the star."""
         items = list(items)
@@ -682,7 +721,7 @@ class StaticSystem:
                 index = self.planet_names_.index(index)
         if index < 0 or index >= self.n_planets_:
             raise IndexError("Index out of range.")
-        new_planets = self.planets[:index] + self.planets[index+1:]
+        new_planets = self.planets[:index] + self.planets[index + 1 :]
         return StaticSystem(
             star=self.star,
             planets=new_planets,
@@ -923,58 +962,73 @@ def resokit_to_system(
     StaticSystem
         StaticSystem instance.
     """
+    columns = resokit_data.columns_
     resokit_df = resokit_data.to_dataframe()
 
     # Stars
     aux_star_cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
-    star_cols = list(set(aux_star_cols).intersection(resokit_df.columns))
+    star_cols = list(set(aux_star_cols).intersection(columns))
     star_df = resokit_df[star_cols]
 
     # Planets
     aux_planet_cols = (
         RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {"star_name"}
     )
-    planet_cols = list(set(aux_planet_cols).intersection(resokit_df.columns))
+    planet_cols = list(set(aux_planet_cols).intersection(columns))
     planet_df = resokit_df[planet_cols]
 
-    # Assert unique star
-    star_names = set(star_df["star_name"])
-    if len(star_names) > 1:
-        raise ValueError("All planets must have the same star name.")
+    # Clean data if more than 1 planet
+    if resokit_data.n_objects_ > 1:
+        # Assert unique star
+        star_names = set(star_df["star_name"])
+        if len(star_names) > 1:
+            raise ValueError(
+                "All planets must have the same star name."
+                + f"Found {star_names} instead."
+            )
 
-    # Assert no duplicated planets
-    planet_names = set(planet_df["name"])
-    if len(planet_names) < len(planet_df):
-        raise ValueError("Duplicated planet names found.")
+        # Assert no duplicated planets
+        planet_names = set(planet_df["name"])
+        if len(planet_names) < len(planet_df):
+            raise ValueError("Duplicated planet names found.")
 
-    # If multiple lines (i.e. multiple planets), then create a star
-    # from the star_df line with less null or NaN values
-    # if len(star_df) > 1:
-    #     star_df = star_df.loc[star_df.notnull().sum(axis=1).idxmax()]
+        # If multiple lines (i.e. multiple planets), then create a star
+        # from the star_df line with less null or NaN values
+        # if len(star_df) > 1:
+        #     star_df = star_df.loc[star_df.notnull().sum(axis=1).idxmax()]
 
-    # Option2: preserve the row with most recent rowupdate column date
-    # To get this, check the date from rowupdate column
-    # and get the row with the most recent date
-    rowupdate = pd.to_datetime(star_df["rowupdate"])
-    star_df = star_df.loc[rowupdate.idxmax()]
+        # Option2: preserve the row with most recent rowupdate column date
+        # To get this, check the date from rowupdate column
+        # and get the row with the most recent date
+        rowupdate = pd.to_datetime(star_df["rowupdate"], errors="coerce")
+        star_df = star_df.loc[rowupdate.idxmax()]
 
     # Redefine star columns to avoid "star_"
     star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
 
-    # Create stars and planets
+    # Create star
     star = _create_static_star(
         star_data=star_df,
         source=resokit_data.source,
         metadata=resokit_data.metadata,
     )
-    planets = [
-        _create_static_planet(
-            planet_data=planet,
+
+    # Create Planets
+    if resokit_data.n_objects_ > 1:
+        planets = [
+            _create_static_planet(
+                planet_data=planet,
+                source=resokit_data.source,
+                metadata=resokit_data.metadata,
+            )
+            for _, planet in planet_df.iterrows()
+        ]
+    else:
+        planets = _create_static_planet(
+            planet_data=planet_df,
             source=resokit_data.source,
             metadata=resokit_data.metadata,
         )
-        for _, planet in planet_df.iterrows()
-    ]
 
     return _create_static_system(
         star=star,
