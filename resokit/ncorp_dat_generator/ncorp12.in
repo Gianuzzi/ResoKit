@@ -1,0 +1,661 @@
+           data input file for ncorp12.f90 (version 20/12/2023)
+
+-------------------------------------------------------------------------------
+<> Type of Run - 
+
+   new run or restart (new or restart)    : new
+   data dump file name    (name or no)    : dump.ncorp12
+   data dump time interval                : 1.0d4
+
+-------------------------------------------------------------------------------
+<> General Units - 
+
+   units of mass (sun, jup, earth, kg)    : sun
+   units of distance (au, km, m)          : au
+   units of time (second, day, year)      : year
+
+-------------------------------------------------------------------------------
+<> Parameters of the Integration - 
+
+   integrator (radau, bs, rk)             : bs
+   initial time for integration           : 0.0
+   total integration time                 : 2.0e3
+   output time interval                   : 1.0e1
+   precision (digits per step)            : 12
+   initial time step (-1 for auto)        : -1.0
+   sign (-1 for backward integration)     : 1.0
+	
+-------------------------------------------------------------------------------
+<> The Primary - 
+
+   mass of primary (in mass units)        : 1.0
+   radius of primary [km]                 : 590000.0
+   rotational period of primary [days]    : 27.8
+   modified J2 (i.e. J2*R^2) (no if <=0)  : 0.0
+
+-------------------------------------------------------------------------------
+<> The Planets (i.e. gravitationally interacting bodies) - 
+
+   include planets (max=10)      (yes/no) : yes
+   planet mass unit (sun, jup, earth, kg) : earth
+   planet ref. frame  (astro, bary, etc.) : astro
+
+ mass      a       e       I        M        w       Omega     tau_a     tau_e
+
+ 10.0      1      0.1     1.0      0.0      0.0      20.0
+ 10.0      3      0.2     2.0      0.0      0.0      0.0
+ 10.0      4      0.2     2.0      0.0      0.0      0.0
+
+   resonance indices (empty if unwanted)  : -1 3 0
+
+   include Type I migration     (yes/no)  : no
+        eccentricity damping factor Qe    : 0.1
+    ang. momentum conservation factor     : 0.3
+
+   include Stokes-type migration (yes/no) : no
+        gas dissipation time [yrs]        : 1.0d9
+
+   include tidal effects        (yes/no)  : no
+        stellar fluid Love number         : 0.05
+        stellar moment inertia factor     : 0.07
+        stellar tidal parameter Q'        : 1.0d6
+        planet fluid Love numbers         : 0.3  0.3  
+	planet moment inertia factor      : 0.33 0.33 
+        planetary tidal parameters Q'     : 100. 100. 
+        planet densities [gr/cm^3]        : 3.0  3.0  
+        planet rotational periods [days]  : 3.0  4.0  
+   acceleration factor for tidal effects  : 1000.0
+
+   relativity for planets       (yes/no)  : no
+
+-------------------------------------------------------------------------------
+<> The Particles (i.e. massless bodies) - 
+
+   include particles (max=4000) (yes/no)  : no
+   input particle file name (* for grid)  : particles.in
+
+   include non-linear gas drag  (yes/no)  : no
+       planetesimal density [gr/cm**3]    : 3.0
+
+   include Yarkovsky effect     (yes/no)  : no
+       albedo for particles               : 0.04
+
+   relativity for particles     (yes/no)  : no
+
+-------------------------------------------------------------------------------
+<> The Gas Disk (used only if Type I migration or gas drag turned on) - 
+
+   density at r=1 [gr/cm^2]               : 1000.0
+   power-law exponent (S~r^(-gama))       : 0.5
+   disk flare index                       : 0.0
+   disk scale height (Hr) at r=1          : 0.05
+   disk dissipation time [yrs]            : 3.7e5
+
+   eccentricity of gas disk               : 0.0
+   initial disk long. of pericenter       : 0.0
+   inverse precession period [1/yrs]      : 0.0
+
+   include inner cavity    (yes/no)       : no
+   location of cavity edge [r]            : 0.2
+   width of cavity transition [r]         : 0.001
+
+-------------------------------------------------------------------------------
+<> Indicators of Chaos and/or Changes in Orbital Elements - 
+
+   calculate indicators (no or type)      :  no
+   maximum value for Megno (<0 for no)    : -1.0
+
+-------------------------------------------------------------------------------
+<> Conditions for Collison/Escape/Instability - 
+
+   minimum distance from primary [au]     : 0.0
+   maximum distance from primary [au]     : 10000.0
+   minimum approach to planets   [Rhill]  : 0.1
+   minimum semimajor axis        [au]     : 0.0
+   maximum semimajor axis        [au]     : 10000.0
+   maximum eccentricity                   : 1.0
+
+   stop run if planet ejected (yes/no)    : yes
+
+-------------------------------------------------------------------------------
+<> Low-pass Filter - 
+
+   use low-pass filter (yes/no)           : no
+   decimation = int(t_pass/t_output)      : 300
+   size of filter (even number)           : 900
+   output decimation N (delt => delt*N)   : 1
+
+-------------------------------------------------------------------------------
+<> Output - 
+
+   general output file         (name/no)  : ncorp12.dat
+   planetary data output file  (name/no)  : no
+   particles data output file  (name/no)  : no
+   collisions/escapes outfile  (name/no)  : no
+   chaos indicator outfile   (name/*/no)  : no
+   individual file per body (yes/no)      : yes
+   output on screen (yes, %, no)          : yes
+   output variables (elements, coord)     : elements
+   output ref. frame (astro, bary, etc.)  : astro
+   output planet mass                     : no
+   output body radius                     : no
+   output stellar & planetary spin        : no
+   output energy and angular momentum     : no
+
+------------------------------------------------------------------------------
+end 
+------------------------------------------------------------------------------
+
+                              EXPLANATIONS
+
+<> General Rules:
+
+   - All inputs are optional! If a given value is not specified, the code
+     adopts the default value (given after this section). For example, if 
+     no massless particles are desired, it is sufficient to delete the 
+     whole section from the input file. Same for chaos indicators, gas disk,
+     filter, etc, as well as for the separator lines and titles of each
+     section.
+
+   - Lines beginning with a character that is not a number or a letter
+     (e.g. $ , % , < , etc.) are considered user comments.
+
+   - lines whose first 18 non-empty characters are not identified in the 
+     code's vocabulary are ignored. Thus, if you wish to comment a line, 
+     it is sufficient to place a "c" in the first column.
+
+   - Code reads all the input until it encounters the word "end". This is 
+     the only obligatory line of the file.
+
+   - Lines may be written in any order. The value assigned is specified 
+     after the ":" symbol. This can be placed in any column, and the same
+     goes for its alpha-numeric value.
+
+   - All alpha-numeric values must be in small letters (do not use caps).
+
+   - Only the first letter is necessary for each question. For example,
+     if "s" is given for the unit mass, it is clear that the user means
+     sun. Similarly, "y" means yes and "j" means jacobi.
+
+<> Type of Run:
+
+    May be a new run or a continuation (restart) from an interrupted
+    simulation. If a dump file name is given, the dump file will be updated
+    every dump time interval. Time unit is defined in the next section.
+    On a restart, the rest of the input file is not read. All integration
+    parameters remain fixed from original run.
+       If no dump file is desired, write "no" instead of file name.
+
+<> General Units: 
+
+    Sets general units of time, distance and mass, assumd equal to both
+    input and output. However, units for planetary masses can be redefined
+    in the "<> The Planets" section; that value will not affect the output
+    units.
+
+<> Parameters of the Integration: 
+
+    Code allows user to choose between three EDO integrators:
+    
+         - radau: Everhart's Radau15 integrator.
+         - bs:    Bulirsch-Stoer integrator.
+         - rk:    Runge-Kutta (Dopri) of order 7/8.
+
+    The rest of the options in this section are fairly clear and should not
+    require further  explanation.
+
+<> The Primary: 
+
+   Self-explanatory (I hope).
+   Radius and rotational period only used if tidal effects are turned on.
+   No oblateness effects are considered if the modified J2 coefficient is 
+   set to a negative value.
+
+<> The Planets (i.e. gravitationally interacting bodies): 
+
+   Up to 10 gravitationally interacting bodies may be used for a given
+   integration. 
+   
+   Planet Mass Units:   Although the unit of mass has been previously set,
+                        here the user is allowed to modify it temporarily
+		        just for the input of planetary data.
+
+   Planetary data:      Input format is:
+
+	  elements  ->   mass  a   e   I   M    w    O    tau_a   tau_e
+
+      where:  a = semimajor axis , e = eccentricity , I = inclination,
+              M = mean anomaly   , w = argument of pericenter ,
+              O = longitude of the ascending node. Angles must be in degrees.
+
+              tau_a & tau_e are optional inputs, and are defined in the
+              Stokes-type migration seub-section.
+
+      If grilla_planets is to be used, planetary data must be left blank.
+
+   Reference Frame: User may choose between the following coordinate systems:
+
+           astro    : astrocentric variables 
+           bary     : barycentric variables
+           jacobi   : variables from Jacobi coordinates
+  	   poincare : variables from Poincare canonical coordinates
+  	   mixed    : variables from binary-Poincare canonical coordinates
+
+   Resonance indices:
+
+         It is possible to request the code to calculate the different
+	 resonance angles associated with a given MMR between the planets.
+	 No resonances involving particles are yet implemented.
+         In the case of N planets, the resonance should specified as:
+
+      resonance indices (empty if unwanted)  :  j_1  j_2  j_3  ...  j_N
+
+         leading to a set of resonance angles:
+
+         theta_i = j_1*lambda_1 + j_2*lambda_2 + ... + j_N*lambda_N - q*varpi_i
+
+         where q = j_1 + j_2 + ... + j_N  is the order of the resonance.
+	 During the integration, the value of theta_i will be writen in
+	 the output file, in the line corresponding to the i-th planet,
+	 as a new column following the orbital elements. It will NOT be
+	 included in the output if cartesian coordinates and velocities
+	 are requested.
+         If filtered output is trned on, resonant angles will be filtered
+         online with no modifications to the code. 
+         If no resonance analysis is requested, just avoid writting any
+	 value for j_i. Eliminating/commenting the whole line will have
+	 the same effect.
+
+   Planetary non-conservative forces:
+
+      Type-I planetary migration:
+
+          Modeled following a modified version of Goldreich & Schlichting
+	  (2014). Depends on two parameters:
+
+          eccentricity damping factor Qe : 
+                   Lower values lead to slower damping. Tanaka & Ward
+		   (2002) assumed Qe=1, while Cresswell & Nelson (2008)
+		   found Qe=0.1
+          ang. momentum conservation factor : 
+                   Takes into consideration that disk-induced migration
+		   should preserve a certain fraction of the orbital
+		   angular momemtum.
+                   Goldreich & Schlichting (2014) suggest factor = 0.3,
+		   while choosing factor = 0 reduces to classical
+		   prescription by Tanaka et al. (2002).
+
+          In addition, code allows to spectify an inner edge for the disk,
+          following the description in Giuppone et al. (2012).
+
+      Stokes-type planetary migration:
+
+            Modeled following an ad-hoc Stokes-type force. Depends on two
+	    parameters:
+
+            tau_a : characteristic time for orbital decay.
+            tau_e : same but for orbtial circularization.
+
+            If turned on, the user must add values for tau_a & tau_e for
+            each planet after the final orbital element (i.e. Omega/vz).
+            Negative values for tau_a & tau_e are allowed, implying
+	    outward orbital migration and/or eccentricity excitation.
+
+      Note: Type-I and Stokes-type migration cannot be used simultaneously!
+
+      Tidal effects:
+
+            Modeled with a Darwin-Mignard (CTL) equilibrium tide model.
+            The stellar and planetary (modified) tidal parameters Q' are
+	    assumed evaluated at a value of the planetary mean-motion
+	    equal to unity. 
+               Recall that the Mignard weak-friction tidal model depends
+	    on a factor k2*Delta_t (for both star and planet), where k2
+	    is the body's Love number and Delta_t the tidal time lag. The
+	    relationship between k2*Delta_t and Q' is given by
+
+                              k2*Delta_t = 1.5/Q'/n
+				     
+             where n is the planet's mean-motion. Since k2*Delta_t is
+             a constant in most tidal models, then a certain value of 
+             n must be assumed for the given value of Q'. Here we take 
+             n=1 day for simplificy.                     
+                Values for planetary densities, rotational perdios and
+             Q' must be given for each planet, separate by empty spaces.
+
+      Relativistic effects:
+
+             Post-Newtonian effects based on Richardson & Kelly (1988).
+
+<> The Particles (i.e. massless bodies): 
+
+   Initial conditions for the massless bodies are given through an
+   external file. If the run is part of an external extensive grid
+   (grilla_particles.f90), the input will be done from the screen, so
+   choose "*" as the file name.
+   
+   Depending on whether the variables are elements or coordinates, the
+   input format must be:
+
+	  elements  ->   a  e  i   M   w   O  R
+	  coord     ->   x  y  z  vx  vy  vz  R
+
+    where:  a = semimajor axis , e = eccentricity , I = inclination,
+            M = mean anomaly   , w = argument of pericenter ,
+            O = longitude of the ascending node. Angles must be in degrees.
+
+   Units for distance and time are assumed to be given General Units.
+   Finally, the last column allows user to specify 
+
+         R = particle radius [m]
+
+   If neither gas drag nor Yarkovsky effects are chosen, then the particle
+   radius R may be omitted. In such a case, the input format may just be:
+
+	 elements  ->   a  e  i   M   w   O
+	 coord     ->   x  y  z  vx  vy  vz
+
+   The choice of input variables (whether elements or coordinates) as well
+   as the reference frame (astrocentric, Jaocib, etc.) is assumed equal to
+   that specified in the planetary data part.
+
+   Non-Linear Gas Drag: We assume a gas drag law where the acceleration
+                        introduced to the particle is proportional to the 
+                        square of the relative velocity between the solid 
+                        body and the gas. 
+
+   Yarkovsky Effect: Only the diurnal Yarkovsky effect is modeled as an
+                     exterior force which only affects the semimajor axis.
+                     Positive (negative) values of the albedo give......
+
+<> Gas Disk:
+
+      If Type-I migration for planets and/or aerodynamic drag is requested 
+   for particles, all the aspects of the gas disk are given in this section.
+   We assume a thin locally isothermic disk with constant aspect-ratio.
+   The surface density follows a power law with exponent (-gamma). 
+   Preserving characteristics from old works on binary systems, the disk
+   may be assumed to be eccentric and precessing (negative values imply 
+   retrograde precession).
+      An inner cavity may be modeled for the disk, following the description
+   given in Giuppone et al. (2012). 
+      The gas disk is assumed to be axisymmetric in a Jacobi reference frame;
+    thus all formulas are internally expressed in these coordinates, even
+    if Jacobi is not set for input or output of data.
+
+<> Indicators of Chaos and/or Changes in Orbital Elements:
+  
+   Chaos Indicators: User can choose between different indicators. These are
+
+      a : Delta a          (a_max - a_min)
+      e : Delta e          (e_max - e_min)
+      i : Delta i          (i_max - i_min)
+      l : log10(LCE)       (LCE = maximum Lyaponuov characteristic exponent)
+      m : Averaged Megno   (usually denoted by <Y>)
+      t : escape time      (true value as given by simulation)
+      s : instabiliy time  (as estimated through Shannon entropy)
+
+    It is possible to choose more than one indicator, all of which will be
+    calculated at the same time. For example, the input line:
+
+         calculate indicators (no or type)      : m  e    a
+
+    will output the values of the averaged Megno, Delta_e and Delta_a.
+    The order of the indicators in the output files will be the same as the
+    order of the letters in the input line. Any number of spaces are allowed
+    between letters. If no indicator in desired, just write "no" or comment
+    the whole line.
+
+   Maximum value for Megno:
+
+    It is possible to set a maximum value for Megno, after which both LCE
+    and Megno are no longer updated, thus reducing the CPU time. Predefined
+    values are given during the rest of the integration (<Y> = <Y>_max,
+    log10(LCE) = -1.0). However, the body is NOT removed from the system
+    and both its dynamics and (Delta_e,Delta_a) calculations proceed
+    unaltered.
+
+<> Conditions for Collision/Escape/Instability:
+
+   If a body is ejected from the system or suffers a merger, the identifying
+   number in the output files is NOT modified. Thus, particle 100 always
+   gives the orbital evolution of the same body, even if others with smaller
+   identifying numbers have been ejected.
+      Collision occurs if the distance between two bodies is smaller than a
+   user-specified factor of the sum of their physical radii. Collisions are
+   assumed to the accretional, independent of the impact velocity, and center
+   of mass approximation is used. All collisions and/or escapes are recorded
+   in a separate output file.
+
+<> Low-pass Filter:
+
+   The FIR filter is constructed at the beginning of the run, and the
+   corresponding Airy disk and reconstructed Step function are written in
+   a file called "filter.dat". Only positive integers are written. This
+   file can be used to estimate ripple, attenuation and gray band, thus
+   check the precision of the filter.
+      Decimation of output: usually = to previous value of decimation.
+   However, user may want more data points. A value of unity maintains
+   original deltat of output.
+
+<> Output:
+
+   Code writes output in several files. Complete output is written in 
+   one file, while planetary and particle orbital data are also written
+   separately in two other files. Finally, a fourth output file records
+   the chaos indicators (updated at each output time) as function of the
+   initial orbital elements.
+
+      If this code is used as part of a "grilla.f90"-type run, then the
+   output file for the chaos indicators MUST be set to "*". This will 
+   instruct the code to write only the final values of the indicators
+   (at the end of the integration timespan) and just on the screen. If
+   the simulations includes particles, this on-screen output will be
+   restricted to the particles and no chaos indicators of the planets
+   will be recorded.
+   
+      It is also possible to specify individual data files for all bodies.
+   In that case, the code will generate files named as planetN.dat and
+   particleN.dat, where N takes values between 1 and the total number of
+   each type of bodies.
+
+      If a certain output fle is not desired, write "no" instead of the
+   name.
+
+      It is also possible to ask the code to include more information,
+   such as the body radius (important if planetary accretion takes place),
+   solar and planetary spin, and total orbital energy and angular momentum.
+
+   For outputs in orbital elements, the default format is: 
+
+                   t,i1,a1,e1,inc1,M1,w1,O1
+                   t,i2,a2,e2,inc2,M2,w2,O2
+		              .
+		              .
+
+   where i1, i2, etc. is the identifying numbers of each body. If cartesian 
+   coordinates are chosen for output, the format is similar:
+
+                   t,i1,x1,y1,z1,vx1,vy1,vz1
+                   t,i2,x2,y2,z2,vx2,vy2,vz2
+		              .
+		              .
+
+   Aditional quatities may be requested for the output. If ALL possibilities
+   are turned on, the line corresponding to the ith-planet would look like:
+   
+   t,i,ai,ei,inci,Mi,wi,Oi,tetai,massi,Ri,Prot0,Proti,Pi,E,Ltot,caos1i...caos4i
+
+   where:  tetai  = resonant angle containing the longitude pericenter of mi
+           massi  = planetary mass (in specified mass units)
+           Ri     = planetary radius (in meters)
+	   Prot0  = Rotational period of central mass (in days)
+	   Proti  = Idem for planet
+	   Pi     = planetary orbital period
+	   E      = total orbital energy of system
+	   Ltot   = total angular momentum
+	   caos1i = 1st chaos indicator 
+	   caos2i = 2nd chaos indicator
+	   caos3i = 3rd chaos indicator
+	   caos4i = 4th chaos indicator
+	   
+   If some of theese quantities are not requested, the corresponding columns
+   will not appear in the output file.
+   
+      Finally, the individual output files will have the same format, except
+   that the identifying number of the body is omitted. 
+
+
+
+-------------------------------------------------------------------------------
+                   DEFAULT VALUES FOR THE INPUT FILE
+
+<> Type of Run - 
+
+   new run or restart (new or restart)    : new
+   data dump file name    (name or no)    : dump.ncorp11
+   data dump time interval                : 1.0d5
+
+-------------------------------------------------------------------------------
+<> General Units - 
+
+   units of mass (sun, jup, earth, kg)    : sun
+   units of distance (au, km)             : au
+   units of time (second, day, year)      : year
+
+-------------------------------------------------------------------------------
+<> Parameters of the Integration - 
+
+   integrator (radau, bs, rk)             : bs
+   initial time for integration           : 0.0
+   total integration time                 : 1.0d6
+   output time interval                   : 1.0d3
+   precision (digits per step)            : 11
+   initial time step (-1 for auto)        : -1.0
+   sign (-1 for backward integration)     : 1.0
+	
+-------------------------------------------------------------------------------
+<> The Primary - 
+
+   mass of primary (in mass units)        : 1.00
+   radius of primary [km]                 : 590000.0
+   rotational period of primary [days]    : 27.8
+   modified J2 (i.e. J2*R^2) (<=0 if no)  : 0.0
+	
+-------------------------------------------------------------------------------
+<> The Planets (i.e. gravitationally interacting bodies) - 
+
+   include planets (max=10)     (yes/no)  : yes
+   planet mass unit   (sun,jup,earth,kg)  : sun
+   planet ref. frame (astro, bary, etc.)  : astro
+
+ mass      a       e       I        M        w       Omega     tau_a     tau_e
+
+ 9.54792e-4  5.203363  0.04839  1.3053   34.4044   14.7539  100.5562
+ 2.85886e-4  9.537070  0.05415  2.4845   49.9442   92.4320  113.7150
+
+   resonance indices (empty if unwanted)  : 2  -5
+
+   include Type I migration     (yes/no)  : no
+        eccentricity damping factor Qe    : 0.1
+	ang. momentum conservation factor : 0.3
+
+   include Stokes-type migration (yes/no) : no
+        gas dissipation time [yrs]        : 1.0d6
+
+   include tidal effects        (yes/no)  : no
+        planet densities [gr/cm^3]        : 0.3    0.3
+        planet rotational periods [days]  : 1.0    1.0
+        stellar tidal parameter Q'        : 1.0d7
+        planetary tidal parameters Q'     : 1.0d6  1.0d6
+
+   relativity for planets       (yes/no)  : no
+
+-------------------------------------------------------------------------------
+<> The Particles (i.e. massless bodies) - 
+
+   include particles (max=3000) (yes/no)  : no
+   input particle file name (* for grid)  : particles.in
+
+   include non-linear gas drag  (yes/no)  : no
+       planetesimal density [gr/cm**3]    : 3.0
+
+   include Yarkovsky effect     (yes/no)  : no
+       albedo for particles               : 0.04
+
+   relativity for particles     (yes/no)  : no
+
+-------------------------------------------------------------------------------
+<> Indicators of Chaos and/or Changes in Orbital Elements - 
+
+   calculate indicators (no or type)      : no
+   maximum value for Megno (<0 for no)    : 10.0
+
+-------------------------------------------------------------------------------
+<> The Gas Disk (used only if Type I migration or gas drag turned on) - 
+
+   density at r=1 [gr/cm^2]               : 1.0d5
+   power-law exponent (S~r^(-gama))       : 0.5
+   disk flare index                       : 0.0
+   disk scale height (Hr) at r=1          : 0.07
+   disk dissipation time [yrs]            : 1.0d6
+
+   eccentricity of gas disk               : 0.0
+   initial disk long. of pericenter       : 0.0
+   inverse precession period [1/yrs]      : 0.0
+
+   include inner cavity    (yes/no)       : no
+   location of cavity edge [r]            : 0.1
+   width of cavity transition [r]         : 0.01
+
+-------------------------------------------------------------------------------
+<> Conditions for Collison/Escape - 
+
+   minimum distance from primary          : 0.001
+   maximum distance from primary          : 100.0
+   minimum approach to planets [Ri+Rj]    : 0.1
+   minimum semimajor axis [AU]            : 0.001
+   maximum semimajor axis [AU]            : 100.0
+   maximum eccentricity                   : 0.9
+
+-------------------------------------------------------------------------------
+<> Low-pass Filter - 
+
+   use low-pass filter (yes/no)           : no
+   decimation = int(t_pass/t_output)      : 1
+   size of filter (even number)           : 200
+   output decimation N (delt => delt/N)   : 1
+
+-------------------------------------------------------------------------------
+<> Output - 
+
+   general output file         (name/no)  : ncorp11.dat
+   planetary data output file  (name/no)  : planets.dat
+   particles data output file  (name/no)  : particles.dat
+   collisions/escapes outfile  (name/no)  : encounters.dat
+   chaos indicator outfile   (name/*/no)  : chaos.dat
+   individual file per body (yes/no)      : no
+   output on screen (yes, %, no)          : yes
+   output variables (elements, coord)     : elements
+   output ref. frame (astro, bary, etc.)  : astro
+   output planet mass                     : no
+   output body radius                     : no
+   output stellar & planetary spin        : no
+   output energy and angular momentum     : no
+
+------------------------------------------------------------------------------
+end 
+------------------------------------------------------------------------------
+_______________________________________________________________________________
+
+Planetary Table (all angles are in degrees):
+
+    mass         a [AU]       e         I      lambda      varpi      Omega
+  1.66014e-7    0.387098   0.20563   7.0049   252.2508    77.4565    48.3317
+  2.44784e-6    0.723331   0.00677   3.3947   181.9797   131.5330    76.6807
+  3.04043e-6    1.000000   0.01671   0.0000   100.4644   102.9472   348.7394
+  3.22715e-7    1.523662   0.09341   1.8506   355.4533   336.0409    49.5786
+  9.54792e-4    5.203363   0.04839   1.3053    34.4044    14.7539   100.5562
+  2.85886e-4    9.537070   0.05415   2.4845    49.9442    92.4320   113.7150
+  4.36624e-5   19.191261   0.04717   0.7699   313.2322   170.9642    74.2299
+  5.15139e-5   30.068963   0.00859   1.7692   304.8800    44.9714   131.7217
