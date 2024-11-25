@@ -290,13 +290,13 @@ def load_dataset(
     # Check if the dataset is already stored in memory
     if IN_MEMORY_DATASETS[source] is not None and not only_index:
         if verbose:
-            print(" Loading memory stored dataset.")
+            print(" Loading memory stored dataset...")
         return IN_MEMORY_DATASETS[source].copy()  # dataframes are mutable
 
     # Check if the index columns are already stored in memory
     elif IN_MEMORY_INDEXES[source] is not None and only_index:
         if verbose:
-            print(" Loading memory stored index columns.")
+            print(" Loading memory stored index columns...")
         return IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
 
     # Define paths and ZIP extraction flag
@@ -376,12 +376,12 @@ def load_dataset(
     if store_index:
         if store and not only_index:
             if verbose:
-                print(" Storing the entire dataset into memory.")
+                print(" Storing the entire dataset into memory...")
             IN_MEMORY_DATASETS[source] = data.copy()
             IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]]
         else:
             if verbose:
-                print(" Storing the index columns into memory.")
+                print(" Storing the index columns into memory...")
             IN_MEMORY_INDEXES[source] = data.copy()
 
     return data
