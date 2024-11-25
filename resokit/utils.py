@@ -17,6 +17,7 @@
 # IMPORTS
 # =============================================================================
 
+from fractions import Fraction
 import platform
 import sys
 from types import MappingProxyType
@@ -252,3 +253,85 @@ def assert_module_imported(
         raise ImportError(
             f"{module_name} is required for this function. {message}"
         )
+
+
+def float_to_fraction(
+    value: float,
+    max_terms: int = None,
+    max_error: float = None,
+    as_fraction: bool = False,
+    verbose: bool = False,
+):
+    """
+    Calculate the continued fraction approximation of a value.
+
+    Parameters
+    ----------
+    value : float
+        Value to approximate.
+    max_terms : int, optional
+        Maximum number of terms to use in the continued fraction expansion.
+    max_error : float, optional
+        Maximum error tolerance for the approximation.
+    as_fraction : bool, optional. Default: False
+        Whether to return the result as a fraction.
+    verbose : bool, optional. Default: True
+        Whether to print the intermediate results of the calculation.
+
+    Returns
+    -------
+    tuple
+        Tuple with the numerator and denominator of the best approximation.
+    """
+    if max_terms is None and max_error is None:
+        raise ValueError(
+            "At least one of max_terms or max_error must be provided."
+        )
+    if not isinstance(value, (int, float)):
+        raise TypeError("value must be a number.")
+    if max_terms is not None and not isinstance(max_terms, int):
+        raise TypeError("max_terms must be an integer.")
+    if max_error is not None and not isinstance(max_error, (int, float)):
+        raise TypeError("max_error must be a number.")
+
+    max_error = abs(max_error) if max_error is not None else None
+
+    z = value
+    a = []
+    numer = []
+    denom = []
+    i = 0
+
+    while True:
+        a_i = int(z)
+        a.append(a_i)
+        z = 1 / (z - a_i) if z != a_i else 0
+
+        if i == 0:
+            numer.append(a_i)
+            denom.append(1)
+        elif i == 1:
+            numer.append(a_i * numer[i - 1] + 1)
+            denom.append(a_i)
+        else:
+            numer.append(a_i * numer[i - 1] + numer[i - 2])
+            denom.append(a_i * denom[i - 1] + denom[i - 2])
+
+        approx_value = numer[i] / denom[i]
+        error = abs(approx_value - value)
+        if verbose:
+            print(
+                f"Term {i + 1}: {a_i} -> {approx_value:.6f} "
+                + f"(error: {error:.2e})"
+            )
+
+        if (max_error is not None and error < max_error) or (
+            max_terms is not None and i + 1 >= max_terms
+        ):
+            break
+
+        i += 1
+
+    if as_fraction:
+        return Fraction(numer[i], denom[i])
+    return numer[i], denom[i]

@@ -24,7 +24,13 @@ from typing import Union
 import attrs
 import pandas as pd
 
-from resokit.utils import MAPPINGS, RESO_OB_TYPES, RESO_PL_TYPES, RESO_SR_TYPES
+from resokit.utils import (
+    MAPPINGS,
+    RESO_OB_TYPES,
+    RESO_PL_TYPES,
+    RESO_SR_TYPES,
+    float_to_fraction,
+)
 
 # =============================================================================
 # CONSTANTS
@@ -141,7 +147,8 @@ class ResokitDataFrame:
             warnings.warn("Missing 'name' column in the DataFrame.")
         if (self.n_objects_ == 1) and not isinstance(self.data_df, pd.Series):
             raise TypeError(
-                "With only one object, data_df must be a Series (not a DataFrame)"
+                "With only one object, data_df must be a Series "
+                + "(not a DataFrame)"
             )
         return
 
@@ -151,12 +158,14 @@ class ResokitDataFrame:
 
     def __getitem__(self, slice):
         """x[y] <==> x.__getitem__(y)."""
-        sliced = self.data_df.__getitem__(slice)
-        return (
-            sliced.copy()
-            if isinstance(sliced, (pd.DataFrame, pd.Series))
-            else sliced
-        )
+        if self.n_objects_ == 1:
+            if isinstance(slice, int):
+                return self.data_df.iloc[slice]
+            if isinstance(slice, list):
+                if all(isinstance(i, int) for i in slice):
+                    return self.data_df.iloc[slice]
+            return self.data_df[slice]
+        return self.data_df.__getitem__(slice)
 
     def __dir__(self):
         """dir(pdf) <==> pdf.__dir__()."""
@@ -190,7 +199,7 @@ class ResokitDataFrame:
             columns = f"{self.n_columns_} columns"
             footer = f"ResokitDataFrame - {rows} x {columns}"
         else:
-            rows = f"1 row"
+            rows = "1 row"
             columns = f"{self.n_columns_} columns"
 
         parts = [
@@ -446,6 +455,23 @@ class StaticPlanet(ResokitDataFrame):
                         "Found columns not in the default planet mapping."
                     )
 
+    def __getitem__(self, slice):
+        """x[y] <==> x.__getitem__(y)."""
+        if isinstance(slice, int) or (  # integer key indexing
+            isinstance(slice, (list, tuple))  # list or tuple
+            and all(isinstance(i, int) for i in slice)  # of integers
+        ):
+            raise IndexError(
+                "StaticPlanet does not support integer indexing. "
+                + "Use the 'name' column instead."
+            )
+        if isinstance(slice, tuple) and all(isinstance(i, str) for i in slice):
+            warnings.warn(
+                "StaticPlanet does not support multi-column indexing. "
+                + "Use [[name1, name2, ...]] instead."
+            )
+        return super().__getitem__(slice)
+
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
         return (
@@ -508,6 +534,18 @@ class StaticStar(ResokitDataFrame):
                         "Found columns not in the default star mapping."
                     )
                     print(col)
+
+    def __getitem__(self, slice):
+        """x[y] <==> x.__getitem__(y)."""
+        if isinstance(slice, int) or (  # integer key indexing
+            isinstance(slice, (list, tuple))  # list or tuple
+            and all(isinstance(i, int) for i in slice)  # of integers
+        ):
+            raise IndexError(
+                "StaticStar does not support integer indexing. "
+                + "Use the 'name' column instead."
+            )
+        return super().__getitem__(slice)
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
@@ -636,16 +674,18 @@ class StaticSystem:
 
     def __getitem__(self, slice):
         """x[y] <==> x.__getitem__(y)."""
-        if isinstance(slice, int):
+        if isinstance(slice, int) or (
+            isinstance(slice, (list, tuple))
+            and all(isinstance(i, int) for i in slice)
+        ):
             sliced = self.planets[slice]
-            # Return a new StaticPlanet
-            return StaticPlanet(
-                data_df=sliced.data_df,
-                source=sliced.source,
-                metadata=dict(sliced.metadata),
-            )
-        if isinstance(slice, str) and slice.startswith("star_"):
-            return self.star.__getitem__(slice.replace("star_", ""))
+            # Return a new StaticPlanet ???
+            # return StaticPlanet(
+            #     data_df=sliced.data_df,
+            #     source=sliced.source,
+            #     metadata=dict(sliced.metadata),
+            # )
+            return sliced
         return self.get_system_items(slice)
 
     def __len__(self):
@@ -656,45 +696,71 @@ class StaticSystem:
         """Return the specified planet"""
         return self.planets[idx]
 
-    def _get_star_items(self, items: list[str] | str):
-        """Return the specified items of the star."""
-        items = list(items)
+    def _get_star_items(self, items: Union[list[str], str]):
+        """Return the specified value items of the star."""
+        if isinstance(items, str):
+            items = [items]
         items = [item.replace("star_", "") for item in items]
-        return self.star[items]
+        return [self.star[item] for item in items]
 
-    def _get_planets_items(self, items: str):
-        """Return the specified items of the planets."""
-        return [planet[items] for planet in self.planets]
+    def _get_planets_items(
+        self, items: Union[list[str], str], values: bool = True
+    ):
+        """Return the specified value items of the planets."""
+        if isinstance(items, str):
+            items = [items]
+        lista = [planet[items] for planet in self.planets]
+        if values:
+            return [item.values[0] for item in lista]
+        return lista
 
-    def get_system_items(self, items: list[str] | str):
+    def get_system_items(self, items: Union[list[str], str]):
         """Return the specified items of the system."""
-        items = list(set(items))
-        # Get star and planets items
-        star_items = [item for item in items if item.startswith("star_")]
-        planet_items = list(set(items) - set(star_items))
-        # Get values
-        star_vals = []
-        planet_vals = []
-        if star_items:
-            star_vals = list(self._get_star_items(star_items))
-        if planet_items:
-            planet_vals = list(self._get_planets_items(planet_items))
-        # Return values
+        if isinstance(items, str):
+            items = [items]
+        # If only one item, return the value
+        if len(items) == 1:
+            item = items[0]
+            if item.startswith("star_"):
+                return self.star[item.replace("star_", "")]
+            if self.n_planets_ > 1:
+                return pd.Series(
+                    self._get_planets_items(item),
+                    index=self.planet_names_,
+                    name=item,
+                )
+            return self.planets[0][item]
+        # If only 1 planet, return a Series
         if self.n_planets_ == 1:
-            return list(star_vals + planet_vals)[0]
-        if not planet_vals:
-            return pd.Series(star_vals, index=star_items, name=self.star.name)
+            return pd.Series(
+                {
+                    item: (
+                        self.star[item.replace("star_", "")]
+                        if item.startswith("star_")
+                        else self.planets[0][item]
+                    )
+                    for item in items
+                },
+                name=self.name,
+            )
+        # If multiple planets, return a DataFrame
         df = pd.DataFrame(
-            planet_vals,
-            columns=planet_items,
+            {
+                item: (
+                    self._get_planets_items(item)
+                    if not item.startswith("star_")
+                    else [None] * self.n_planets_
+                )
+                for item in items
+            },
             index=self.planet_names_,
         )
-        if star_vals:
-            for col, val in zip(star_items, star_vals):
-                df[col] = val
+        for col in df.columns:
+            if col.startswith("star_"):
+                df[col] = self.star[col.replace("star_", "")]
         return df
 
-    def remove_planet(self, index: int | str):
+    def remove_planet(self, index: int | str, verbose: bool = True):
         """
         Remove a planet from the system.
 
@@ -721,15 +787,25 @@ class StaticSystem:
                 index = self.planet_names_.index(index)
         if index < 0 or index >= self.n_planets_:
             raise IndexError("Index out of range.")
-        new_planets = self.planets[:index] + self.planets[index + 1 :]
-        return StaticSystem(
+        new_planets = self.planets[:index] + self.planets[index + 1:]
+        new_meta = dict(self.metadata)
+        if "removed_planet" not in new_meta:
+            new_meta["removed_planet"] = self.planets[index].name
+        else:
+            new_meta["removed_planet"] += f", {self.planets[index].name}"
+        ss = StaticSystem(
             star=self.star,
             planets=new_planets,
             name=self.name,
-            metadata=dict(self.metadata),
+            metadata=new_meta,
         )
+        if verbose:
+            print(f"Planet {self.planets[index].name} [{index}] removed.")
+        return ss
 
-    def add_planet(self, planet: StaticPlanet, sort: bool = True):
+    def add_planet(
+        self, planet: StaticPlanet, sort: bool = True, verbose: bool = True
+    ):
         """
         Add a planet to the system.
 
@@ -753,14 +829,72 @@ class StaticSystem:
         new_planets = self.planets + [planet]
         if sort:
             new_planets = sorted(new_planets, key=lambda x: x["P"])
-        return StaticSystem(
+        new_meta = dict(self.metadata)
+        if "added_planet" not in new_meta:
+            new_meta["added_planet"] = planet.name
+        else:
+            new_meta["added_planet"] += f", {planet.name}"
+        ss = StaticSystem(
             star=self.star,
             planets=new_planets,
             name=self.name,
-            metadata=dict(self.metadata),
+            metadata=new_meta,
         )
+        if verbose:
+            print(f"Planet {planet.name} added.")
+        return ss
 
-    def to_dataframe(self, columns=None, copy=False):
+    def get_period_ratio(
+        self, pair: Union[list, tuple, str] = "all", fraction_error: float = 0
+    ) -> Union[float, pd.DataFrame]:
+        """
+        Return the period ratio of the planets.
+
+        Parameters
+        ----------
+        pair : list, tuple, str, optional. Default: 'all'.
+            Which pair of planets to consider.
+            Either 'all' or a list/tuple of planet names/indexes.
+        fraction_error : float, optional. Default: 0.
+            If > 0, return the fraction with error lower than this value.
+
+        Returns
+        -------
+        float, pd.DataFrame
+            Period ratio of the planets
+        """
+        if self.n_planets_ < 2:
+            raise ValueError("There must be at least 2 planets to compare.")
+        if isinstance(pair, str):
+            if not pair == "all":
+                raise ValueError("Invalid pair value.")
+            if self.n_planets_ == 2:
+                return self.planets[0].P / self.planets[1].P
+            # Create a DataFrame with all the period ratios
+            periods = self.get_system_items("P")
+            df = pd.DataFrame(
+                [[p1 / p2 for p2 in periods] for p1 in periods],
+                index=periods.index,
+                columns=periods.index,
+            )
+            if abs(fraction_error):
+                return df.map(
+                    lambda x: float_to_fraction(x, max_error=fraction_error)
+                )
+            return df
+        if len(pair) != 2:
+            raise ValueError("Pair must have 2 elements.")
+        if all(isinstance(i, int) for i in pair):
+            ratio = self.planets[pair[0]].P / self.planets[pair[1]].P
+        elif all(isinstance(i, str) for i in pair):
+            ratio = self.get_system_items("P").loc[pair[0], pair[1]]
+        else:
+            raise ValueError("Invalid pair value.")
+        if abs(fraction_error):
+            return float_to_fraction(ratio, max_error=fraction_error)
+        return ratio
+
+    def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:
         """
         Return the data_df as a new DataFrame.
 
@@ -869,81 +1003,85 @@ def _create_static_planet(
     return StaticPlanet(data_df=planet_data, source=source, metadata=metadata)
 
 
-def resokit_to_planet(
-    resokit_data: ResokitDataFrame,
-    row: int = 0,
-) -> StaticPlanet:
-    """
-    Convert a ResokitDataFrame to a StaticPlanet instance.
+# def resokit_to_planet(
+#     resokit_data: ResokitDataFrame,
+#     row: int = 0,
+# ) -> StaticPlanet:
+#     """
+#     Convert a ResokitDataFrame to a StaticPlanet instance.
+#     Not usable at the moment.
 
-    Parameters
-    ----------
-    resokit_data : ResokitDataFrame
-        ResokitDataFrame instance.
-    row : int, optional. Default: 0.
-        Row index to convert.
-    Returns
-    -------
-    StaticPlanet
-        StaticPlanet instance.
-    """
-    if not isinstance(resokit_data, ResokitDataFrame):
-        raise TypeError(
-            "resokit_data must be a ResokitDataFrame instance."
-            + f" Got: {type(resokit_data)} instead."
-        )
+#     Parameters
+#     ----------
+#     resokit_data : ResokitDataFrame
+#         ResokitDataFrame instance.
+#     row : int, optional. Default: 0.
+#         Row index to convert.
+#     Returns
+#     -------
+#     StaticPlanet
+#         StaticPlanet instance.
+#     """
+#     if not isinstance(resokit_data, ResokitDataFrame):
+#         raise TypeError(
+#             "resokit_data must be a ResokitDataFrame instance."
+#             + f" Got: {type(resokit_data)} instead."
+#         )
 
-    # Get planet columns df from resokit
-    columns = RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {"star_name"}
-    planet_df = resokit_data.to_dataframe(columns=columns)
-    source = resokit_data.source
-    meta = resokit_data.to_dict()
+#     # Get planet columns df from resokit
+#     columns = RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {"star_name"}
+#     planet_df = resokit_data.to_dataframe(columns=columns)
+#     source = resokit_data.source
+#     meta = resokit_data.to_dict()
 
-    # Get the row if multiple lines
-    if len(resokit_data) > 1:
-        planet_df = planet_df.iloc[row]
+#     # Get the row if multiple lines
+#     if len(resokit_data) > 1:
+#         planet_df = planet_df.iloc[row]
 
-    return _create_static_planet(
-        planet_data=planet_df, source=source, metadata=meta
-    )
+#     return _create_static_planet(
+#         planet_data=planet_df, source=source, metadata=meta
+#     )
 
 
-def resokit_to_star(
-    resokit_data: ResokitDataFrame,
-    row: int = 0,
-) -> StaticStar:
-    """
-    Convert a ResokitDataFrame to a StaticStar instance.
+# def resokit_to_star(
+#     resokit_data: ResokitDataFrame,
+#     row: int = 0,
+# ) -> StaticStar:
+#     """
+#     Convert a ResokitDataFrame to a StaticStar instance.
+#     Not usable at the moment.
 
-    Parameters
-    ----------
-    resokit_data : ResokitDataFrame
-        ResokitDataFrame instance.
-    row : int, optional. Default: 0.
-        Row index to convert.
-        None to get the row with the most recent rowupdate date.
+#     Parameters
+#     ----------
+#     resokit_data : ResokitDataFrame
+#         ResokitDataFrame instance.
+#     row : int, optional. Default: 0.
+#         Row index to convert.
+#         None to get the row with the most recent rowupdate date.
 
-    Returns
-    -------
-    StaticStar
-        StaticStar instance.
-    """
-    # Get planet columns df from resokit
-    cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
-    columns = {col.replace("star_", "") for col in cols}
-    star_df = resokit_data.to_dataframe(columns=columns)
-    source = resokit_data.source
-    meta = resokit_data.to_dict()
+#     Returns
+#     -------
+#     StaticStar
+#         StaticStar instance.
+#     """
+#     # Get planet columns df from resokit
+#     cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
+#     columns = {col.replace("star_", "") for col in cols}
+#     star_df = resokit_data.to_dataframe(columns=columns)
+#     source = resokit_data.source
+#     meta = resokit_data.to_dict()
 
-    # Get the row if multiple lines.
-    # Use the most recent rowupdate date, if row not specified
-    if len(resokit_data) > 1:
-        if row < 0 or row is None:
-            star_df["rowupdate"] = pd.to_datetime(star_df["rowupdate"])
-            row = star_df["rowupdate"].idxmax()
-        star_df = star_df.iloc[row]
+#     # Get the row if multiple lines.
+#     # Use the most recent rowupdate date, if row not specified
+#     if len(resokit_data) > 1:
+#         if row < 0 or row is None:
+#             star_df["rowupdate"] = pd.to_datetime(star_df["rowupdate"])
+#             row = star_df["rowupdate"].idxmax()
+#         star_df = star_df.iloc[row]
 
-    return _create_static_star(star_data=star_df, source=source, metadata=meta)
+#     return _create_static_star(
+#       star_data=star_df, source=source, metadata=meta
+#     )
 
 
 def resokit_to_system(
