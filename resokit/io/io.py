@@ -24,10 +24,8 @@ import pandas as pd
 
 from resokit.core import (
     ResokitDataFrame,
-    StaticPlanet,
     StaticSystem,
     df_to_resokit,
-    resokit_to_planet,
     resokit_to_system,
 )
 from resokit.datasets import load_dataset
@@ -193,7 +191,8 @@ def _load_system_from_db(
     # If storing, then load the whole dataset
     if verbose:
         print(
-            f"Loading {name} {'planet' if is_planet else 'star system'} from {source}."
+            f"Loading {'planet' if is_planet else 'star system'} {name} "
+            + f"from {source}."
         )
     if store:
         store_index = True  # Store the index if the dataset will be stored
@@ -253,7 +252,7 @@ def load_system_from_eu(
     verbose: bool = True,
     low_memory: bool = False,
     as_resokit: bool = False,
-) -> Union[ResokitDataFrame, StaticPlanet, StaticSystem]:
+) -> Union[ResokitDataFrame, StaticSystem]:
     """
     Load system from ExoplanetEU.
 
@@ -284,8 +283,7 @@ def load_system_from_eu(
     -------
     Union[ResokitDataFrame, StaticPlanet, StaticSystem]
         ResoKit DataFrame (if as_resokit is True),
-        StaticPlanet (if is_planet is True),
-        or StaticSystem (if is_planet is False).
+        or StaticSystem.
     """
     df = _load_system_from_db(
         name=name,
@@ -314,9 +312,7 @@ def load_system_from_eu(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return StaticPlanet or StaticSystem
-        if is_planet:
-            return resokit_to_planet(reso)
+    if not as_resokit:  # Return StaticSystem
         return resokit_to_system(reso)
 
     return reso  # Return ResoKit DataFrame
@@ -334,7 +330,7 @@ def load_system_from_nasa(
     controversial_set: bool = False,
     default_set: bool = True,
     as_resokit: bool = False,
-) -> Union[ResokitDataFrame, StaticPlanet, StaticSystem]:
+) -> Union[ResokitDataFrame, StaticSystem]:
     """
     Load system from NASA.
 
@@ -369,10 +365,9 @@ def load_system_from_nasa(
 
     Returns
     -------
-    Union[ResokitDataFrame, StaticPlanet, StaticSystem]
+    Union[ResokitDataFrame, StaticSystem]
         ResoKit DataFrame (if as_resokit is True),
-        StaticPlanet (if is_planet is True),
-        or StaticSystem (if is_planet is False).
+        or StaticSystem.
     """
     df = _load_system_from_db(
         name=name,
@@ -406,9 +401,7 @@ def load_system_from_nasa(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return StaticPlanet or StaticSystem
-        if is_planet:
-            return resokit_to_planet(reso)
+    if not as_resokit:  # Return StaticSystem
         return resokit_to_system(reso)
 
     return reso  # Return ResoKit DataFrame
