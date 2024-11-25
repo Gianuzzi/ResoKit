@@ -21,10 +21,8 @@ import pandas as pd
 
 from resokit.core import (
     ResokitDataFrame,
-    StaticPlanet,
     StaticSystem,
     df_to_resokit,
-    resokit_to_planet,
     resokit_to_system,
 )
 from resokit.utils import assert_module_imported, DEFAULT_METADATA
@@ -160,7 +158,7 @@ def query_online_data(
     controversial_flag: int = 0,
     verbose: bool = True,
     as_resokit: bool = False,
-) -> Union[ResokitDataFrame, StaticPlanet, StaticSystem]:
+) -> Union[ResokitDataFrame, StaticSystem]:
     """
     Query the online dataset based on specified filters.
 
@@ -183,10 +181,9 @@ def query_online_data(
 
     Returns
     -------
-    Union[ResokitDataFrame, StaticPlanet, StaticSystem]
+    Union[ResokitDataFrame, StaticSystem]
         ResoKit DataFrame (if as_resokit is True),
-        StaticPlanet (if is_planet is True),
-        or StaticSystem (if is_planet is False).
+        or StaticSystem.
 
     Returns
     -------
@@ -240,9 +237,7 @@ def query_online_data(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return StaticPlanet or StaticSystem
-        if planet_name:
-            return resokit_to_planet(reso)
+    if not as_resokit:  # Return StaticSystem
         return resokit_to_system(reso)
 
     return reso  # Return ResoKit DataFrame
