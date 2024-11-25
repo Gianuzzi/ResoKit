@@ -1,8 +1,14 @@
+# =============================================================================
+# IMPORTS
+# =============================================================================
+
 import numpy as np
 import pandas as pd
-import attrs
-import warnings
 from rsk_core import DynamicPlanet, Star, DynamicSystem, Angles
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
 
 # allowed inputs
 ELEM_SPACE = {
@@ -16,25 +22,34 @@ ELEM_SPACE = {
     "Omega": None,
     "_": None,
     "mass": None,
+    "resangs": None,
 }
 
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
 
 def _try_getting(df, key):
-    if key in df.columns:
-        return df[key].values
-    return None
+    """Retrieve a column's values or return None."""
+    return df[key].values if key in df.columns else None
 
-def _set_angle(angls):
-    if angls is None: 
-        return None
-    return(Angles(angls))
+def _to_Angles(angls):
+    """Convert list to Angles or return None."""
+    return None if angls is None else Angles(angls)
 
+def _separate_resangs(resangs,npl):
+    """Separate resonance angles by planet."""
+    return None if resangs is None else [resangs[i::npl] for i in range(npl)]
 
-#####--------------------- LOAD INTEGRATION
+# =============================================================================
+# MAIN FUNCTION
+# =============================================================================
+
 def load_integration(
     file,
     npl,
     names=["time", "ibody", "a", "e", "inc", "M", "w", "Omega"],
+    sep_files=False,
     mass=None,
     radius=None,
     usecols=None,
@@ -49,7 +64,9 @@ def load_integration(
     Parameters
     ----------
     file : str
-        Path to file. Has to be separated by spaces.
+        Path to file. If sep_files is True, this parameter should be the names
+        of the individual files, with an asterisk replacing the body id,
+        eg. " file='planet*.dat' ".
     npl : int
         Number of planets.
     names : list of str, optional
@@ -57,6 +74,8 @@ def load_integration(
         "a", "e", "inc", "M", "w", "Omega", "mass", "_"]. Use "_" for
         throwaways. The default is ["time", "ibody", "a", "e", "inc", "M",
         "w", "Omega"].
+    sep_files: bool, optional
+        Should be true if data is scattered in a one-file-per-body manner.
     mass : list of floats, optional
         Planet masses in Earth masses.
         The default is None.
@@ -97,6 +116,10 @@ def load_integration(
 
     if plnames and len(plnames) != npl:
         raise ValueError("Shape of plnames mismatch")
+    
+    # if sep_files, there shouldnt be an ibody column
+    if sep_files and ("ibody" in names):
+        raise Exception("separated files don't have 'ibody' column")
 
     # =============== READ DATA =============== #
     # select parameters with usecols
@@ -105,13 +128,29 @@ def load_integration(
     names = [names[i] for i in usecols]
 
     # read data
-    data = pd.read_table(
-        file,
-        delimiter=r"\s+",
-        names=names,
-        header=None,
-        usecols=usecols,
-    )
+    if not sep_files:
+        data = pd.read_table(
+            file,
+            delimiter=r"\s+",
+            names=names,
+            header=None,
+            usecols=usecols,
+            )
+    elif sep_files:
+        data = pd.DataFrame()
+        for ipl in np.arange(1,npl+1):
+            astk_ind = file.index('*')
+            file_ith = file[:astk_ind]+str(ipl)+file[astk_ind+1:]
+            data_ith = pd.read_table(
+                    file_ith,
+                    delimiter=r"\s+",
+                    names=names,
+                    header=None,
+                    usecols=usecols,
+                    )
+            data_ith['ibody'] = ipl
+            data = pd.concat([data,data_ith])
+        data = data.sort_values(['times','ibody'])
     nrows = len(data.index)
 
     # =============== PREPARE DATAFRAME =============== #
@@ -131,7 +170,9 @@ def load_integration(
                             using an 'ibody' column or one file per planet"
             )
         data["ibody"] = pl_ibodies
-
+        
+    
+    # =============== ORGANIZE DATA =============== #
     # set default values of mass and radius to list of nones
     if mass is None:
         mass = [None] * npl
@@ -165,10 +206,10 @@ def load_integration(
         is_star_i = is_star[ipl]
         
         # convert angles
-        inc_i   = _set_angle(inc_i)
-        M_i     = _set_angle(M_i)
-        w_i     = _set_angle(w_i)
-        Omega_i = _set_angle(Omega_i)
+        inc_i   = _to_Angles(inc_i)
+        M_i     = _to_Angles(M_i)
+        w_i     = _to_Angles(w_i)
+        Omega_i = _to_Angles(Omega_i)
         
         # create the object
         ith_pl_obj = DynamicPlanet(
@@ -188,14 +229,10 @@ def load_integration(
 
     # =============== CREATE STAR =============== #
     star = Star(mass=st_m, radius=st_r)
-    return DynamicSystem(star=star, planets=planets)
-
-
-sys1 = load_integration(
-    "datasets/2planet_example.dat",
-    npl=2,
-    names=["times", "ibody", "a", "e", "_", "_", "w", "Omega", "_", "_"],
-)
-
-pl1 = sys1.planets[0]
-pl2 = sys1.planets[1]
+    
+    # ======== DYNAMIC SYSTEM PROPERTIES ======== #
+    resangs = _try_getting(data, "resangs")
+    resangs = _to_Angles(resangs)
+    resangs_l = _separate_resangs(resangs,npl)
+    
+    return DynamicSystem(star=star, planets=planets, resangs=resangs_l)

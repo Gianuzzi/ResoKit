@@ -4,37 +4,40 @@
 
 
 import numpy as np
+import matplotlib.pyplot as plt
 import attrs
-import warnings
 
 
-# ============================================================================
+# =============================================================================
 # UTILTY FUNCTIONS AND CLASSES
-# ============================================================================
+# =============================================================================
 
 
 # list of angles
-class Angles:
-    def __new__(cls,angls):
-        if isinstance(angls, Angles):
-            return angls  # Return existing instance, skips new object creation
-        return super().__new__(Angles)  # Create a new Angles instance
-
-    def __init__(self, angls):
-        # Avoid re-initializing if angls is already an Angles instance
-        if isinstance(angls, Angles): return
-        angls = np.asarray(angls)
-        self.angls = angls % 360
+class Angles(np.ndarray):
+    # First two methods are required when subclassing np.ndarray
+    def __new__(cls, angls,rad=False):
+        units = 180/np.pi if rad else 1 
+        ang_arr = np.asarray(angls)*units
+        ang_arr = ang_arr%360
+        return ang_arr.view(cls)
 
     def __add__(self, other_angls):
-        if isinstance(other_angls, Angles):
-            return (self.angls + other_angls.angls) % 360
-        warnings.warn('Added Angle type to non-Angle type')
-        return self.angls + other_angls
-
+        return(np.ndarray.__add__(self,other_angls) % 360)
+    
+    @property
+    def rad(self):
+        return(self*np.pi/180)
+    
     def __repr__(self):
-        angls = np.asarray(self.angls)
-        return str(angls)
+        # Truncate representation if array is large
+        max_items = 10  # Maximum items to display before truncation
+        if self.size > max_items:
+            # Show the first and last few elements with ellipsis in the middle
+            data = np.concatenate((self[:5],['...'], self[-5:]))
+            return f"Angles([{', '.join(map(str, data))}])"
+        else:
+            return np.ndarray.__repr__(self)
     
     
 # Custom validators
@@ -76,7 +79,6 @@ _ANGL_TIME_SEQ_VALID_AND_CONV = {
 def _exists(var):
     return var is not None
 
-
 def _everything_exists(*variables):
     return all([_exists(var) for var in variables])
 
@@ -91,13 +93,13 @@ class DynamicPlanet:
     """Time series for the evolution of a planet"""
 
     # Input time arrays
-    times: list = attrs.field(default=None, **_TIME_SEQ_VALID_AND_CONV)  # yr
-    a: list = attrs.field(default=None, **_TIME_SEQ_VALID_AND_CONV)  # AU
-    e: list = attrs.field(default=None, **_TIME_SEQ_VALID_AND_CONV)  #
-    inc: list = attrs.field(default=None, **_ANGL_TIME_SEQ_VALID_AND_CONV)  # deg
-    M: list = attrs.field(default=None, **_ANGL_TIME_SEQ_VALID_AND_CONV)  # deg
-    w: list = attrs.field(default=None, **_ANGL_TIME_SEQ_VALID_AND_CONV)  # deg
-    Omega: list = attrs.field(default=None, **_ANGL_TIME_SEQ_VALID_AND_CONV)  # deg
+    times: list  # yr
+    a:     list  # AU
+    e:     list  #
+    inc:   list  # deg
+    M:     list  # deg
+    w:     list  # deg
+    Omega: list  # deg
 
     # Input constants
     mass: float = attrs.field(
@@ -120,8 +122,7 @@ class DynamicPlanet:
         init=False, default=None, validator=_validate_sequence
     )  # mean longitude
     _lam: list = attrs.field(
-        init=False, default=None, validator=_validate_sequence
-    )  # mean longitude
+        init=False, default=None)  # mean longitude
 
     @property
     def varpi(self):
@@ -131,7 +132,7 @@ class DynamicPlanet:
                             required to calculate 'varpi'"
             )
         elif self._varpi is None:
-            self._varpi = (self.w + self.Omega) % 360
+            self._varpi = self.w + self.Omega
         return self._varpi
 
     @property
@@ -140,13 +141,20 @@ class DynamicPlanet:
             raise TypeError(
                 "'M', 'w' and 'Omega' are\
                             required to calculate 'varpi'"
-            )
+                            )
         elif self._lam is None:
-            self._lam = (self.M + self.w + self.Omega) % 360
+            self._lam = self.M + self.w + self.Omega
         return self._lam
-
-    def planet_method(self): ...
-
+    
+    def plot(self,var,ax=None,**plot_kw):
+      if ax is None: ax=plt.gca()
+      ax.plot(self.times,getattr(self,var),**plot_kw)
+      return ax
+  
+    def scatter(self,var,ax=None,**scatter_kw):
+      if ax is None: ax=plt.gca()
+      ax.scatter(self.times,getattr(self,var),**scatter_kw)
+      return ax
 
 # ------------------------- STAR
 @attrs.define(repr=False)
@@ -170,7 +178,7 @@ _LIST_OF_PLANETS_VALID = attrs.validators.deep_iterable(
     member_validator=attrs.validators.instance_of(DynamicPlanet)
 )
 
-
+_PICK_RIGHT_VP_COEFS = 'sum(vp_coefs) has to equal order of MMR.'
 # ------------------------- DynamicSystem
 @attrs.define(repr=False)
 class DynamicSystem:
@@ -187,7 +195,9 @@ class DynamicSystem:
     nstars: int = attrs.field(default=1, validator=attrs.validators.instance_of(int))
     # time array
     times: list = attrs.field(init=False, default=None, **_TIME_SEQ_VALID_AND_CONV)
-
+    
+    resangs: list = attrs.field(default=None, validator=_validate_sequence)
+    
     def __attrs_post_init__(self):
         self.times = self.planets[0].times
         self.npl = len(self.planets)
@@ -207,9 +217,58 @@ class DynamicSystem:
         nl = np.asarray([(mu_l / pli.a**3) ** 0.5 for pli in planets])
         prat = nl[:-1] / nl[1:]
         return prat
+    
+    
+    
+    def calc_2pmmr(self,num,den,ij=[0,1],vp_coefs=[0,0]):
+        assert (num-den - sum(vp_coefs) == 0), _PICK_RIGHT_VP_COEFS
+        
+        i1,i2 = ij
+        pl1 = self.planets[i1]
+        pl2 = self.planets[i2]
+        
+        p = den
+        q = num-den
+        
+        _2pmmr_ang = pl1.lam*p - pl2.lam*(p+q) \
+                   + np.dot(vp_coefs,[pl1.varpi,pl2.varpi])
+        
+        return(_2pmmr_ang)
+    
+    def calc_3pmmr(self,k1,k2,k3,ijk=[0,1,2],vp_coefs=[0,0,0]):
+        assert (self.npl>=3), "Not enough planets for a 3P-MMR."
+        assert (k1+k2+k3 - sum(vp_coefs) == 0), _PICK_RIGHT_VP_COEFS
+        
+        i1,i2,i3 = ijk
+        pl1 = self.planets[i1]
+        pl2 = self.planets[i2]
+        pl3 = self.planets[i3]
 
-
-
-
-
-
+        _3pmmr_ang = pl1.lam*k1 + pl2.lam*k2 + pl3.lam*k3 \
+                   + np.dot(vp_coefs,[pl1.varpi,pl2.varpi,pl3.varpi])
+        return(_3pmmr_ang)
+    
+    def _plot_or_scatter_resangs(self,ax,method,which_3p_ang,**any_kw):
+        which = np.asarray(which_3p_ang)
+        which = [which] if which.ndim==0 else which
+        for i in which:
+            resangi = self.resangs[i]
+            plotting_func = getattr(ax, method)
+            plotting_func(self.times,resangi,**any_kw)
+        return ax
+    
+    def plot(self,var,ax=None,which_3p_ang=None,**plot_kw):
+      if ax is None: ax=plt.gca()
+      if var=='resangs':
+          self._plot_or_scatter_resangs(ax,'plot',which_3p_ang,**plot_kw)
+          return ax
+      ax.plot(self.times,getattr(self,var),**plot_kw)
+      return ax
+  
+    def scatter(self,var,ax=None,which_3p_ang=None,**scatter_kw):
+      if ax is None: ax=plt.gca()
+      if var=='resangs':
+          self._plot_or_scatter_resangs(ax,'scatter',which_3p_ang,**scatter_kw)
+          return ax
+      ax.scatter(self.times,getattr(self,var),**scatter_kw)
+      return ax
