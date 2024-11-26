@@ -22,6 +22,8 @@ from collections.abc import Mapping
 from typing import Union
 
 import attrs
+
+# import matplotlib.pyplot as plt
 import pandas as pd
 
 from resokit.utils import (
@@ -397,7 +399,7 @@ def df_to_resokit(
 # NEW CODE
 
 
-@attrs.define(repr=False, frozen=True)
+@attrs.define(repr=False, frozen=True, slots=True)
 class StaticPlanet(ResokitDataFrame):
     """
     StaticPlanet class representing a static planet.
@@ -482,7 +484,7 @@ class StaticPlanet(ResokitDataFrame):
         )
 
 
-@attrs.define(repr=False, frozen=True)
+@attrs.define(repr=False, frozen=True, slots=True)
 class StaticStar(ResokitDataFrame):
     """
     StaticStar class representing a static star.
@@ -524,6 +526,7 @@ class StaticStar(ResokitDataFrame):
                 "StaticStar must have a pd.Series. "
                 + f"Got: {type(self.data_df)} instead."
             )
+        # Check if all columns are in the default mapping
         if not self.user_defined_:
             AUX_COLS = {
                 col.replace("star_", "") for col in RESO_SR_TYPES.keys()
@@ -556,7 +559,7 @@ class StaticStar(ResokitDataFrame):
         )
 
 
-@attrs.define(repr=False, frozen=True)
+@attrs.define(repr=False, frozen=True, slots=True)
 class StaticSystem:
     """
     StaticSystem class representing a static system.
@@ -579,6 +582,9 @@ class StaticSystem:
         Flag indicating if the system is user-defined.
     planet_names_ : list
         List of planet names.
+    period_ratios : float, pd.DataFrame
+        Period ratios of the planets.
+        Created after calling the period_ratios method.
     """
 
     star: StaticStar = attrs.field(
@@ -603,6 +609,8 @@ class StaticSystem:
     source_: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
     planet_names_: list = attrs.field(init=False)
+
+    period_ratios_: Union[float, pd.DataFrame] = attrs.field(init=False)
 
     @n_planets_.default
     def _n_planets__default(self):
@@ -634,9 +642,20 @@ class StaticSystem:
         """Default value for planet_names_."""
         return [getattr(planet, "name") for planet in self.planets]
 
+    @period_ratios_.default
+    def _period_ratios__default(self):
+        """Default value for period_ratios."""
+        if self.n_planets_ == 1:
+            return None
+        elif self.n_planets_ == 2:
+            return self.planets[0].P / self.planets[1].P
+        return pd.DataFrame()  # Empty mutable DataFrame
+
     def __attrs_post_init__(self):
         """Post-initialization hook."""
         star_name = self.star.name
+        # Check if all planets are StaticPlanet instances
+        # and if they have the same star name
         for planet in self.planets:
             if not isinstance(planet, StaticPlanet):
                 raise TypeError(
@@ -649,13 +668,14 @@ class StaticSystem:
                     f"Planet({planet.name}) star name({planet.star_name})"
                     + f" is different from Star({star_name})."
                 )
+        # Check if all planets have unique names
         if self.n_planets_ != len(set(self.planet_names_)):
             warnings.warn("Planets must have unique names.")
         return
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        star_msg = "\n" + f" Star: {self.star.name}"
+        star_msg = "\n Star:\n  " + f"{self.star.name}"
         planets_msg = (
             "\n"
             + f" Planet{'s' if self.n_planets_ > 1 else ''}:"
@@ -667,7 +687,7 @@ class StaticSystem:
             + f"{star_msg} "
             + f"{planets_msg}"
             + "\n"
-            + f" from {self.source_} data source."
+            + f" from '{self.source_}' data source."
             if not self.user_defined_
             else ""
         )
@@ -686,7 +706,7 @@ class StaticSystem:
             #     metadata=dict(sliced.metadata),
             # )
             return sliced
-        return self.get_system_items(slice)
+        return self.get_item(slice)
 
     def __len__(self):
         """len(x) <=> x.__len__()."""
@@ -714,7 +734,7 @@ class StaticSystem:
             return [item.values[0] for item in lista]
         return lista
 
-    def get_system_items(self, items: Union[list[str], str]):
+    def get_item(self, items: Union[list[str], str]):
         """Return the specified items of the system."""
         if isinstance(items, str):
             items = [items]
@@ -787,7 +807,7 @@ class StaticSystem:
                 index = self.planet_names_.index(index)
         if index < 0 or index >= self.n_planets_:
             raise IndexError("Index out of range.")
-        new_planets = self.planets[:index] + self.planets[index + 1:]
+        new_planets = self.planets[:index] + self.planets[index + 1 :]
         new_meta = dict(self.metadata)
         if "removed_planet" not in new_meta:
             new_meta["removed_planet"] = self.planets[index].name
@@ -844,8 +864,22 @@ class StaticSystem:
             print(f"Planet {planet.name} added.")
         return ss
 
-    def get_period_ratio(
-        self, pair: Union[list, tuple, str] = "all", fraction_error: float = 0
+    @property
+    def period_ratios(self):
+        """Return the period ratios of the planets."""
+        if self.n_planets_ < 2:
+            raise ValueError("There must be at least 2 planets to compare.")
+        if self.n_planets_ == 2:
+            return self.period_ratios_
+        if not self.period_ratios_.empty:
+            return self.period_ratios_
+        return self.pair_ratio()
+
+    def pair_ratio(
+        self,
+        *pair: Union[list, tuple, str],
+        fraction_arg: Union[float, int] = 0,
+        verbose: bool = True,
     ) -> Union[float, pd.DataFrame]:
         """
         Return the period ratio of the planets.
@@ -855,8 +889,14 @@ class StaticSystem:
         pair : list, tuple, str, optional. Default: 'all'.
             Which pair of planets to consider.
             Either 'all' or a list/tuple of planet names/indexes.
-        fraction_error : float, optional. Default: 0.
-            If > 0, return the fraction with error lower than this value.
+        fraction_arg : float, int, optional. Default: 0.
+            If an integer, return the fraction with this number of term
+             calculations.
+            If a float, return the fraction with error lower than this value.
+            If 0, return the float value (do not convert to fraction).
+        verbose : bool, optional. Default: False.
+            Whether to print the steps of the calculation if a single pair,
+            and fraction_arg is not 0.
 
         Returns
         -------
@@ -865,33 +905,75 @@ class StaticSystem:
         """
         if self.n_planets_ < 2:
             raise ValueError("There must be at least 2 planets to compare.")
+        fract_kwargs = {}
+        if isinstance(fraction_arg, float):
+            fract_kwargs = {"max_error": fraction_arg}
+        elif isinstance(fraction_arg, int):
+            fract_kwargs = {"max_terms": float(fraction_arg)}
+        else:
+            raise ValueError("Invalid fraction_arg value.")
+        # Extract pair
+        if not pair:
+            pair = "all"
+        elif len(pair) > 2:
+            raise ValueError("Pair must have 2 elements.")
+        elif len(pair) == 1:
+            pair = pair[0]
         if isinstance(pair, str):
             if not pair == "all":
                 raise ValueError("Invalid pair value.")
             if self.n_planets_ == 2:
                 return self.planets[0].P / self.planets[1].P
+            if not self.period_ratios_.empty:
+                if fract_kwargs:
+                    return self.period_ratios_.map(
+                        lambda x: float_to_fraction(
+                            x,
+                            **fract_kwargs,
+                            verbose=False,
+                        )
+                    )
+                return self.period_ratios
             # Create a DataFrame with all the period ratios
-            periods = self.get_system_items("P")
+            periods = self.get_item("P")
             df = pd.DataFrame(
                 [[p1 / p2 for p2 in periods] for p1 in periods],
                 index=periods.index,
                 columns=periods.index,
             )
-            if abs(fraction_error):
+            # Store the DataFrame
+            if self.period_ratios_.empty:
+                self.period_ratios_[df.columns] = df
+            if fract_kwargs:
                 return df.map(
-                    lambda x: float_to_fraction(x, max_error=fraction_error)
+                    lambda x: float_to_fraction(
+                        x, **fract_kwargs, verbose=False
+                    )
                 )
             return df
-        if len(pair) != 2:
-            raise ValueError("Pair must have 2 elements.")
-        if all(isinstance(i, int) for i in pair):
-            ratio = self.planets[pair[0]].P / self.planets[pair[1]].P
-        elif all(isinstance(i, str) for i in pair):
-            ratio = self.get_system_items("P").loc[pair[0], pair[1]]
+        if fract_kwargs:
+            fract_kwargs["verbose"] = verbose
+        idxs = []  # Indexes of the pair
+        for idx in pair:
+            if isinstance(idx, str):
+                if len(idx) == 1:  # Suffix
+                    idxs.append(
+                        [planet.suffix_ for planet in self.planets].index(idx)
+                    )
+                else:  # Name
+                    idxs.append(self.planet_names_.index(idx))
+            elif isinstance(idx, int):  # Index
+                idxs.append(idx)
+            else:
+                raise ValueError("Invalid pair value.")
+        # Calculate the ratio
+        if not self.period_ratios_.empty:
+            ratio = self.period_ratios_.iloc[idxs[0], idxs[1]]
         else:
-            raise ValueError("Invalid pair value.")
-        if abs(fraction_error):
-            return float_to_fraction(ratio, max_error=fraction_error)
+            ratio = self.planets[idxs[0]].P / self.planets[idxs[1]].P
+        # Return the ratio
+        if abs(fraction_arg):
+            return float_to_fraction(ratio, **fract_kwargs)
         return ratio
 
     def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:

@@ -260,7 +260,7 @@ def float_to_fraction(
     max_terms: int = None,
     max_error: float = None,
     as_fraction: bool = False,
-    verbose: bool = False,
+    verbose: bool = True,
 ):
     """
     Calculate the continued fraction approximation of a value.
@@ -272,9 +272,9 @@ def float_to_fraction(
     max_terms : int, optional
         Maximum number of terms to use in the continued fraction expansion.
     max_error : float, optional
-        Maximum error tolerance for the approximation.
+        Maximum relative error tolerance for the approximation.
     as_fraction : bool, optional. Default: False
-        Whether to return the result as a fraction.
+        Whether to return the result as a Fraction object.
     verbose : bool, optional. Default: True
         Whether to print the intermediate results of the calculation.
 
@@ -302,6 +302,8 @@ def float_to_fraction(
     denom = []
     i = 0
 
+    if verbose:
+        print(f"Approximating float {value:.6f} as a continued fraction:")
     while True:
         a_i = int(z)
         a.append(a_i)
@@ -318,10 +320,11 @@ def float_to_fraction(
             denom.append(a_i * denom[i - 1] + denom[i - 2])
 
         approx_value = numer[i] / denom[i]
-        error = abs(approx_value - value)
+        error = abs(approx_value - value) / value
         if verbose:
             print(
-                f"Term {i + 1}: {a_i} -> {approx_value:.6f} "
+                f"Iter {i + 1:>2d}: {numer[i]:>3d}/{denom[i]:<3d} "
+                + f"-> {approx_value:.6f} "
                 + f"(error: {error:.2e})"
             )
 
