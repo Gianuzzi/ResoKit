@@ -65,7 +65,7 @@ def download_dataset(
     verbose: bool = True,
     return_data: bool = False,
     store: bool = False,
-) -> Union[Path | pd.DataFrame | None]:
+) -> Union[Path, pd.DataFrame, None]:
     """
     Downloads the dataset from a specified source and saves it locally as CSV.
 
@@ -226,7 +226,7 @@ def load_dataset(
     download_if_missing: bool = False,
     extract: bool = False,
     only_index: bool = False,
-    only_rows: list | int = [],
+    only_rows: Union[list, int] = [],
     verbose: bool = True,
     store: bool = False,
     store_index: bool = True,
