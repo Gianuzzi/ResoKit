@@ -21,6 +21,7 @@ from fractions import Fraction
 import platform
 import sys
 from types import MappingProxyType
+from typing import Union
 
 from resokit import __version__ as VERSION
 
@@ -260,8 +261,9 @@ def float_to_fraction(
     max_terms: int = None,
     max_error: float = None,
     as_fraction: bool = False,
+    stop_func: callable = None,
     verbose: bool = True,
-):
+) -> Union[Fraction, tuple[int, int]]:
     """
     Calculate the continued fraction approximation of a value.
 
@@ -269,23 +271,30 @@ def float_to_fraction(
     ----------
     value : float
         Value to approximate.
-    max_terms : int, optional
+    max_terms : int, optional.
         Maximum number of terms to use in the continued fraction expansion.
-    max_error : float, optional
+    max_error : float, optional.
         Maximum relative error tolerance for the approximation.
     as_fraction : bool, optional. Default: False
         Whether to return the result as a Fraction object.
+    stop_func : callable, optional
+        Function to use as a stopping criterion for the approximation.
+        Takes the numerator and denominator of the current approximation as
+        arguments and returns a boolean indicating whether to stop.
+        If STOP is reached, the function will return the
+        previous approximation.
     verbose : bool, optional. Default: True
         Whether to print the intermediate results of the calculation.
 
     Returns
     -------
-    tuple
-        Tuple with the numerator and denominator of the best approximation.
+    Union[Fraction, tuple[int, int]]
+        Tuple with the numerator and denominator of the best approximation,
+        or a Fraction object if `as_fraction` is True.
     """
-    if max_terms is None and max_error is None:
+    if max_terms is None and max_error is None and stop_func is None:
         raise ValueError(
-            "At least one of max_terms or max_error must be provided."
+            "At least one of max_terms or max_error or stop_func must be set."
         )
     if not isinstance(value, (int, float)):
         raise TypeError("value must be a number.")
@@ -293,6 +302,25 @@ def float_to_fraction(
         raise TypeError("max_terms must be an integer.")
     if max_error is not None and not isinstance(max_error, (int, float)):
         raise TypeError("max_error must be a number.")
+    if stop_func is not None:
+        has_stop = True
+        if callable(stop_func):
+            try:
+                if not isinstance(stop_func(1, 1), bool):
+                    raise TypeError("stop_func must return a boolean.")
+            except Exception as e:  # Any error
+                print(e)
+                raise TypeError(
+                    "stop_func must be able to return a boolean "
+                    + "from the numerator and denominator."
+                )
+        else:
+            raise TypeError("stop_func must be a callable.")
+    else:
+        has_stop = False
+
+        def stop_func(n, d):
+            return False  # Keep going
 
     max_error = abs(max_error) if max_error is not None else None
 
@@ -320,17 +348,22 @@ def float_to_fraction(
             denom.append(a_i * denom[i - 1] + denom[i - 2])
 
         approx_value = numer[i] / denom[i]
-        error = abs(approx_value - value) / value
+        error = abs((approx_value - value) / value)
+        is_stop = stop_func(numer[i], denom[i])
         if verbose:
             print(
                 f"Iter {i + 1:>2d}: {numer[i]:>3d}/{denom[i]:<3d} "
                 + f"-> {approx_value:.6f} "
                 + f"(error: {error:.2e})"
+                + (f" -> STOP: {is_stop}" if has_stop else "")
             )
 
         if (max_error is not None and error < max_error) or (
             max_terms is not None and i + 1 >= max_terms
         ):
+            break
+        if is_stop:
+            i -= 1  # Go back one step before
             break
 
         i += 1
