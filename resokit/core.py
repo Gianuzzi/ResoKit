@@ -23,7 +23,7 @@ from typing import Union
 
 import attrs
 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from resokit.utils import (
@@ -147,7 +147,7 @@ class ResokitDataFrame:
             warnings.warn("Empty DataFrame.")
         if "name" not in self.columns_:
             warnings.warn("Missing 'name' column in the DataFrame.")
-        if (self.n_objects_ == 1) and not isinstance(self.data_df, pd.Series):
+        if self.n_objects_ == 1 and not isinstance(self.data_df, pd.Series):
             raise TypeError(
                 "With only one object, data_df must be a Series "
                 + "(not a DataFrame)"
@@ -780,7 +780,82 @@ class StaticSystem:
                 df[col] = self.star[col.replace("star_", "")]
         return df
 
-    def remove_planet(self, index: int | str, verbose: bool = True):
+    def plot(
+        self,
+        x: str,
+        y: str,
+        error_x: bool = False,
+        error_y: bool = False,
+        ax: plt.Axes = None,
+        planet_legend: bool = True,
+        **kwargs,
+    ):
+        """
+        Plot the x vs y data of the system.
+
+        Parameters
+        ----------
+        x : str
+            Name of the column to use as x-axis.
+        y : str
+            Name of the column to use as y-axis.
+        error_x : bool, optional. Default: False.
+            Whether to plot the x error bars.
+        error_y : bool, optional. Default: False.
+            Whether to plot the y error bars.
+        ax : plt.Axes, optional. Default: None.
+            Matplotlib Axes to plot on.
+        planet_legend : bool, optional. Default: True.
+            Whether to add a legend with the planet names.
+        kwargs : dict
+            Additional keyword arguments for the plot function.
+        """
+        if ax is None:
+            ax = plt.gca()
+        x_data = self.get_item(x)
+        y_data = self.get_item(y)
+        if error_x:
+            xerr_min = self.get_item(f"{x}_err_min")
+            xerr_max = self.get_item(f"{x}_err_max")
+        if error_y:
+            yerr_min = self.get_item(f"{y}_err_min")
+            yerr_max = self.get_item(f"{y}_err_max")
+        legends = self.planet_names_ if planet_legend else None
+        if error_x and error_y:
+            ax.errorbar(
+                x_data,
+                y_data,
+                xerr=[xerr_min, xerr_max],
+                yerr=[yerr_min, yerr_max],
+                label=legends,
+                **kwargs,
+            )
+        elif error_x:
+            ax.errorbar(
+                x_data,
+                y_data,
+                xerr=[xerr_min, xerr_max],
+                label=legends,
+                **kwargs,
+            )
+        elif error_y:
+            ax.errorbar(
+                y_data,
+                x_data,
+                yerr=[yerr_min, yerr_max],
+                label=legends,
+                **kwargs,
+            )
+        else:
+            ax.plot(x_data, y_data, label=legends, **kwargs)
+        ax.set_xlabel(x)
+        ax.set_ylabel(y)
+        ax.set_title(f"{x} vs {y}")
+        if planet_legend:
+            ax.legend()
+        return ax
+
+    def remove_planet(self, index: Union[int, str], verbose: bool = True):
         """
         Remove a planet from the system.
 
@@ -807,7 +882,7 @@ class StaticSystem:
                 index = self.planet_names_.index(index)
         if index < 0 or index >= self.n_planets_:
             raise IndexError("Index out of range.")
-        new_planets = self.planets[:index] + self.planets[index + 1 :]
+        new_planets = self.planets[:index] + self.planets[index + 1:]
         new_meta = dict(self.metadata)
         if "removed_planet" not in new_meta:
             new_meta["removed_planet"] = self.planets[index].name
@@ -878,8 +953,8 @@ class StaticSystem:
     def pair_ratio(
         self,
         *pair: Union[list, tuple, str],
-        fraction_arg: Union[float, int] = 0,
         verbose: bool = True,
+        fraction_kwargs: dict = {},
     ) -> Union[float, pd.DataFrame]:
         """
         Return the period ratio of the planets.
@@ -889,11 +964,9 @@ class StaticSystem:
         pair : list, tuple, str, optional. Default: 'all'.
             Which pair of planets to consider.
             Either 'all' or a list/tuple of planet names/indexes.
-        fraction_arg : float, int, optional. Default: 0.
-            If an integer, return the fraction with this number of term
-             calculations.
-            If a float, return the fraction with error lower than this value.
-            If 0, return the float value (do not convert to fraction).
+        fraction_kwargs : dict, optional. Default: {}.
+            Keyword arguments for the float_to_fraction function.
+            See float_to_fraction for more information.
         verbose : bool, optional. Default: False.
             Whether to print the steps of the calculation if a single pair,
             and fraction_arg is not 0.
@@ -905,13 +978,6 @@ class StaticSystem:
         """
         if self.n_planets_ < 2:
             raise ValueError("There must be at least 2 planets to compare.")
-        fract_kwargs = {}
-        if isinstance(fraction_arg, float):
-            fract_kwargs = {"max_error": fraction_arg}
-        elif isinstance(fraction_arg, int):
-            fract_kwargs = {"max_terms": float(fraction_arg)}
-        else:
-            raise ValueError("Invalid fraction_arg value.")
         # Extract pair
         if not pair:
             pair = "all"
@@ -925,11 +991,11 @@ class StaticSystem:
             if self.n_planets_ == 2:
                 return self.planets[0].P / self.planets[1].P
             if not self.period_ratios_.empty:
-                if fract_kwargs:
+                if fraction_kwargs:
                     return self.period_ratios_.map(
                         lambda x: float_to_fraction(
                             x,
-                            **fract_kwargs,
+                            **fraction_kwargs,
                             verbose=False,
                         )
                     )
@@ -944,15 +1010,15 @@ class StaticSystem:
             # Store the DataFrame
             if self.period_ratios_.empty:
                 self.period_ratios_[df.columns] = df
-            if fract_kwargs:
+            if fraction_kwargs:
                 return df.map(
                     lambda x: float_to_fraction(
-                        x, **fract_kwargs, verbose=False
+                        x, **fraction_kwargs, verbose=False
                     )
                 )
             return df
-        if fract_kwargs:
-            fract_kwargs["verbose"] = verbose
+        if fraction_kwargs:
+            fraction_kwargs["verbose"] = verbose
         idxs = []  # Indexes of the pair
         for idx in pair:
             if isinstance(idx, str):
@@ -972,8 +1038,8 @@ class StaticSystem:
         else:
             ratio = self.planets[idxs[0]].P / self.planets[idxs[1]].P
         # Return the ratio
-        if abs(fraction_arg):
-            return float_to_fraction(ratio, **fract_kwargs)
+        if fraction_kwargs:
+            return float_to_fraction(ratio, **fraction_kwargs)
         return ratio
 
     def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:
