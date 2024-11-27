@@ -2,9 +2,9 @@ include LICENSE
 include README.md
 recursive-include resokit *.py
 recursive-include resokit *.zip
-recursive-include resokit *.csv
-recursive-include resokit *.vot
+
 exclude tox.ini
 exclude pyproject.toml
 recursive-exclude tests *
 recursive-exclude draft *
+recursive-exclude tools *
