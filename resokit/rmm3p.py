@@ -118,7 +118,7 @@ def find_mmrs_in_area(
                 # or i == 0  # Adjacent 2P-MMR
                 or k == 0  # Adjacent 2P-MMR
                 or (
-                    j == 0 and not ((i > 0) and (k < 0))
+                    j == 0 and not (i > 0 and k < 0)
                 )  # Take (i,0,-k) over (-i,0,k)
             ):
                 continue
@@ -132,7 +132,7 @@ def find_mmrs_in_area(
             if [i_r, j_r, k_r] in r3p_resonances:
                 continue
             # Check bounds for the resonance curve
-            if not is_curve_within_bounds([i_r, j_r, k_r], bounds):
+            if not _is_curve_within_bounds([i_r, j_r, k_r], bounds):
                 continue
             r3p_resonances.append([i_r, j_r, k_r])
 
@@ -154,7 +154,7 @@ def find_mmrs_in_area(
     return r3p_resonances
 
 
-def is_curve_within_bounds(
+def _is_curve_within_bounds(
     resonance: list[int, int, int], bounds: tuple[float, float, float, float]
 ) -> bool:
     """
