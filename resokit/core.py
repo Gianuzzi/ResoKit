@@ -148,10 +148,13 @@ class ResokitDataFrame:
     def __attrs_post_init__(self):
         """Post-initialization hook."""
         if self.data_df.empty:
-            warnings.warn("Empty DataFrame.")
+            warnings.warn("Empty DataFrame.", stacklevel=2)
 
         if "name" not in self.columns_:
-            warnings.warn("Missing 'name' column in the DataFrame.")
+            warnings.warn(
+                "Missing 'name' column in the DataFrame.",
+                stacklevel=2,
+            )
 
         if self.n_objects_ == 1 and not isinstance(self.data_df, pd.Series):
             raise TypeError(
@@ -257,7 +260,7 @@ def df_to_resokit(
     source: str,
     drop: bool = True,
     copy: bool = False,
-    metadata: dict = {},
+    metadata: dict = None,
 ) -> ResokitDataFrame:
     """Convert ExoplanetEU or NASA dataset to ResoKit format.
 
@@ -309,6 +312,10 @@ def df_to_resokit(
         df["n"] = 2.0 * pi / df["P"]
         # Sort by period
         df = df.sort_values(by="P", ascending=True)
+
+    # Add metadata
+    if metadata is None:
+        metadata = {}
 
     return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
 
@@ -371,7 +378,8 @@ class StaticPlanet(ResokitDataFrame):
                     "n_err_max",
                 }:
                     warnings.warn(
-                        "Found columns not in the default planet mapping."
+                        "Found columns not in the default planet mapping.",
+                        stacklevel=2,
                     )
 
     def __getitem__(self, key: Union[int, str, list]):
@@ -435,7 +443,10 @@ class StaticPlanet(ResokitDataFrame):
                     vals[f"{item}_err_max"] = self[f"{item}_err_max"]
                 except KeyError:
                     if not silent:
-                        warnings.warn(f"Error columns not found for {item}.")
+                        warnings.warn(
+                            f"Error columns not found for {item}.",
+                            stacklevel=2,
+                        )
                     pass
 
         return pd.Series(vals)
@@ -448,7 +459,7 @@ class StaticPlanet(ResokitDataFrame):
         error_y: bool = False,
         ax: plt.Axes = None,
         planet_legend: bool = True,
-        plot_kwargs: dict = {},
+        plot_kwargs: dict = None,
     ):
         """Plot the x vs y data of the planet.
 
@@ -507,6 +518,10 @@ class StaticPlanet(ResokitDataFrame):
                 legend = str(planet_legend)
         else:
             legend = None
+
+        # Check plot_kwargs
+        if plot_kwargs is None:
+            plot_kwargs = {}
 
         fmt = plot_kwargs.pop("fmt", "o")
 
@@ -574,7 +589,8 @@ class StaticStar(ResokitDataFrame):
             for col in self.data_df.index:
                 if col not in aux_cols | RESO_OB_TYPES.keys():
                     warnings.warn(
-                        "Found columns not in the default star mapping."
+                        "Found columns not in the default star mapping.",
+                        stacklevel=2,
                     )
                     print(col)
 
@@ -609,7 +625,7 @@ class StaticStar(ResokitDataFrame):
         error_y: bool = False,
         ax: plt.Axes = None,
         star_legend: bool = True,
-        plot_kwargs: dict = {},
+        plot_kwargs: dict = None,
     ):
         """Plot the x vs y data of the star.
 
@@ -668,6 +684,10 @@ class StaticStar(ResokitDataFrame):
                 legend = str(star_legend)
         else:
             legend = None
+
+        # Check plot_kwargs
+        if plot_kwargs is None:
+            plot_kwargs = {}
 
         fmt = plot_kwargs.pop("fmt", "o")
 
@@ -745,16 +765,11 @@ class StaticSystem:
     @source_.default
     def _source__default(self):
         """Set the default value for source_."""
-        main_source = getattr(self.star, "source", "unknown")
+        main_source = self.star.source
 
         return (
             main_source
-            if all(
-                [
-                    getattr(planet, "source", "unknown") == main_source
-                    for planet in self.planets
-                ]
-            )
+            if all([planet.source == main_source for planet in self.planets])
             else "user"
         )
 
@@ -766,7 +781,7 @@ class StaticSystem:
     @planet_names_.default
     def _planet_names__default(self):
         """Set the default value for planet_names_."""
-        return [getattr(planet, "name") for planet in self.planets]
+        return [planet.name for planet in self.planets]
 
     @period_ratios_.default
     def _period_ratios__default(self):
@@ -794,12 +809,13 @@ class StaticSystem:
             if planet.star_name != star_name:
                 warnings.warn(
                     f"Planet({planet.name}) star name({planet.star_name})"
-                    + f" is different from Star({star_name})."
+                    + f" is different from Star({star_name}).",
+                    stacklevel=2,
                 )
 
         # Check if all planets have unique names
         if self.n_planets_ != len(set(self.planet_names_)):
-            warnings.warn("Planets must have unique names.")
+            warnings.warn("Planets must have unique names.", stacklevel=2)
 
         return
 
@@ -999,7 +1015,7 @@ class StaticSystem:
         error_y: bool = False,
         ax: plt.Axes = None,
         legends: Union[bool, str, Iterable[str]] = True,
-        plot_kwargs: dict = {},
+        plot_kwargs: dict = None,
     ):
         """Plot the x vs y data of the system. Uses plt.errorbar internally.
 
@@ -1031,6 +1047,10 @@ class StaticSystem:
             raise ValueError("Both x and y must be star or planet attributes.")
         else:
             star_plot = False
+
+        # Check plot_kwargs
+        if plot_kwargs is None:
+            plot_kwargs = {}
 
         if not star_plot:  # Planet plot
 
@@ -1256,7 +1276,7 @@ class StaticSystem:
         self,
         *pair: Union[list, tuple, str],
         verbose: bool = True,
-        fraction_kwargs: dict = {},
+        fraction_kwargs: dict = None,
     ) -> Union[float, pd.DataFrame]:
         """Return the period ratio of the specified pair of planets.
 
@@ -1287,6 +1307,10 @@ class StaticSystem:
             raise ValueError("Pair must have 2 elements.")
         elif len(pair) == 1:
             pair = pair[0]
+
+        # Check fraction_kwargs
+        if fraction_kwargs is None:
+            fraction_kwargs = {}
 
         if isinstance(pair, str):
 
@@ -1395,7 +1419,7 @@ def _create_static_system(
     star,
     planets,
     name,
-    metadata={},
+    metadata=None,
 ) -> StaticSystem:
     """Create a StaticSystem instance.
 
@@ -1415,6 +1439,9 @@ def _create_static_system(
     StaticSystem
         A new StaticSystem instance.
     """
+    if metadata is None:
+        metadata = {}
+
     return StaticSystem(
         star=star,
         planets=planets,
@@ -1426,7 +1453,7 @@ def _create_static_system(
 def _create_static_star(
     star_data,
     source="user",
-    metadata={},
+    metadata=None,
 ) -> StaticStar:
     """Create a StaticStar instance.
 
@@ -1444,13 +1471,16 @@ def _create_static_star(
     StaticStar
         A new StaticStar instance.
     """
+    if metadata is None:
+        metadata = {}
+
     return StaticStar(data_df=star_data, source=source, metadata=metadata)
 
 
 def _create_static_planet(
     planet_data,
     source="user",
-    metadata={},
+    metadata=None,
 ) -> StaticPlanet:
     """Create a StaticPlanet instance.
 
@@ -1468,6 +1498,9 @@ def _create_static_planet(
     StaticPlanet
         A new StaticPlanet instance.
     """
+    if metadata is None:
+        metadata = {}
+
     return StaticPlanet(data_df=planet_data, source=source, metadata=metadata)
 
 

@@ -418,7 +418,10 @@ def label_mmr3b(
 
     # If the line does not cross the right or top axis
     elif warn:
-        warnings.warn(f"{resonance} does not cross the right or top axis.")
+        warnings.warn(
+            f"{resonance} does not cross the right or top axis.",
+            stacklevel=2,
+        )
 
     return
 

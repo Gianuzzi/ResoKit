@@ -153,7 +153,7 @@ def _load_system_from_db(
     source: str = None,
     store: bool = False,
     store_index: bool = True,
-    load_dataset_kwargs: dict = {},
+    load_dataset_kwargs: dict = None,
     verbose: bool = True,
     low_memory: bool = False,
 ) -> pd.DataFrame:
@@ -199,6 +199,8 @@ def _load_system_from_db(
         low_memory = False  # Load the whole dataset if it will be stored
 
     # Update the keyword arguments
+    if load_dataset_kwargs is None:
+        load_dataset_kwargs = {}
     load_dataset_kwargs.update(
         {"store": store, "verbose": verbose, "store_index": store_index}
     )
@@ -251,7 +253,7 @@ def _load_system_from_db(
 def load_system_from_eu(
     name: str,
     is_planet: bool = False,
-    load_dataset_kwargs: dict = {},
+    load_dataset_kwargs: dict = None,
     drop: bool = True,
     store: bool = False,
     store_index: bool = True,
@@ -290,6 +292,9 @@ def load_system_from_eu(
         ResoKit DataFrame (if as_resokit is True),
         or StaticSystem.
     """
+    if load_dataset_kwargs is None:
+        load_dataset_kwargs = {}
+
     # Load the system from the database
     df = _load_system_from_db(
         name=name,
@@ -329,7 +334,7 @@ def load_system_from_eu(
 def load_system_from_nasa(
     name: str,
     is_planet: bool = False,
-    load_dataset_kwargs: dict = {},
+    load_dataset_kwargs: dict = None,
     drop: bool = True,
     store: bool = False,
     store_index: bool = True,
@@ -376,6 +381,9 @@ def load_system_from_nasa(
         ResoKit DataFrame (if as_resokit is True),
         or StaticSystem.
     """
+    if load_dataset_kwargs is None:
+        load_dataset_kwargs = {}
+
     # Load the system from the database
     df = _load_system_from_db(
         name=name,

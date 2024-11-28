@@ -245,7 +245,7 @@ def load_dataset(
     download_if_missing: bool = False,
     extract: bool = False,
     only_index: bool = False,
-    only_rows: Union[list, int] = [],
+    only_rows: Union[list, int] = False,
     verbose: bool = True,
     store: bool = False,
     store_index: bool = True,
@@ -294,6 +294,9 @@ def load_dataset(
     elif only_rows:  # If only_rows is provided, set up the skip_rows function
 
         whole = False  # Flag to store the whole dataset in memory
+
+        if isinstance(only_rows, bool):
+            raise ValueError("only_rows must be a list or an integer.")
 
         if isinstance(only_rows, int):
             only_rows = [only_rows]
