@@ -321,6 +321,7 @@ def load_system_from_eu(
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
     meta.update({f"load_{'planet' if is_planet else 'system'}": name})
+    meta.update({"eu_index": int(df.index[0])})
 
     reso = df_to_resokit(  # Convert to ResoKit format
         df=df,
@@ -416,6 +417,7 @@ def load_system_from_nasa(
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
     meta.update({f"load_{'planet' if is_planet else 'system'}": name})
+    meta.update({"nasa_index": int(df.index[0])})
 
     reso = df_to_resokit(  # Convert to ResoKit format
         df=df,
