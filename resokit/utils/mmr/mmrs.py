@@ -33,7 +33,7 @@ from scipy.optimize import minimize
 # ============================================================================
 
 
-def three_body_mmr_curve(
+def mmr3b(
     x: Union[float, np.ndarray], resonance: tuple[int, int, int]
 ) -> np.ndarray:
     """
@@ -52,11 +52,15 @@ def three_body_mmr_curve(
         The corresponding values of the 3-body resonance curve.
         Singularities are replaced with NaN.
     """
-    a, b, c = resonance
-    if np.ndim(x) == 0:
+
+    a, b, c = resonance  # Coefficients of the resonance curve
+
+    if np.ndim(x) == 0:  # Single value
         if a * x + b == 0:
             return np.nan
         return -c / (a * x + b)
+
+    # Avoid division by zero
     curve = np.divide(
         -c, (a * x + b), out=np.full_like(x, np.nan), where=(a * x + b) != 0
     )
@@ -64,22 +68,25 @@ def three_body_mmr_curve(
     # Handle singularities
     singularity = -b / a
     if (
-        np.ndim(x) > 0
-        and singularity >= np.min(x)
-        and singularity <= np.max(x)
+        np.ndim(x) > 0  # x is an array
+        and singularity >= np.min(x)  # Singularity is within bounds
+        and singularity <= np.max(x)  # Singularity is within bounds
     ):
         closest_idx = np.argmin(np.abs(x - singularity))
         curve[closest_idx] = np.nan
+
     return curve
 
 
-def find_mmrs_in_area(
+def mmrs_in_area(
     bounds: tuple[float, float, float, float],
-    r3p_order: int = 0,
-    r3p_maxint: int = 10,
-    compute_r2p: bool = True,
-    r2p_order: int = 2,
-    r2p_maxint: int = 10,
+    order3: int = 0,
+    max_coeff3: int = 10,
+    max_order3: int = 0,
+    mmr2b: bool = True,
+    order2: int = 2,
+    max_coeff2: int = 10,
+    max_order2: int = 2,
 ) -> list:
     """
     Identifies 3-body (3P-MMR) and 2-body (2P-MMR) resonances in a
@@ -89,32 +96,48 @@ def find_mmrs_in_area(
     ----------
     bounds : tuple[float, float, float, float]
         The limits of the region (x_min, x_max, y_min, y_max).
-    r3p_order : int
-        Maximum allowable order for 3P-MMRs (default: 0).
-    r3p_maxint : int
-        Maximum integer coefficients for 3P-MMRs (default: 10).
-    compute_r2p : bool
+    order3 : int
+        Exact order for 3P-MMRs (default: 0).
+    max_order3 : int
+        Calculate 3P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered (default: 10).
+    max_coeff3 : int
+        Calculate 3P-MMRs up to this maximum integer coefficient.
+    mmr2b : bool
         Whether to compute 2P-MMRs (default: True).
-    r2p_order : int
-        Maximum allowable order for 2P-MMRs (default: 2).
-    r2p_maxint : int
-        Maximum integer coefficients for 2P-MMRs (default: 10).
+    order2 : int
+        Exact order for 2P-MMRs (default: 2).
+    max_order2 : int
+        Calculate 2P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered (default: 2).
+    max_coeff2 : int
+        Calculate 2P-MMRs up to this maximum integer coefficient.
 
     Returns:
     -------
-    list
+    out: list
         A list containing detected 3P-MMRs and optionally
         2P-MMRs along the x and y axes.
     """
+
     x_min, x_max, y_min, y_max = bounds
     r3p_resonances = []
-    coeff_range = np.flip(np.arange(-r3p_maxint, r3p_maxint + 1))
+
+    # Define the range of coefficients
+    coeff_range = np.flip(np.arange(-max_coeff3, max_coeff3 + 1))
+
+    # Define good_order function
+    def good_order3(i, j, k):
+        if max_order3 == 0:
+            return abs(i + j + k) == order3
+        return (i + j + k) <= max_order3
 
     # Identify 3P-MMRs
-    for i in range(1, r3p_maxint + 1):
+    for i in range(1, max_coeff3 + 1):
         for j, k in product(coeff_range, repeat=2):
+
             if (
-                abs(i + j + k) > r3p_order  # Check order
+                not good_order3(i, j, k)  # Check order
                 # or i == 0  # Adjacent 2P-MMR
                 or k == 0  # Adjacent 2P-MMR
                 or (
@@ -122,36 +145,57 @@ def find_mmrs_in_area(
                 )  # Take (i,0,-k) over (-i,0,k)
             ):
                 continue
+
             # if i < 0:  # Use (|i|,...,...)
             #     i *= -1
             #     j *= -1
             #     k *= -1
+
             # Normalize coefficients
             gcd = np.gcd.reduce([i, j, k])
             i_r, j_r, k_r = i // gcd, j // gcd, k // gcd
+
+            # Skip if the resonance is already in the list
             if [i_r, j_r, k_r] in r3p_resonances:
                 continue
+
             # Check bounds for the resonance curve
             if not _is_curve_within_bounds([i_r, j_r, k_r], bounds):
                 continue
+
             r3p_resonances.append([i_r, j_r, k_r])
 
-    # Identify 2P-MMRs if required
-    if compute_r2p:
-        r2p_x, r2p_y = [], []
-        for i in range(2, r2p_maxint + 1):
-            for j in range(1, i):
-                if (i - j) > r2p_order:
-                    continue
-                gcd = np.gcd(i, j)
-                i_r, j_r = i // gcd, j // gcd
-                if x_min <= i_r / j_r <= x_max and [i_r, j_r] not in r2p_x:
-                    r2p_x.append([i_r, j_r])
-                if y_min <= i_r / j_r <= y_max and [i_r, j_r] not in r2p_y:
-                    r2p_y.append([i_r, j_r])
-        return [r3p_resonances, r2p_x, r2p_y]
+    # Check if 2P-MMRs are not required
+    if not mmr2b:  # Return 3P-MMRs only
+        return r3p_resonances
 
-    return r3p_resonances
+    # 2P-MMRs ideification  required
+
+    # Define good_order function
+    def good_order2(i, j):
+        if max_order2 == 0:
+            return (i - j) == order2
+        return (i - j) <= max_order2
+
+    r2p_x, r2p_y = [], []
+    for i in range(2, max_coeff2 + 1):
+        for j in range(1, i):
+
+            # Check order
+            if not good_order2(i, j):
+                continue
+
+            # Normalize coefficients
+            gcd = np.gcd(i, j)
+            i_r, j_r = i // gcd, j // gcd
+
+            if x_min <= i_r / j_r <= x_max and [i_r, j_r] not in r2p_x:
+                r2p_x.append([i_r, j_r])
+
+            if y_min <= i_r / j_r <= y_max and [i_r, j_r] not in r2p_y:
+                r2p_y.append([i_r, j_r])
+
+    return [r3p_resonances, r2p_x, r2p_y]
 
 
 def _is_curve_within_bounds(
@@ -172,11 +216,13 @@ def _is_curve_within_bounds(
     bool
         True if the curve intersects the region, False otherwise.
     """
+
     x_min, x_max, y_min, y_max = bounds
     i, j, k = resonance
 
     # No singularity handling needed
     if (-j / i < x_min) or (-j / i > x_max):
+
         # Si cruza el eje izquierdo
         if (-k / (i * x_min + j) >= y_min) and (-k / (i * x_min + j) <= y_max):
             return True
@@ -197,6 +243,7 @@ def _is_curve_within_bounds(
 
     # Handle singularities
     else:
+
         # Si cruza el eje izquierdo
         if (
             not np.isclose(-j / i, x_min)
@@ -226,11 +273,10 @@ def _is_curve_within_bounds(
         return False
 
 
-def mindist_r3p(
+def mindist_mmr3b(
     a: float,
     b: float,
     resonance: tuple[int, int, int],
-    bounds_x: tuple[float, float] = (1, np.inf),
     x0: float = None,
     **minimize_kwargs,
 ) -> tuple[float, float]:
@@ -245,8 +291,6 @@ def mindist_r3p(
         The y-coordinate of the point.
     resonance : tuple[int, int, int]
         Coefficients defining the resonance.
-    bounds_x : tuple[float, float], optional. Default: (1, inf)
-        The bounds for the x-coordinate.
     x0 : float, optional. Default: None
         Initial guess for the optimization.
     minimize_kwargs : dict, optional
@@ -255,50 +299,60 @@ def mindist_r3p(
     Returns:
     -------
     tuple[float, float]
-        The x-coordinate of the minimum distance and the distance value.
+        The x-y coordinates of the minimum distance and the distance value.
     """
+
+    # Singularity handling
+    singularity = -resonance[1] / resonance[0]
+
+    # Use the right or left side of the curve, in relation to singularity
+    use_right = resonance[2] < 0
+    # if "use_rigth", then the curve behaves like "1/x", else like "- 1/x"
+    x_y1 = -(resonance[1] + resonance[2]) / resonance[0]
+
+    if x_y1 < max(1, singularity):  # Avoid crossing the singularity
+        x_y1 = np.inf
+
+    # Define the bounds for the optimization
+    bounds_x = [singularity, x_y1] if use_right else [1, singularity]
 
     # Function to calculate the r3p curve value at x
     def dist2_to_curve(x):
-        y = three_body_mmr_curve(x, resonance)
+        y = mmr3b(x, resonance)  # Calculate the curve value
         if np.isnan(y) or y < 1:
             return np.inf
         return (x - a) ** 2 + (y - b) ** 2
 
     # Redefine x0 if necessary
     if x0 is None:
-        x0 = a
-    elif x0 < bounds_x[0] or x0 > bounds_x[1]:
-        raise ValueError("Initial guess is out of bounds!")
-    if np.isinf(dist2_to_curve(x0)) or x0 is None:
-        x0 = None
-        bounds_x1 = a if np.isinf(bounds_x[1]) else max(bounds_x[1], 1)
-        for i, n_steps in enumerate([10, 100, 100]):
-            x0_arr = np.linspace(bounds_x[0], i * bounds_x1, n_steps)
-            y0 = three_body_mmr_curve(x0_arr, resonance)
-            dists = (x0_arr - a) ** 2 + (y0 - b) ** 2
-            # Get the x0_arr value closest to 'a' with y0 != inf
-            if np.any(np.isfinite(dists)):
-                x0 = x0_arr[np.nanargmin(dists)]
-                break
-        if x0 is None:
-            raise ValueError(
-                "Not a valid x0!. Please provide a (better) valid x0."
+        # Use the middle point if the singularity is infinite
+        if use_right:
+            # Use the middle point if finite, else use the singularity + 1e-3
+            x0 = (
+                0.5 * (singularity + x_y1)
+                if np.isfinite(x_y1)
+                else singularity + 1e-3
             )
+        else:
+            x0 = 0.5 * (1 + singularity)  # Use the middle point
+
+    elif x0 < bounds_x[0] or x0 > bounds_x[1]:  # Check if x0 is within bounds
+        raise ValueError(f"Initial guess {x0} is out of bounds: {bounds_x}")
 
     # Function to calculate the distance between a point and the curve
     # Avoid runtime warnings in subtraction
     with np.errstate(invalid="ignore"):
         result = minimize(dist2_to_curve, x0, **minimize_kwargs)
+
     if result.success:
         x_min = result.x[0]
         distance_min = np.sqrt(result.fun)
-        return x_min, distance_min
+        return [x_min, mmr3b(x_min, resonance)], distance_min
     else:
         raise ValueError("Optimization failed!")
 
 
-def r3p_label(res: tuple, ax: plt.Axes, lims: tuple = None):
+def label_mmr3b(res: tuple, ax: plt.Axes, lims: tuple = None):
     """
     Annotates a plot with the label of a resonance line
     based on its coefficients.
@@ -322,7 +376,8 @@ def r3p_label(res: tuple, ax: plt.Axes, lims: tuple = None):
     -------
     None
     """
-    a, b, c = res
+
+    a, b, c = res  # Coefficients of the resonance line
 
     # Define the resonance line and its inverse
     def r(x):
@@ -340,8 +395,10 @@ def r3p_label(res: tuple, ax: plt.Axes, lims: tuple = None):
         x_min, x_max = ax.get_xlim()
         y_min, y_max = ax.get_ylim()
 
+    # Calculate y-coordinate at x_max
+    y = mmr3b(x_max, res)
+
     # Check crossing on the right axis
-    y = three_body_mmr_curve(x_max, res)
     if y_min <= y <= y_max:
         label = f"{a} {b} {c}"  # Compact label format
         y_ax = (y - y_min) / (
@@ -363,55 +420,3 @@ def r3p_label(res: tuple, ax: plt.Axes, lims: tuple = None):
         warnings.warn(f"{res} does not cross the right or top axis.")
 
     return
-
-
-# # Test the code
-# if __name__ == "__main__":
-#     bounds: list = (1.05, 2, 1.05, 2)
-#     r3p_order: int = 0
-#     r3p_maxint: int = 4
-#     compute_r2p: bool = True
-#     r2p_order: int = 2
-#     r2p_maxint: int = 5
-
-#     # MMR identification
-#     mmrs3p, mmrs2px, mmrs2py = find_mmrs_in_area(
-#         bounds, r3p_order, r3p_maxint, compute_r2p, r2p_order, r2p_maxint
-#     )
-
-#     # # Curve computation
-#     x = np.linspace(bounds[0], bounds[1], 100)
-#     curve = three_body_mmr_curve(x, (1, -3, 2))
-
-#     # Compute and Plot the curves
-#     plt.figure()
-#     ax = plt.gca()
-#     for resonance in mmrs2px:
-#         plt.axvline(resonance[0] / resonance[1], color="k", linestyle="--")
-#     for resonance in mmrs2py:
-#         plt.axhline(resonance[0] / resonance[1], color="k", linestyle="--")
-#     for resonance in mmrs3p:
-#         curve = three_body_mmr_curve(x, resonance)
-#         plt.plot(x, curve, ".-", label=f"3P-MMR {resonance}")
-#         r3p_label(resonance, ax, lims=bounds)
-#     # For the last curve, compute the distance to a point
-#     a, b = 2.2, 1.5
-#     resonance = [3, -4, 1]
-#     x0 = 1.5
-#     x_min, distance_min = mindist_r3p(
-#         a,
-#         b,
-#         resonance,
-#         # bounds_x=bounds[:2],
-#         # x0=x0
-#     )
-#     plt.scatter(a, b, color="r", label="Point")
-#     plt.plot([a, x_min], [b, three_body_mmr_curve(x_min, resonance)], "k-")
-#     plt.xlim(bounds[0], bounds[1])
-#     plt.ylim(bounds[2], bounds[3])
-#     # Make the plot look square
-#     plt.gca().set_aspect("equal", adjustable="box")
-#     # plt.legend()
-#     plt.show()
-
-#     print("All tests passed!")
