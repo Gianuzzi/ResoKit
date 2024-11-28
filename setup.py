@@ -12,10 +12,7 @@
 # DOCS
 # =============================================================================
 
-"""
-This file is for distribute and install ResoKit.
-"""
-
+"""This file is for distribute and install ResoKit."""
 
 # =============================================================================
 # IMPORTS
@@ -31,6 +28,7 @@ from setuptools import setup  # noqa
 # =============================================================================
 
 REQUIREMENTS = [
+    "attrs",
     "numpy",
     "matplotlib",
     "pandas",
