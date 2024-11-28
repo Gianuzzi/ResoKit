@@ -13,9 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""
-The ResoKit.utils.mmr module includes tools for 3body resonances analysis.
-"""
+"""The ResoKit.utils.mmr module includes diverse tools for MMRs analysis."""
 
 # =============================================================================
 # IMPORTS

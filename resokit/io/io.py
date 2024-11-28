@@ -10,7 +10,6 @@
 # ============================================================================
 # DOCS
 # ============================================================================
-
 """Module with input/output functions for the ResoKit package."""
 
 # =============================================================================
@@ -43,17 +42,12 @@ RATIOS_THRESHOLD = 0.94
 
 
 def _similar(a: str, b: str) -> float:
-    """
-    Calculate the similarity ratio between two strings.
-    """
+    """Calculate the similarity ratio between two strings."""
     return SequenceMatcher(None, str(a), b).ratio()
 
 
 def _n_close(a: any, b: str, length: int, n=0) -> bool:
-    """
-    Check if two strings are n spaces-close.
-    """
-
+    """Check if two strings are n spaces-close."""
     stra = str(a)  # Convert to string
 
     return (stra[:length] == str(b)) and (
@@ -69,8 +63,7 @@ def _search_system_index(
     verbose: bool = False,
     raw_df: pd.DataFrame = None,
 ) -> tuple[pd.Index, pd.Series, float]:
-    """
-    Search for the index of the system in the dataset.
+    """Search for the index of the system in the dataset.
 
     Parameters
     ----------
@@ -92,7 +85,6 @@ def _search_system_index(
     tuple[pd.Index, pd.Series, float]
         Index, values, and similarity ratio.
     """
-
     # Define the column to search
     column = (
         "pl_name"
@@ -164,8 +156,7 @@ def _load_system_from_db(
     verbose: bool = True,
     low_memory: bool = False,
 ) -> pd.DataFrame:
-    """
-    Load system from ExoplanetEU or NASA.
+    """Load system from ExoplanetEU or NASA.
 
     Parameters
     ----------
@@ -194,7 +185,6 @@ def _load_system_from_db(
     pd.DataFrame
         DataFrame containing the system data.
     """
-
     # Print information
     if verbose:
         print(
@@ -268,8 +258,7 @@ def load_system_from_eu(
     low_memory: bool = False,
     as_resokit: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
-    """
-    Load system from ExoplanetEU.
+    """Load system from ExoplanetEU.
 
     Parameters
     ----------
@@ -300,7 +289,6 @@ def load_system_from_eu(
         ResoKit DataFrame (if as_resokit is True),
         or StaticSystem.
     """
-
     # Load the system from the database
     df = _load_system_from_db(
         name=name,
@@ -350,8 +338,7 @@ def load_system_from_nasa(
     default_set: bool = True,
     as_resokit: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
-    """
-    Load system from NASA.
+    """Load system from NASA.
 
     Parameters
     ----------
@@ -388,7 +375,6 @@ def load_system_from_nasa(
         ResoKit DataFrame (if as_resokit is True),
         or StaticSystem.
     """
-
     # Load the system from the database
     df = _load_system_from_db(
         name=name,

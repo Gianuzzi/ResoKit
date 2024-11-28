@@ -7,7 +7,6 @@
 # ============================================================================
 # DOCS
 # ============================================================================
-
 """Module to query exoplanet.eu and NASA datasets with optimized structure."""
 
 # =============================================================================
@@ -63,8 +62,7 @@ def _build_query(
     conditions: str = "",
     order_by: str = "",
 ) -> str:
-    """
-    Construct a query for the specified dataset source.
+    """Construct a query for the specified dataset source.
 
     Parameters
     ----------
@@ -84,7 +82,6 @@ def _build_query(
     str
         Constructed query string.
     """
-
     source = source.lower()  # Ensure lowercase
 
     # SELECT clause
@@ -118,8 +115,7 @@ def _build_query(
 
 
 def _execute_query(query: str, source: str):
-    """
-    Execute a query on the specified dataset source.
+    """Execute a query on the specified dataset source.
 
     Parameters
     ----------
@@ -133,7 +129,6 @@ def _execute_query(query: str, source: str):
     pd.DataFrame
         Resulting dataset as a pandas DataFrame.
     """
-
     # Ensure requests module is imported
     assert_module_imported(requests_imported, "requests")
 
@@ -170,8 +165,7 @@ def query_online_data(
     verbose: bool = True,
     as_resokit: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
-    """
-    Query the online dataset based on specified filters.
+    """Query the online dataset based on specified filters.
 
     Parameters
     ----------
@@ -201,7 +195,6 @@ def query_online_data(
     pd.DataFrame
         Resulting dataset as a pandas DataFrame.
     """
-
     # Ensure requests and astropy modules are imported
     assert_module_imported(requests_imported, "requests")
 
@@ -267,8 +260,7 @@ def query_online_data(
 
 
 def get_dataset_length(source: str) -> int:
-    """
-    Query the length (count) of the dataset from the specified source.
+    """Query the length (count) of the dataset from the specified source.
 
     Parameters
     ----------
@@ -280,7 +272,6 @@ def get_dataset_length(source: str) -> int:
     int
         Number of entries in the dataset.
     """
-
     # Ensure requests and astropy modules are imported
     assert_module_imported(requests_imported, "requests")
 

@@ -10,7 +10,6 @@
 # ============================================================================
 # DOCS
 # ============================================================================
-
 """Module with internal utility functions for the ResoKit package."""
 
 # =============================================================================
@@ -242,8 +241,7 @@ MAX_F2F_ITER = 12  # Maximum number of iterations
 def assert_module_imported(
     imported: bool, module_name: str, message: str = ""
 ):
-    """
-    Assert that the specified module is imported.
+    """Assert that the specified module is imported.
 
     Parameters
     ----------
@@ -254,7 +252,6 @@ def assert_module_imported(
     message : str, optional. Default: ""
         Error message to display if the module is not imported.
     """
-
     if not imported:
         raise ImportError(
             f"{module_name} is required for this function. {message}"
@@ -271,8 +268,7 @@ def float_to_fraction(
     stop_func: callable = None,
     verbose: bool = True,
 ) -> Union[Fraction, tuple[int, int]]:
-    """
-    Calculate the continued fraction approximation of a value.
+    """Calculate the continued fraction approximation of a value.
 
     Parameters
     ----------
@@ -299,7 +295,6 @@ def float_to_fraction(
         Tuple with the numerator and denominator of the best approximation,
         or a Fraction object if `as_fraction` is True.
     """
-
     # Check input values
     if max_iter is None and max_error is None and stop_func is None:
         raise ValueError(
@@ -419,8 +414,7 @@ def float_to_fraction(
 
 
 def parse_to_iter(value: any, to: type = list) -> Iterable:
-    """
-    Parse a value to an iterable if it is not already.
+    """Parse a value to an iterable if it is not already.
 
     Parameters
     ----------
@@ -435,7 +429,6 @@ def parse_to_iter(value: any, to: type = list) -> Iterable:
     Iterable
         Parsed value as an iterable.
     """
-
     # If it is a string (already iterable) or not an iterable, return a list
     if isinstance(value, str) or not isinstance(value, Iterable):
         return [value]

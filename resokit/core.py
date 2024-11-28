@@ -10,8 +10,7 @@
 # ============================================================================
 # DOCS
 # ============================================================================
-
-""" Module ResoKit. """
+"""Module ResoKit."""
 
 # =============================================================================
 # IMPORTS
@@ -70,30 +69,29 @@ class MetaData(Mapping):
     _data = attrs.field(converter=dict, factory=dict)
 
     def __repr__(self):
-        """repr(x) <=> x.__repr__()."""
+        """Repr(x) <=> x.__repr__()."""
         return f"Metadata({repr(self._data)})"
 
     def __getitem__(self, k):
-        """x[k] <=> x.__getitem__(k)."""
+        """X[k] <=> x.__getitem__(k)."""
         return self._data[k]
 
     def __iter__(self):
-        """iter(x) <=> x.__iter__()."""
+        """Iter(x) <=> x.__iter__()."""
         return iter(self._data)
 
     def __len__(self):
-        """len(x) <=> x.__len__()."""
+        """Len(x) <=> x.__len__()."""
         return len(self._data)
 
     def __getattr__(self, a):
-        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        """Getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
         return self[a]
 
 
 @attrs.define(frozen=True, slots=True, repr=False)
 class ResokitDataFrame:
-    """
-    Initialize a ResoKit DataFrame class.
+    """Initialize a ResoKit DataFrame class.
 
     Parameters
     ----------
@@ -121,7 +119,7 @@ class ResokitDataFrame:
 
     @columns_.default
     def _columns__default(self) -> list:
-        """Default value for columns_."""
+        """Set the default value for columns_."""
         return (
             self.data_df.index
             if isinstance(self.data_df, pd.Series)
@@ -130,12 +128,12 @@ class ResokitDataFrame:
 
     @n_columns_.default
     def _n_columns__default(self) -> int:
-        """Default value for n_columns_."""
+        """Set the default value for n_columns_."""
         return len(self.columns_)
 
     @n_objects_.default
     def _n_objects__default(self) -> int:
-        """Default value for n_objects_."""
+        """Set the default value for n_objects_."""
         return (
             self.data_df.shape[0]
             if isinstance(self.data_df, pd.DataFrame)
@@ -144,7 +142,6 @@ class ResokitDataFrame:
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-
         if self.data_df.empty:
             warnings.warn("Empty DataFrame.")
 
@@ -165,7 +162,6 @@ class ResokitDataFrame:
 
     def __getitem__(self, key):
         """x[y] <==> x.__getitem__(y)."""
-
         if self.n_objects_ == 1:
             if isinstance(key, int):
                 return self.data_df.iloc[key]
@@ -188,7 +184,6 @@ class ResokitDataFrame:
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-
         with pd.option_context("display.show_dimensions", False):
             df_body = repr(self.data_df).splitlines()
 
@@ -205,7 +200,6 @@ class ResokitDataFrame:
 
     def _repr_html_(self):
         """Return a HTML representation of the DataFrame."""
-
         ad_id = id(self)
 
         with pd.option_context("display.show_dimensions", False):
@@ -231,8 +225,7 @@ class ResokitDataFrame:
         return html
 
     def to_dataframe(self, columns=None, copy=False):
-        """
-        Return the data_df as a new DataFrame.
+        """Return the data_df as a new DataFrame.
 
         Parameters
         ----------
@@ -241,7 +234,6 @@ class ResokitDataFrame:
         copy : bool, optional. Default: False.
             Whether to return a copy of the DataFrame.
         """
-
         if columns is not None:
             used_cols = [col for col in list(columns) if col in self.columns_]
             df = self.data_df[used_cols]
@@ -262,8 +254,7 @@ def df_to_resokit(
     copy: bool = False,
     metadata: dict = {},
 ) -> ResokitDataFrame:
-    """
-    Convert ExoplanetEU or NASA dataset to ResoKit format.
+    """Convert ExoplanetEU or NASA dataset to ResoKit format.
 
     Parameters
     ----------
@@ -319,12 +310,10 @@ def df_to_resokit(
 
 @attrs.define(repr=False, frozen=True, slots=True)
 class StaticPlanet(ResokitDataFrame):
-    """
-    StaticPlanet class representing a static planet.
+    """StaticPlanet class representing a static planet.
 
     Attributes
     ----------
-
     data_df : pd.Series
         Series containing the data.
     source : str
@@ -345,22 +334,21 @@ class StaticPlanet(ResokitDataFrame):
 
     @name.default
     def _name_default(self):
-        """Default value for name."""
+        """Set the default value for name."""
         return self.data_df["name"]  # ["name"] because .name is a df method
 
     @user_defined_.default
     def _user_defined__default(self):
-        """Default value for user_defined_."""
+        """Set the default value for user_defined_."""
         return self.source not in ["eu", "nasa"]
 
     @suffix_.default
     def _suffix__default(self):
-        """Default value for suffix_."""
+        """Set the default value for suffix_."""
         return self.data_df["name"].split(" ")[-1]
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-
         # Assert data_series is a Series and not DataFrame
         if not isinstance(self.data_df, pd.Series):
             raise TypeError(
@@ -383,7 +371,6 @@ class StaticPlanet(ResokitDataFrame):
 
     def __getitem__(self, key: Union[int, str, list]):
         """x[y] <==> x.__getitem__(y)."""
-
         key = parse_to_iter(key)
 
         if all(isinstance(i, int) for i in key):
@@ -416,8 +403,7 @@ class StaticPlanet(ResokitDataFrame):
         error: bool = False,
         silent: bool = False,
     ):
-        """
-        Return the specified items of the planet.
+        """Return the specified items of the planet.
 
         Parameters
         ----------
@@ -433,7 +419,6 @@ class StaticPlanet(ResokitDataFrame):
         pd.Series
             Series with the requested items.
         """
-
         items = parse_to_iter(items)
 
         vals = {}
@@ -460,8 +445,7 @@ class StaticPlanet(ResokitDataFrame):
         planet_legend: bool = True,
         plot_kwargs: dict = {},
     ):
-        """
-        Plot the x vs y data of the system.
+        """Plot the x vs y data of the planet.
 
         Parameters
         ----------
@@ -485,7 +469,6 @@ class StaticPlanet(ResokitDataFrame):
         plt.Axes
             Matplotlib Axes with the plot.
         """
-
         if ax is None:
             ax = plt.gca()
 
@@ -537,8 +520,7 @@ class StaticPlanet(ResokitDataFrame):
 
 @attrs.define(repr=False, frozen=True, slots=True)
 class StaticStar(ResokitDataFrame):
-    """
-    StaticStar class representing a static star.
+    """StaticStar class representing a static star.
 
     Attributes
     ----------
@@ -559,8 +541,7 @@ class StaticStar(ResokitDataFrame):
 
     @name.default
     def _name_default(self):
-        """Default value for name."""
-
+        """Set the default value for name."""
         if "star_name" in self.data_df.index:
             return self.data_df["star_name"]
 
@@ -568,12 +549,11 @@ class StaticStar(ResokitDataFrame):
 
     @user_defined_.default
     def _user_defined__default(self):
-        """Default value for user_defined_."""
+        """Set the default value for user_defined_."""
         return self.source not in ["eu", "nasa"]
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-
         # Assert data_series is a Series
         if not isinstance(self.data_df, pd.Series):
             raise TypeError(
@@ -595,7 +575,6 @@ class StaticStar(ResokitDataFrame):
 
     def __getitem__(self, key: Union[int, str, list]):
         """x[y] <==> x.__getitem__(y)."""
-
         key = parse_to_iter(key)
 
         if any(isinstance(i, int) for i in key):
@@ -627,8 +606,7 @@ class StaticStar(ResokitDataFrame):
         star_legend: bool = True,
         plot_kwargs: dict = {},
     ):
-        """
-        Plot the x vs y data of the system.
+        """Plot the x vs y data of the star.
 
         Parameters
         ----------
@@ -652,7 +630,6 @@ class StaticStar(ResokitDataFrame):
         plt.Axes
             Matplotlib Axes with the plot.
         """
-
         if ax is None:
             ax = plt.gca()
 
@@ -703,8 +680,9 @@ class StaticStar(ResokitDataFrame):
 
 @attrs.define(repr=False, frozen=True, slots=True)
 class StaticSystem:
-    """
-    StaticSystem class representing a static system.
+    """StaticSystem class representing a static system.
+
+    Contains a star and a list of planets.
 
     Attributes
     ----------
@@ -756,13 +734,12 @@ class StaticSystem:
 
     @n_planets_.default
     def _n_planets__default(self):
-        """Default value for n_planets_."""
+        """Set the default value for n_planets_."""
         return len(self.planets)
 
     @source_.default
     def _source__default(self):
-        """Default value for source_."""
-
+        """Set the default value for source_."""
         main_source = getattr(self.star, "source", "unknown")
 
         return (
@@ -778,18 +755,17 @@ class StaticSystem:
 
     @user_defined_.default
     def _user_defined__default(self):
-        """Default value for user_defined_."""
+        """Set the default value for user_defined_."""
         return self.source_ not in ["eu", "nasa"]
 
     @planet_names_.default
     def _planet_names__default(self):
-        """Default value for planet_names_."""
+        """Set the default value for planet_names_."""
         return [getattr(planet, "name") for planet in self.planets]
 
     @period_ratios_.default
     def _period_ratios__default(self):
-        """Default value for period_ratios."""
-
+        """Set the default value for period_ratios_."""
         if self.n_planets_ == 1:
             return None
         elif self.n_planets_ == 2:
@@ -799,7 +775,6 @@ class StaticSystem:
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-
         star_name = self.star.name
 
         # Check if all planets are StaticPlanet instances
@@ -825,7 +800,6 @@ class StaticSystem:
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-
         star_msg = "\n Star:\n  " + f"{self.star.name}"
 
         planets_msg = (
@@ -858,7 +832,6 @@ class StaticSystem:
         -------
         A sliced planet object or specific items of the system.
         """
-
         key = parse_to_iter(key)
 
         if all(isinstance(i, int) for i in key):
@@ -875,8 +848,7 @@ class StaticSystem:
         return self.n_planets_ + 1
 
     def planet(self, indices: Union[int, Iterable[int]]) -> StaticPlanet:
-        """
-        Slice the planets by given indices.
+        """Slice the planets by given indices.
 
         Parameters
         ----------
@@ -887,7 +859,6 @@ class StaticSystem:
         -------
         An existing StaticPlanet or list of StaticPlanet objects.
         """
-
         indices = parse_to_iter(indices, to=list)
 
         if not all(isinstance(i, int) for i in indices):
@@ -905,8 +876,7 @@ class StaticSystem:
     def _get_planets_items(
         self, items: Union[str, list[str]], return_values: bool = True
     ):
-        """
-        Retrieve specific attributes of planets.
+        """Retrieve specific attributes of planets.
 
         Parameters
         ----------
@@ -920,7 +890,6 @@ class StaticSystem:
         list
             Values or full objects of the specified planet attributes.
         """
-
         data = [planet[items] for planet in self.planets]
 
         if return_values:
@@ -932,8 +901,7 @@ class StaticSystem:
         return [item for item in data]
 
     def get_item(self, items: Union[str, list[str]], error: bool = False):
-        """
-        Retrieve specific attributes of the system (star/planets).
+        """Retrieve specific attributes of the system (star/planets).
 
         Parameters
         ----------
@@ -948,7 +916,6 @@ class StaticSystem:
         pd.Series or pd.DataFrame
             Series or DataFrame with the requested items.
         """
-
         items = parse_to_iter(items)
 
         if error:
@@ -971,7 +938,6 @@ class StaticSystem:
 
     def _get_single_item(self, item: str):
         """Handle retrieval when a single item is requested."""
-
         if item.startswith("star_"):
             return self.star[item.replace("star_", "")]
 
@@ -1000,7 +966,6 @@ class StaticSystem:
 
     def _get_multiple_planet_items(self, items: list[str]):
         """Retrieve attributes when there are multiple planets."""
-
         # Create a DataFrame with the requested items
         df = pd.DataFrame(
             {
@@ -1031,9 +996,7 @@ class StaticSystem:
         legends: Union[bool, str, Iterable[str]] = True,
         plot_kwargs: dict = {},
     ):
-        """
-        Plot the x vs y data of the system.
-        Uses plt.errorbar internally.
+        """Plot the x vs y data of the system. Uses plt.errorbar internally.
 
         Parameters
         ----------
@@ -1054,7 +1017,6 @@ class StaticSystem:
         plot_kwargs : dict
             Additional keyword arguments for the plt.errorbar function.
         """
-
         if ax is None:
             ax = plt.gca()
 
@@ -1099,9 +1061,9 @@ class StaticSystem:
     def plot_triplet(
         self, which: Union[str, int] = "all", ax: plt.Axes = None, **kwargs
     ):
-        """
-        Plot each CONSECUTIVE triplet of planets in the system in the
-        period ratio space, defined as P_{i+1}/P_i vs P_{i+2}/P_{i+1}.
+        """Plot each CONSECUTIVE triplet of planets in the period ratio space.
+
+        Systems triplets are shown in the plane P_{i+1}/P_i vs P_{i+2}/P_{i+1}.
 
         Parameters
         ----------
@@ -1122,7 +1084,6 @@ class StaticSystem:
         plt.Axes
             Matplotlib Axes with the plot.
         """
-
         # Check if the system has at least 3 planets
         if self.n_planets_ < 3:
             raise ValueError("There must be at least 3 planets to compare.")
@@ -1165,15 +1126,13 @@ class StaticSystem:
         return ax
 
     def remove_planet(self, index: Union[int, str], verbose: bool = True):
-        """
-        Remove a planet from the system.
+        """Remove a planet from the system.
 
         Parameters
         ----------
         index : int, str
             Index or suffix (1 char) or name of the planet to remove.
         """
-
         if isinstance(index, str):  # Remove by name or suffix
 
             if len(index) == 1:  # Remove by suffix
@@ -1225,8 +1184,7 @@ class StaticSystem:
     def add_planet(
         self, planet: StaticPlanet, sort: bool = True, verbose: bool = True
     ):
-        """
-        Add a planet to the system.
+        """Add a planet to the system.
 
         Parameters
         ----------
@@ -1240,7 +1198,6 @@ class StaticSystem:
         StaticSystem
             A new StaticSystem instance.
         """
-
         if not isinstance(planet, StaticPlanet):
             raise TypeError(
                 "planet must be a StaticPlanet instance."
@@ -1276,8 +1233,7 @@ class StaticSystem:
 
     @property
     def period_ratios(self):
-        """Return the period ratios of the planets."""
-
+        """Return the period ratios of all the planets."""
         if self.n_planets_ < 2:
             raise ValueError("There must be at least 2 planets to compare.")
 
@@ -1295,8 +1251,7 @@ class StaticSystem:
         verbose: bool = True,
         fraction_kwargs: dict = {},
     ) -> Union[float, pd.DataFrame]:
-        """
-        Return the period ratio of the planets.
+        """Return the period ratio of the specified pair of planets.
 
         Parameters
         ----------
@@ -1315,7 +1270,6 @@ class StaticSystem:
         float, pd.DataFrame
             Period ratio of the planets
         """
-
         if self.n_planets_ < 2:
             raise ValueError("There must be at least 2 planets to compare.")
 
@@ -1399,15 +1353,13 @@ class StaticSystem:
         return ratio
 
     def to_dataframe(self, columns: list = None) -> pd.DataFrame:
-        """
-        Return the data_df as a new DataFrame.
+        """Return data_df as a new DataFrame.
 
         Parameters
         ----------
         columns : list, optional. Default: None.
             Columns to return.
         """
-
         # Create a DataFrame with the planets data
         df = pd.DataFrame()
         for planet in self.planets:
@@ -1423,9 +1375,7 @@ class StaticSystem:
         return df
 
     def to_dict(self) -> dict:
-        """
-        Return the metadata as a new dictionary.
-        """
+        """Return the metadata as a new dictionary."""
         return dict(self.metadata)
 
 
@@ -1440,8 +1390,7 @@ def _create_static_system(
     name,
     metadata={},
 ) -> StaticSystem:
-    """
-    Create a StaticSystem instance.
+    """Create a StaticSystem instance.
 
     Parameters
     ----------
@@ -1472,8 +1421,7 @@ def _create_static_star(
     source="user",
     metadata={},
 ) -> StaticStar:
-    """
-    Create a StaticStar instance.
+    """Create a StaticStar instance.
 
     Parameters
     ----------
@@ -1497,8 +1445,7 @@ def _create_static_planet(
     source="user",
     metadata={},
 ) -> StaticPlanet:
-    """
-    Create a StaticPlanet instance.
+    """Create a StaticPlanet instance.
 
     Parameters
     ----------
@@ -1520,8 +1467,7 @@ def _create_static_planet(
 def resokit_to_system(
     resokit_data: ResokitDataFrame,
 ) -> StaticSystem:
-    """
-    Convert a ResokitDataFrame to a StaticSystem instance.
+    """Convert a ResokitDataFrame to a StaticSystem instance.
 
     Parameters
     ----------
@@ -1533,7 +1479,6 @@ def resokit_to_system(
     StaticSystem
         StaticSystem instance.
     """
-
     columns = resokit_data.columns_  # Columns of the data
 
     # Convert to DataFrame

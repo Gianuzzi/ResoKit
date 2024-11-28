@@ -7,7 +7,6 @@
 # ============================================================================
 # DOCS
 # ============================================================================
-
 """Module to manage provided exoplanet datasets from exoplanet.eu and NASA."""
 
 # =============================================================================
@@ -66,8 +65,9 @@ def download_dataset(
     return_data: bool = False,
     store: bool = False,
 ) -> Union[Path, pd.DataFrame, None]:
-    """
-    Downloads the dataset from a specified source and saves it locally as CSV.
+    """Download the dataset from a specified source and saves it locally.
+
+    The dataset is downloaded from the provided URL and saved as a CSV file.
 
     Parameters
     ----------
@@ -89,7 +89,6 @@ def download_dataset(
         or the dataset itself if return_data=True,
         or None if the file already exists and overwrite=False.
     """
-
     # Check if requests is imported
     assert_module_imported(requests_imported, "requests")
 
@@ -157,8 +156,7 @@ def download_dataset(
 
 
 def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
-    """
-    Create a ZIP archive containing both EU and NASA dataset CSV files.
+    """Create a ZIP archive containing both EU and NASA dataset CSV files.
 
     Parameters
     ----------
@@ -172,7 +170,6 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
     Path
         Path to the created ZIP file.
     """
-
     zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
 
     if zip_path.exists() and not overwrite:  # Check if ZIP already exists
@@ -203,8 +200,7 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
 
 
 def check_file_age(source: str, from_zip: bool = False) -> int:
-    """
-    Checks the dataset file's age and prints a warning if it's outdated.
+    """Check the dataset file's age and prints a warning if it's outdated.
 
     Parameters
     ----------
@@ -218,7 +214,6 @@ def check_file_age(source: str, from_zip: bool = False) -> int:
     int
         Age of the file in days.
     """
-
     source = source.lower()  # Ensure lowercase
 
     file_path = (
@@ -254,8 +249,10 @@ def load_dataset(
     store: bool = False,
     store_index: bool = True,
 ) -> pd.DataFrame:
-    """
-    Loads the dataset from a specified source and optionally extracts from ZIP.
+    """Load the dataset from a specified source and optionally extract it.
+
+    The dataset is loaded from the provided CSV file and stored in memory.
+    If the dataset is already stored in memory, it is returned directly.
 
     Parameters
     ----------
@@ -283,7 +280,6 @@ def load_dataset(
     pd.DataFrame or None
         The loaded dataset as a DataFrame.
     """
-
     source = source.lower()  # Ensure lowercase
 
     if source not in DATASET_FILENAMES:  # Check if source is valid
@@ -431,8 +427,7 @@ def load_dataset(
 
 
 def clear_memory(source: str) -> None:
-    """
-    Clear the memory address of stored datasets.
+    """Clear the memory address of stored datasets.
 
     Parameters
     ----------
@@ -440,7 +435,6 @@ def clear_memory(source: str) -> None:
         If provided, only clears the memory for the specified source.
         If 'both', clears both sources.
     """
-
     source = source.lower()  # Ensure lowercase
 
     if source == "both":

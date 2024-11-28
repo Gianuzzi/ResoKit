@@ -13,9 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""
-The ResoKit.utils module includes tools for data manipulation and analysis.
-"""
+"""The ResoKit.utils module includes tools for data analysis."""
 
 # =============================================================================
 # IMPORTS

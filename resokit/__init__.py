@@ -12,13 +12,10 @@
 # ============================================================================
 # DOCS
 # ============================================================================
+"""ResoKit.
 
-"""
-ResoKit.
-
-ResoKit addresses the need for diagnosing and analyzing
- mean motion resonances (MMR) in coplanar planetary systems."
-
+ResoKit addresses the need for diagnosing and analyzing  mean motion
+resonances (MMR) in coplanar planetary systems."
 """
 
 __version__ = "0.1.0"
@@ -41,4 +38,5 @@ from .utils import mmr  # noqa
 
 
 def hello():
+    """Print the hello message."""
     print("Hello from the resokit package!")

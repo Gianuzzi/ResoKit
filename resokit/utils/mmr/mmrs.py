@@ -11,9 +11,10 @@
 # DOCS
 # ============================================================================
 
-"""
-This module provides tools for identifying, labeling, and computing
-distances to MMRs in the phase space.
+"""Module to manage 3-body mean-motion resonances (MMRs).
+
+This module provides tools for identifying, labeling, and computing distances
+to MMRs in the phase space.
 """
 
 # ============================================================================
@@ -36,23 +37,21 @@ from scipy.optimize import minimize
 def mmr3b(
     x: Union[float, np.ndarray], resonance: tuple[int, int, int]
 ) -> np.ndarray:
-    """
-    Computes the 3-body mean-motion resonance (MMR) curve.
+    """Compute the 3-body mean-motion resonance (MMR) curve.
 
-    Parameters:
+    Parameters
     ----------
     x : float or np.ndarray
         The independent variable for the curve.
     resonance : tuple[int, int, int]
         Coefficients (a, b, c) defining the resonance.
 
-    Returns:
+    Returns
     -------
     np.ndarray
         The corresponding values of the 3-body resonance curve.
         Singularities are replaced with NaN.
     """
-
     a, b, c = resonance  # Coefficients of the resonance curve
 
     if np.ndim(x) == 0:  # Single value
@@ -88,11 +87,13 @@ def mmrs_in_area(
     max_coeff2: int = 10,
     max_order2: int = 2,
 ) -> list:
-    """
-    Identifies 3-body (3P-MMR) and 2-body (2P-MMR) resonances in a
-    specified phase-space region.
+    """Identify 3-body and 2-body MMRs in a specified phase-space region.
 
-    Parameters:
+    This function identifies 3-body mean-motion resonances (3P-MMRs) and
+    optionally 2-body mean-motion resonances (2P-MMRs) in a specified
+    region of the phase space.
+
+    Parameters
     ----------
     bounds : tuple[float, float, float, float]
         The limits of the region (x_min, x_max, y_min, y_max).
@@ -113,13 +114,12 @@ def mmrs_in_area(
     max_coeff2 : int
         Calculate 2P-MMRs up to this maximum integer coefficient.
 
-    Returns:
+    Returns
     -------
     out: list
         A list containing detected 3P-MMRs and optionally
         2P-MMRs along the x and y axes.
     """
-
     x_min, x_max, y_min, y_max = bounds
     r3p_resonances = []
 
@@ -201,22 +201,20 @@ def mmrs_in_area(
 def _is_curve_within_bounds(
     resonance: list[int, int, int], bounds: tuple[float, float, float, float]
 ) -> bool:
-    """
-    Determines if a resonance curve intersects a bounded region.
+    """Determine if a resonance curve intersects a bounded region.
 
-    Parameters:
+    Parameters
     ----------
     resonance : list[int, int, int]
         Coefficients defining the resonance.
     bounds : tuple[float, float, float, float]
         The bounding region as (x_min, x_max, y_min, y_max).
 
-    Returns:
+    Returns
     -------
     bool
         True if the curve intersects the region, False otherwise.
     """
-
     x_min, x_max, y_min, y_max = bounds
     i, j, k = resonance
 
@@ -280,10 +278,9 @@ def mindist_mmr3b(
     x0: float = None,
     **minimize_kwargs,
 ) -> tuple[float, float]:
-    """
-    Calculate the minimum distance to a 3-body resonance curve.
+    """Calculate the minimum distance to a 3-body resonance curve.
 
-    Parameters:
+    Parameters
     ----------
     a : float
         The x-coordinate of the point.
@@ -296,12 +293,11 @@ def mindist_mmr3b(
     minimize_kwargs : dict, optional
         Additional arguments for the optimization function.
 
-    Returns:
+    Returns
     -------
     tuple[float, float]
         The x-y coordinates of the minimum distance and the distance value.
     """
-
     # Singularity handling
     singularity = -resonance[1] / resonance[0]
 
@@ -353,19 +349,18 @@ def mindist_mmr3b(
 
 
 def label_mmr3b(
-    res: tuple, ax: plt.Axes, lims: tuple = None, warn: bool = True
+    resonance: tuple, ax: plt.Axes, lims: tuple = None, warn: bool = True
 ):
-    """
-    Annotates a plot with the label of a resonance line
-    based on its coefficients.
+    """Annotate a plot with the label of a resonance line.
 
-    The label is placed where the resonance line crosses
-    either the right or top axis of the plot.
-    If the line does not cross these axes,  a warning is printed.
+    The label is placed where the resonance line crosses either the
+    right or top axis of the plot. The resonance coefficients are
+    displayed in a compact format. If the line does not cross these
+    axes, a warning is printed.
 
-    Parameters:
+    Parameters
     ----------
-    res : tuple
+    resonance : tuple
         Coefficients of the resonance line (a, b, c) in
         the form a*x + b*y + c = 0.
     ax : matplotlib.axes.Axes
@@ -377,12 +372,11 @@ def label_mmr3b(
         Whether to print a warning if the resonance does not cross
         the right or top axis (default: True).
 
-    Returns:
+    Returns
     -------
     None
     """
-
-    a, b, c = res  # Coefficients of the resonance line
+    a, b, c = resonance  # Coefficients of the resonance line
 
     # Define the resonance line and its inverse
     def r(x):
@@ -401,7 +395,7 @@ def label_mmr3b(
         y_min, y_max = ax.get_ylim()
 
     # Calculate y-coordinate at x_max
-    y = mmr3b(x_max, res)
+    y = mmr3b(x_max, resonance)
 
     # Check crossing on the right axis
     if y_min <= y <= y_max:
@@ -422,7 +416,7 @@ def label_mmr3b(
 
     # If the line does not cross the right or top axis
     elif warn:
-        warnings.warn(f"{res} does not cross the right or top axis.")
+        warnings.warn(f"{resonance} does not cross the right or top axis.")
 
     return
 
@@ -441,11 +435,13 @@ def plot_mmrs(
     label_mmrs: bool = False,
     **plot_kwargs,
 ):
-    """
-    Plots 3-body (3P-MMR) and optionally 2-body (2P-MMR) resonances
-    in a specified phase-space region.
+    """Plot 3-body and 2-body mean-motion resonances in a phase-space region.
 
-    Parameters:
+    This function plots 3-body mean-motion resonances (3P-MMRs) and optionally
+    2-body mean-motion resonances (2P-MMRs) in a specified region of the phase
+    space.
+
+    Parameters
     ----------
     bounds : tuple[float, float, float, float], optional
         The limits of the region (x_min, x_max, y_min, y_max).
@@ -479,12 +475,11 @@ def plot_mmrs(
     plot_kwargs : dict, optional
         Additional arguments for the plot function.
 
-    Returns:
+    Returns
     -------
     plt.Axes
         The axis object on which the plot was drawn.
     """
-
     # Get the current axis if not provided
     if ax is None:
         ax = plt.gca()
