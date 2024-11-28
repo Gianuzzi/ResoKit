@@ -1033,6 +1033,7 @@ class StaticSystem:
     ):
         """
         Plot the x vs y data of the system.
+        Uses plt.errorbar internally.
 
         Parameters
         ----------
@@ -1051,7 +1052,7 @@ class StaticSystem:
             If str, use the string as the legend.
             If Iterable, use the list of strings as the legends.
         plot_kwargs : dict
-            Additional keyword arguments for the plot function.
+            Additional keyword arguments for the plt.errorbar function.
         """
 
         if ax is None:
@@ -1095,6 +1096,74 @@ class StaticSystem:
 
         return self.star.plot(x, y, error_x, error_y, ax, legends, plot_kwargs)
 
+    def plot_triplet(
+        self, which: Union[str, int] = "all", ax: plt.Axes = None, **kwargs
+    ):
+        """
+        Plot each CONSECUTIVE triplet of planets in the system in the
+        period ratio space, defined as P_{i+1}/P_i vs P_{i+2}/P_{i+1}.
+
+        Parameters
+        ----------
+        which : int, str, optional. Default: 'all'.
+            Which triplets to plot.
+            If 'all', plot all possible triplets.
+            If int, plot the triplet with the given index.
+            For example:
+            - 0 will plot the first triplet: (0, 1, 2).
+            - 1 will plot the second triplet: (1, 2, 3).
+        ax : plt.Axes, optional. Default: None.
+            Matplotlib Axes to plot on.
+        **kwargs : dict
+            Additional keyword arguments for the plt.scatter function.
+
+        Returns
+        -------
+        plt.Axes
+            Matplotlib Axes with the plot.
+        """
+
+        # Check if the system has at least 3 planets
+        if self.n_planets_ < 3:
+            raise ValueError("There must be at least 3 planets to compare.")
+
+        # Get period ratios
+        period_ratios = self.period_ratios
+
+        # Check which triplets to plot. Remember they are consecutive.
+        if which == "all":
+            triplets = [(i, i + 1, i + 2) for i in range(self.n_planets_ - 2)]
+        elif isinstance(which, int):
+            if which < 0 or which >= self.n_planets_ - 2:
+                raise ValueError("Index out of range.")
+            triplets = [(which, which + 1, which + 2)]
+        else:
+            raise ValueError("Invalid value for 'which'.")
+
+        # Create a new figure if ax is None
+        if ax is None:
+            ax = plt.gca()
+
+        # For the label, use suffixes if they are unique
+        suffixes = [planet.suffix_ for planet in self.planets]
+        use_suffix = len(suffixes) == len(set(suffixes))
+
+        # Plot each triplet
+        for i, j, k in triplets:
+            if not use_suffix:
+                label_aux = [str(i), str(j), str(k)]
+            else:
+                label_aux = [self.planets[idx].suffix_ for idx in [i, j, k]]
+            label = "".join(label_aux)
+            ax.scatter(
+                period_ratios.iloc[j, i],
+                period_ratios.iloc[k, j],
+                label=label,
+                **kwargs,
+            )
+
+        return ax
+
     def remove_planet(self, index: Union[int, str], verbose: bool = True):
         """
         Remove a planet from the system.
@@ -1130,7 +1199,7 @@ class StaticSystem:
             raise IndexError("Index out of range.")
 
         # Create a new list of planets
-        new_planets = self.planets[:index] + self.planets[index + 1 :]
+        new_planets = self.planets[:index] + self.planets[index + 1:]
 
         # Create a new metadata dictionary
         new_meta = self.to_dict()
