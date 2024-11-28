@@ -352,7 +352,9 @@ def mindist_mmr3b(
         raise ValueError("Optimization failed!")
 
 
-def label_mmr3b(res: tuple, ax: plt.Axes, lims: tuple = None):
+def label_mmr3b(
+    res: tuple, ax: plt.Axes, lims: tuple = None, warn: bool = True
+):
     """
     Annotates a plot with the label of a resonance line
     based on its coefficients.
@@ -371,6 +373,9 @@ def label_mmr3b(res: tuple, ax: plt.Axes, lims: tuple = None):
     lims : tuple, optional
         Custom axis limits in the format (x_min, x_max, y_min, y_max).
         If not provided, the function will use the current axis limits.
+    warn : bool, optional
+        Whether to print a warning if the resonance does not cross
+        the right or top axis (default: True).
 
     Returns:
     -------
@@ -416,7 +421,118 @@ def label_mmr3b(res: tuple, ax: plt.Axes, lims: tuple = None):
         ax.text(x_ax, 1.02, label, transform=ax.transAxes, ha="center")
 
     # If the line does not cross the right or top axis
-    else:
+    elif warn:
         warnings.warn(f"{res} does not cross the right or top axis.")
 
     return
+
+
+def plot_mmrs(
+    bounds: tuple[float, float, float, float] = None,
+    order3: int = 0,
+    max_coeff3: int = 10,
+    max_order3: int = 0,
+    mmr2b: bool = True,
+    order2: int = 2,
+    max_coeff2: int = 10,
+    max_order2: int = 2,
+    n_points: int = 1000,
+    ax: plt.Axes = None,
+    label_mmrs: bool = False,
+    **plot_kwargs,
+):
+    """
+    Plots 3-body (3P-MMR) and optionally 2-body (2P-MMR) resonances
+    in a specified phase-space region.
+
+    Parameters:
+    ----------
+    bounds : tuple[float, float, float, float], optional
+        The limits of the region (x_min, x_max, y_min, y_max).
+        If ax is provided, the bounds will be adjusted to the axis limits.
+        Default: (1, 10, 1, 10).
+    order3 : int
+        Exact order for 3P-MMRs (default: 0).
+    max_order3 : int
+        Calculate 3P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered (default: 10).
+    max_coeff3 : int
+        Calculate 3P-MMRs up to this maximum integer coefficient.
+    mmr2b : bool
+        Whether to compute 2P-MMRs (default: True).
+    order2 : int
+        Exact order for 2P-MMRs (default: 2).
+    max_order2 : int
+        Calculate 2P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered (default: 2).
+    max_coeff2 : int
+        Calculate 2P-MMRs up to this maximum integer coefficient.
+    n_points : int, optional
+        Number of points for the curve (default: 500).
+    ax : plt.Axes, optional
+        The axis object on which the plot will be drawn.
+        If not provided, a new figure and axis will be created.
+    label_mmrs : bool, optional
+        Whether to label the resonances on the plot.
+        Recommended to set xlim and ylim before using this option,
+        or the labels may be placed outside the plot. (default: False).
+    plot_kwargs : dict, optional
+        Additional arguments for the plot function.
+
+    Returns:
+    -------
+    plt.Axes
+        The axis object on which the plot was drawn.
+    """
+
+    # Get the current axis if not provided
+    if ax is None:
+        ax = plt.gca()
+
+    if bounds is None:
+        # Get the axis limits
+        bounds = [
+            ax.get_xlim()[0],
+            ax.get_xlim()[1],
+            ax.get_ylim()[0],
+            ax.get_ylim()[1],
+        ]
+
+    # Get the resonances in the specified area
+    mmrs = mmrs_in_area(
+        bounds,
+        order3,
+        max_coeff3,
+        max_order3,
+        mmr2b,
+        order2,
+        max_coeff2,
+        max_order2,
+    )
+
+    # Plot the resonances
+    if mmr2b:
+        mmr3 = mmrs[0]
+        mmr2x = mmrs[1]
+        mmr2y = mmrs[2]
+    else:
+        mmr3 = mmrs
+        mmr2x = mmr2y = []
+
+    # Plot the 2P-MMRs
+    for r2x in mmr2x:
+        ax.axvline(r2x[0] / r2x[1], color="k", linestyle="--")
+
+    # Plot the 2P-MMRs
+    for r2y in mmr2y:
+        ax.axhline(r2y[0] / r2y[1], color="k", linestyle="--")
+
+    # Plot the 3P-MMRs
+    for r3 in mmr3:
+        x = np.linspace(bounds[0], bounds[1], n_points)
+        curve = mmr3b(x, r3)
+        ax.plot(x, curve, **plot_kwargs)
+        if label_mmrs:
+            label_mmr3b(r3, ax, warn=True)
+
+    return ax

@@ -25,3 +25,4 @@ from .mmrs import label_mmr3b  # noqa
 from .mmrs import mindist_mmr3b  # noqa
 from .mmrs import mmr3b  # noqa
 from .mmrs import mmrs_in_area  # noqa
+from .mmrs import plot_mmrs  # noqa
