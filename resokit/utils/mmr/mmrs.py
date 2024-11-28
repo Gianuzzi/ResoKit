@@ -26,7 +26,9 @@ from itertools import product
 from typing import Union
 
 import matplotlib.pyplot as plt
+
 import numpy as np
+
 from scipy.optimize import minimize
 
 # ============================================================================

@@ -10,6 +10,7 @@
 # ============================================================================
 # DOCS
 # ============================================================================
+
 """Module ResoKit."""
 
 # =============================================================================
@@ -21,9 +22,13 @@ from collections.abc import Mapping
 from typing import Iterable, Union
 
 import attrs
+
 import matplotlib.pyplot as plt
-import pandas as pd
+
 from numpy import isnan, pi
+
+import pandas as pd
+
 
 from resokit.utils.utils import (
     MAPPINGS,
@@ -58,12 +63,12 @@ class MetaData(Mapping):
 
     Example
     -------
-    >>> metadata = MetaData({"a": 1, "b": 2})
+    >>> metadata = MetaData({"a": 12, "b": 2})
     >>> metadata.a
-    1
+    12
 
     >>> metadata["a"]
-    1
+    12
     """
 
     _data = attrs.field(converter=dict, factory=dict)
@@ -563,11 +568,11 @@ class StaticStar(ResokitDataFrame):
 
         # Check if all columns are in the default mapping
         if not self.user_defined_:
-            AUX_COLS = {
+            aux_cols = {
                 col.replace("star_", "") for col in RESO_SR_TYPES.keys()
             }
             for col in self.data_df.index:
-                if col not in AUX_COLS | RESO_OB_TYPES.keys():
+                if col not in aux_cols | RESO_OB_TYPES.keys():
                     warnings.warn(
                         "Found columns not in the default star mapping."
                     )
@@ -1158,7 +1163,9 @@ class StaticSystem:
             raise IndexError("Index out of range.")
 
         # Create a new list of planets
-        new_planets = self.planets[:index] + self.planets[index + 1:]
+        new_planets = [  # This way to avoid "index + 1 :" <BLACK>
+            self.planets[i] for i in range(self.n_planets_) if i != index
+        ]
 
         # Create a new metadata dictionary
         new_meta = self.to_dict()

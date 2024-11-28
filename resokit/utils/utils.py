@@ -10,6 +10,7 @@
 # ============================================================================
 # DOCS
 # ============================================================================
+
 """Module with internal utility functions for the ResoKit package."""
 
 # =============================================================================
@@ -22,7 +23,7 @@ from fractions import Fraction
 from types import MappingProxyType
 from typing import Iterable, Union
 
-from resokit import __version__ as VERSION
+from resokit import __version__ as version
 
 # =============================================================================
 # DEFAULTS
@@ -30,7 +31,7 @@ from resokit import __version__ as VERSION
 
 DEFAULT_METADATA = MappingProxyType(
     {
-        "ResoKit": VERSION,
+        "ResoKit": version,
         "author": "Emmanuel Gianuzzi",
         "author_email": "egianuzzi@unc.edu.ar",
         "affiliation": "FAMAF-IATE-OAC-CONICET",
