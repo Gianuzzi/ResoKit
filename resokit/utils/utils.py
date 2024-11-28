@@ -17,11 +17,11 @@
 # IMPORTS
 # =============================================================================
 
-from fractions import Fraction
 import platform
 import sys
+from fractions import Fraction
 from types import MappingProxyType
-from typing import Union
+from typing import Iterable, Union
 
 from resokit import __version__ as VERSION
 
@@ -230,6 +230,10 @@ RESO_DTYPES = MappingProxyType(
     {**RESO_PL_TYPES, **RESO_SR_TYPES, **RESO_OB_TYPES}
 )
 
+# Maximum error tolerance for the float-to-fraction conversion
+MIN_F2F_ERROR = 1e-10  # It is a very small number
+MAX_F2F_ITER = 12  # Maximum number of iterations
+
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
@@ -258,7 +262,7 @@ def assert_module_imported(
 
 def float_to_fraction(
     value: float,
-    max_terms: int = None,
+    max_iter: int = None,
     max_error: float = None,
     as_fraction: bool = False,
     stop_func: callable = None,
@@ -271,7 +275,7 @@ def float_to_fraction(
     ----------
     value : float
         Value to approximate.
-    max_terms : int, optional.
+    max_iter : int, optional.
         Maximum number of terms to use in the continued fraction expansion.
     max_error : float, optional.
         Maximum relative error tolerance for the approximation.
@@ -292,14 +296,14 @@ def float_to_fraction(
         Tuple with the numerator and denominator of the best approximation,
         or a Fraction object if `as_fraction` is True.
     """
-    if max_terms is None and max_error is None and stop_func is None:
+    if max_iter is None and max_error is None and stop_func is None:
         raise ValueError(
-            "At least one of max_terms or max_error or stop_func must be set."
+            "At least one of max_iter or max_error or stop_func must be set."
         )
     if not isinstance(value, (int, float)):
         raise TypeError("value must be a number.")
-    if max_terms is not None and not isinstance(max_terms, int):
-        raise TypeError("max_terms must be an integer.")
+    if max_iter is not None and not isinstance(max_iter, int):
+        raise TypeError("max_iter must be an integer.")
     if max_error is not None and not isinstance(max_error, (int, float)):
         raise TypeError("max_error must be a number.")
     if stop_func is not None:
@@ -358,12 +362,21 @@ def float_to_fraction(
                 + (f" -> STOP: {is_stop}" if has_stop else "")
             )
 
-        if (max_error is not None and error < max_error) or (
-            max_terms is not None and i + 1 >= max_terms
-        ):
+        if (max_error is not None and error < max_error) or (  # Relative error
+            max_iter is not None and i + 1 >= max_iter
+        ):  # Max iterations
             break
         if is_stop:
             i -= 1  # Go back one step before
+            break
+
+        if error < MIN_F2F_ERROR:  # Minimum error (close enough)
+            if verbose:
+                print(f"Minimum function error reached: {MIN_F2F_ERROR}")
+            break
+        if i >= MAX_F2F_ITER:
+            if verbose:
+                print(f"Maximum number of iterations reached: {MAX_F2F_ITER}")
             break
 
         i += 1
@@ -371,3 +384,28 @@ def float_to_fraction(
     if as_fraction:
         return Fraction(numer[i], denom[i])
     return numer[i], denom[i]
+
+
+def parse_to_iter(value: any, to: type = list) -> Iterable:
+    """
+    Parse a value to an iterable if it is not already.
+
+    Parameters
+    ----------
+    value : Any
+        Value to parse.
+    to : type, optional. Default: list
+        Type of iterable to return.
+        If not None, to(value) will be called.
+
+    Returns
+    -------
+    Iterable
+        Parsed value as an iterable.
+    """
+    # If it is a string (already iterable) or not an iterable, return a list
+    if isinstance(value, str) or not isinstance(value, Iterable):
+        return [value]
+    elif to is not None:
+        return to(value)
+    return value

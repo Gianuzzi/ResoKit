@@ -14,31 +14,12 @@
 # ============================================================================
 
 """
-ResoKit.
-
-ResoKit addresses the need for diagnosing and analyzing
- mean motion resonances (MMR) in coplanar planetary systems."
-
+The ResoKit.utils module includes tools for data manipulation and analysis.
 """
-
-__version__ = "0.1.0"
-
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-# from . import tools  # noqa
-from . import core  # noqa
-from . import datasets  # noqa
-from . import io  # noqa
-from . import utils  # noqa
-from .utils import mmr  # noqa
-
-# =============================================================================
-# FUNCTIONS
-# =============================================================================
-
-
-def hello():
-    print("Hello from the resokit package!")
+from . import mmr  # noqa
+from .utils import float_to_fraction  # noqa
