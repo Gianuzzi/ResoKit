@@ -74,6 +74,7 @@ def do_setup():
             "resokit",
             "resokit.datasets",
             "resokit.io",
+            "resokit.utils",
         ],
         include_package_data=True,
         license="MIT",
