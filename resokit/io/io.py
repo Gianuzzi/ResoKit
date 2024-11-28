@@ -29,7 +29,7 @@ from resokit.core import (
     resokit_to_system,
 )
 from resokit.datasets import load_dataset
-from resokit.utils import DEFAULT_METADATA
+from resokit.utils.utils import DEFAULT_METADATA
 
 # =============================================================================
 # CONSTANTS
@@ -53,7 +53,9 @@ def _n_close(a: any, b: str, length: int, n=0) -> bool:
     """
     Check if two strings are n spaces-close.
     """
+
     stra = str(a)  # Convert to string
+
     return (stra[:length] == str(b)) and (
         (len(stra) == length + n) or stra[length] == " "
     )
@@ -90,6 +92,7 @@ def _search_system_index(
     tuple[pd.Index, pd.Series, float]
         Index, values, and similarity ratio.
     """
+
     # Define the column to search
     column = (
         "pl_name"
@@ -122,12 +125,14 @@ def _search_system_index(
     # If no exact matches, search for 1 space-close names
     length = len(name)
     close_matches = raw_series.apply(lambda x: _n_close(x, name, length, 1))
-    if close_matches.any():
+
+    if close_matches.any():  # If 1 space-close names found
         return raw_series[close_matches].index, raw_series[close_matches], 0.9
 
     # If no 1 space-close names, search for 2 space-close names
     close_matches = raw_series.apply(lambda x: _n_close(x, name, length, 2))
-    if close_matches.any():
+
+    if close_matches.any():  # If 2 space-close names found
         return raw_series[close_matches].index, raw_series[close_matches], 0.8
 
     # If no 2 space-close names, search for similar names
@@ -138,6 +143,7 @@ def _search_system_index(
         top_3_indices = similarity_ratios.nlargest(3).index
         good_matches = similarity_ratios.index.isin(top_3_indices)
 
+    # Get the good matches
     similarity_ratios = similarity_ratios[good_matches]
 
     # Return the index, values, and the minimum similarity ratio
@@ -188,12 +194,15 @@ def _load_system_from_db(
     pd.DataFrame
         DataFrame containing the system data.
     """
-    # If storing, then load the whole dataset
+
+    # Print information
     if verbose:
         print(
             f"Loading {'planet' if is_planet else 'star system'} {name} "
             + f"from {source}."
         )
+
+    # If storing, then load the whole dataset
     if store:
         store_index = True  # Store the index if the dataset will be stored
         low_memory = False  # Load the whole dataset if it will be stored
@@ -202,9 +211,11 @@ def _load_system_from_db(
     load_dataset_kwargs.update(
         {"store": store, "verbose": verbose, "store_index": store_index}
     )
+
+    # Load the dataset
     if not low_memory:  # Load the whole dataset
         raw_df = load_dataset(source=source, **load_dataset_kwargs)
-    else:
+    else:  # Will load only the index if possible
         raw_df = None
 
     # Search for the system
@@ -225,21 +236,25 @@ def _load_system_from_db(
             print(f" Star {name} not found in {source} dataset.")
         if ratio == 0:  # No similar names found
             return pd.DataFrame()
-        # Show similar names found
+
         # Note: get most probable by whitespace separation
         most_prob = list(set(val for val in values if name + " " in val))
         others = list(set(val for val in values if val not in most_prob))
-        most_prob.sort()
-        others.sort()
+
+        most_prob.sort()  # Sort the most probable
+        others.sort()  # Sort the others
+
+        # Forced to print the most probable and others
         print(f" Similar names found in {source} dataset:")
         print(f" - {most_prob + others}")
+
         return pd.DataFrame()  # Return an empty DataFrame
 
     # Load the system
-    if raw_df is None:
+    if raw_df is None:  # Load only the system data
         return load_dataset(source=source, only_rows=idx, verbose=verbose)
-    else:
-        return raw_df.loc[idx]
+
+    return raw_df.loc[idx]  # Load the system data from the raw dataset
 
 
 def load_system_from_eu(
@@ -285,6 +300,8 @@ def load_system_from_eu(
         ResoKit DataFrame (if as_resokit is True),
         or StaticSystem.
     """
+
+    # Load the system from the database
     df = _load_system_from_db(
         name=name,
         is_planet=is_planet,
@@ -304,7 +321,8 @@ def load_system_from_eu(
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
     meta.update({f"load_{'planet' if is_planet else 'system'}": name})
-    reso = df_to_resokit(
+
+    reso = df_to_resokit(  # Convert to ResoKit format
         df=df,
         source="eu",
         drop=drop,
@@ -369,6 +387,8 @@ def load_system_from_nasa(
         ResoKit DataFrame (if as_resokit is True),
         or StaticSystem.
     """
+
+    # Load the system from the database
     df = _load_system_from_db(
         name=name,
         is_planet=is_planet,
@@ -380,20 +400,24 @@ def load_system_from_nasa(
         low_memory=low_memory,
     )
 
-    # If the DataFrame is empty, return it
-    if not df.empty:
-        if controversial_set is not None:  # Filter controversial data
-            df = df[df["pl_controv_flag"] == int(controversial_set)]
-        if default_set is not None:  # Filter default data
-            df = df[df["default_flag"] == int(default_set)]
-    else:
-        return df
+    # Check if the dataset is empty
+    if df.empty:
+        return df  # Can't work with empty DataFrame
+
+    # Filter controversial data
+    if controversial_set is not None:
+        df = df[df["pl_controv_flag"] == int(controversial_set)]
+
+    # Filter default data
+    if default_set is not None:
+        df = df[df["default_flag"] == int(default_set)]
 
     # Convert the DataFrame to ResoKit format
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
     meta.update({f"load_{'planet' if is_planet else 'system'}": name})
-    reso = df_to_resokit(
+
+    reso = df_to_resokit(  # Convert to ResoKit format
         df=df,
         source="nasa",
         drop=drop,

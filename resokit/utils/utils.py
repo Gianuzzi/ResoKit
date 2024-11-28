@@ -254,10 +254,13 @@ def assert_module_imported(
     message : str, optional. Default: ""
         Error message to display if the module is not imported.
     """
+
     if not imported:
         raise ImportError(
             f"{module_name} is required for this function. {message}"
         )
+
+    return True  # Module is imported
 
 
 def float_to_fraction(
@@ -296,20 +299,28 @@ def float_to_fraction(
         Tuple with the numerator and denominator of the best approximation,
         or a Fraction object if `as_fraction` is True.
     """
+
+    # Check input values
     if max_iter is None and max_error is None and stop_func is None:
         raise ValueError(
             "At least one of max_iter or max_error or stop_func must be set."
         )
+
     if not isinstance(value, (int, float)):
         raise TypeError("value must be a number.")
+
     if max_iter is not None and not isinstance(max_iter, int):
         raise TypeError("max_iter must be an integer.")
+
     if max_error is not None and not isinstance(max_error, (int, float)):
         raise TypeError("max_error must be a number.")
-    if stop_func is not None:
-        has_stop = True
-        if callable(stop_func):
-            try:
+
+    if stop_func is not None:  # Check stop_func
+
+        has_stop = True  # Stop function is set
+
+        if callable(stop_func):  # Check if it is callable
+            try:  # Check if it returns a boolean
                 if not isinstance(stop_func(1, 1), bool):
                     raise TypeError("stop_func must return a boolean.")
             except Exception as e:  # Any error
@@ -318,24 +329,30 @@ def float_to_fraction(
                     "stop_func must be able to return a boolean "
                     + "from the numerator and denominator."
                 )
-        else:
+        else:  # Not callable
             raise TypeError("stop_func must be a callable.")
     else:
-        has_stop = False
 
+        has_stop = False  # Stop function is not set
+
+        #  Default stop function: Keep going
         def stop_func(n, d):
             return False  # Keep going
 
+    # Define max error
     max_error = abs(max_error) if max_error is not None else None
 
+    # Initialize variables
     z = value
     a = []
     numer = []
     denom = []
     i = 0
 
+    # Print the initial value
     if verbose:
         print(f"Approximating float {value:.6f} as a continued fraction:")
+
     while True:
         a_i = int(z)
         a.append(a_i)
@@ -351,9 +368,16 @@ def float_to_fraction(
             numer.append(a_i * numer[i - 1] + numer[i - 2])
             denom.append(a_i * denom[i - 1] + denom[i - 2])
 
+        # Calculate the approximation
         approx_value = numer[i] / denom[i]
+
+        # Calculate the relative error
         error = abs((approx_value - value) / value)
+
+        # Check if the stop function is reached
         is_stop = stop_func(numer[i], denom[i])
+
+        # Print the intermediate results
         if verbose:
             print(
                 f"Iter {i + 1:>2d}: {numer[i]:>3d}/{denom[i]:<3d} "
@@ -362,27 +386,35 @@ def float_to_fraction(
                 + (f" -> STOP: {is_stop}" if has_stop else "")
             )
 
+        # Check stopping criteria
         if (max_error is not None and error < max_error) or (  # Relative error
-            max_iter is not None and i + 1 >= max_iter
-        ):  # Max iterations
+            max_iter is not None and i + 1 >= max_iter  # Max iterations
+        ):
             break
+
+        # Check if the stop function is reached
         if is_stop:
             i -= 1  # Go back one step before
             break
 
+        # Check if the error is below the minimum
         if error < MIN_F2F_ERROR:  # Minimum error (close enough)
-            if verbose:
+            if verbose:  # Print a warning
                 print(f"Minimum function error reached: {MIN_F2F_ERROR}")
             break
+
+        # Check if the maximum number of iterations is reached
         if i >= MAX_F2F_ITER:
-            if verbose:
+            if verbose:  # Print a warning
                 print(f"Maximum number of iterations reached: {MAX_F2F_ITER}")
             break
 
         i += 1
 
+    # Return the best approximation as a Fraction object
     if as_fraction:
         return Fraction(numer[i], denom[i])
+
     return numer[i], denom[i]
 
 
@@ -403,9 +435,11 @@ def parse_to_iter(value: any, to: type = list) -> Iterable:
     Iterable
         Parsed value as an iterable.
     """
+
     # If it is a string (already iterable) or not an iterable, return a list
     if isinstance(value, str) or not isinstance(value, Iterable):
         return [value]
     elif to is not None:
         return to(value)
+
     return value

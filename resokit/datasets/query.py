@@ -25,7 +25,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.utils import assert_module_imported, DEFAULT_METADATA
+from resokit.utils.utils import DEFAULT_METADATA, assert_module_imported
 
 try:
     import requests
@@ -84,17 +84,23 @@ def _build_query(
     str
         Constructed query string.
     """
-    source = source.lower()
 
+    source = source.lower()  # Ensure lowercase
+
+    # SELECT clause
     if not isinstance(select, str):
         raise ValueError("Select must be a string.")
 
+    # Construct the query
     query = f"SELECT {select} "
+
+    # FROM clause
     if alias:
         if not isinstance(alias, str):
             raise ValueError("Alias must be a string.")
         query += f"AS {alias} "
 
+    # Add the source table
     query += "FROM ps" if source == "nasa" else "FROM exoplanet.epn_core"
 
     # WHERE clause
@@ -127,8 +133,13 @@ def _execute_query(query: str, source: str):
     pd.DataFrame
         Resulting dataset as a pandas DataFrame.
     """
+
+    # Ensure requests module is imported
     assert_module_imported(requests_imported, "requests")
-    source = source.lower()
+
+    source = source.lower()  # Ensure lowercase
+
+    # Define the query URL
     url = QUERY_URL[source]
     query_url = (
         "query="
@@ -136,13 +147,13 @@ def _execute_query(query: str, source: str):
         + ("&format=csv" if source == "nasa" else "")
     )
 
-    try:
+    try:  # Execute the query
         response = requests.get(url + query_url)
         response.raise_for_status()
 
-        if source == "nasa":
+        if source == "nasa":  # Parse CSV response
             return pd.read_csv(BytesIO(response.content))
-        else:
+        else:  # Parse VOTable response
             return Table.read(BytesIO(response.content)).to_pandas()
 
     except requests.RequestException as e:
@@ -190,11 +201,15 @@ def query_online_data(
     pd.DataFrame
         Resulting dataset as a pandas DataFrame.
     """
+
+    # Ensure requests and astropy modules are imported
     assert_module_imported(requests_imported, "requests")
+
     if not planet_name and not star_name:
         raise ValueError(
             "Either 'planet_name' or 'star_name' must be provided."
         )
+
     if planet_name and star_name:
         raise ValueError(
             "Only one of 'planet_name' or 'star_name' can be provided."
@@ -203,6 +218,7 @@ def query_online_data(
     # Define the target or star field based on the source
     if source not in ["eu", "nasa"]:
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
+
     if source == "eu":
         field_name = "target_name" if planet_name else "star_name"
         assert_module_imported(
@@ -210,15 +226,21 @@ def query_online_data(
         )
     else:
         field_name = "pl_name" if planet_name else "hostname"
-    filter_value = star_name or planet_name
+
+    filter_value = star_name or planet_name  # Get the filter value
+
+    # Build the query
     query = _build_query(source, conditions=[f"{field_name}='{filter_value}'"])
 
     # Add default_flag condition for NASA source
     if default_flag and source == "nasa":
         query += " AND default_flag=1"
+
+    # Add controversial_flag condition for NASA source
     if controversial_flag is not None and source == "nasa":
         query += f" AND pl_controv_flag={controversial_flag}"
 
+    # Print query information
     if verbose:
         print(f" Querying {source} database with query: {query}")
 
@@ -229,7 +251,8 @@ def query_online_data(
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
     meta.update({"query": query})
-    reso = df_to_resokit(
+
+    reso = df_to_resokit(  # Convert to ResoKit DataFrame
         df=df,
         source=source,
         drop=False,
@@ -257,21 +280,26 @@ def get_dataset_length(source: str) -> int:
     int
         Number of entries in the dataset.
     """
+
+    # Ensure requests and astropy modules are imported
     assert_module_imported(requests_imported, "requests")
-    source = source.lower()
+
+    source = source.lower()  # Ensure lowercase
+
+    # Build the query
     if source == "nasa":
         query = "query=SELECT+COUNT(*)+FROM+ps&format=csv"
     elif source == "eu":
         query = "query=SELECT+COUNT(*)+FROM+exoplanet.epn_core"
-        assert_module_imported(
+        assert_module_imported(  # Ensure astropy is imported
             astropy_imported, "astropy", "Not needed for NASA."
         )
     else:
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
-    url = QUERY_URL[source]
+    url = QUERY_URL[source]  # Define the query URL
 
-    try:
+    try:  # Execute the query
         response = requests.get(url + query)
         response.raise_for_status()
 

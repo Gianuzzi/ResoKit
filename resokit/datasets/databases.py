@@ -22,7 +22,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 
-from resokit.utils import assert_module_imported
+from resokit.utils.utils import assert_module_imported
 
 try:
     import requests
@@ -89,9 +89,12 @@ def download_dataset(
         or the dataset itself if return_data=True,
         or None if the file already exists and overwrite=False.
     """
+
     # Check if requests is imported
     assert_module_imported(requests_imported, "requests")
+
     source = source.lower()  # Ensure lowercase
+
     # Check if source is valid
     if source not in DATASET_FILENAMES:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
@@ -101,25 +104,30 @@ def download_dataset(
     url = DATASET_URLS[source]
     zip_path = BASE_PATH / ZIP_FILENAME
 
-    # Check if file exists or exists in ZIP
-    if file_path.exists() and not overwrite:
+    if (  # Check if the file exists and not overwrite
+        file_path.exists() and not overwrite
+    ):
         if verbose:
             print(
                 f" {file_path} already exists. \n"
                 + "Use overwrite=True to redownload and overwrite."
             )
+
         return
-    elif (
+
+    elif (  # Check if ZIP exists and contains the file, but not overwrite
         zip_path.exists()
         and DATASET_FILENAMES[source] in ZipFile(zip_path).namelist()
         and not overwrite
-    ):  # Check if ZIP exists and contains the file, but not overwrite
+    ):
+
         if verbose:
             print(
                 f" {DATASET_FILENAMES[source]} found in {ZIP_FILENAME}. \n"
                 + "Use overwrite=True to redownload, or run load_dataset"
                 + f"(source='{source}', extract=True) to extract it."
             )
+
         return
 
     # Download if not found
@@ -132,8 +140,12 @@ def download_dataset(
     # Write the file
     if verbose:
         print(" Writing data to file...")
+
+    # Save the file
     with open(file_path, "wb") as f:
         f.write(response.content)
+
+    # Print message if verbose
     if verbose:
         print(f" File {file_path} successfully downloaded and saved.")
 
@@ -160,6 +172,7 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
     Path
         Path to the created ZIP file.
     """
+
     zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
 
     if zip_path.exists() and not overwrite:  # Check if ZIP already exists
@@ -169,7 +182,9 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
 
     with ZipFile(zip_path, "w") as zipf:
         for _, filename in DATASET_FILENAMES.items():
-            file_path = BASE_PATH / filename
+
+            file_path = BASE_PATH / filename  # Path to the dataset file
+
             # Check if the file exists before adding to ZIP
             if file_path.exists():
                 zipf.write(file_path, arcname=filename)  # Add to ZIP
@@ -180,8 +195,10 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
                     f"{filename} not found, please download it first."
                 )
 
+    # Print message if verbose
     if verbose:
         print(f" Created ZIP archive: {zip_path}")
+
     return zip_path
 
 
@@ -201,22 +218,28 @@ def check_file_age(source: str, from_zip: bool = False) -> int:
     int
         Age of the file in days.
     """
+
     source = source.lower()  # Ensure lowercase
+
     file_path = (
         BASE_PATH / DATASET_FILENAMES[source]
     )  # Path to the dataset file
 
     if from_zip:  # Get the creation date from inside the ZIP archive
-        zip_path = BASE_PATH / ZIP_FILENAME
+
+        zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
+
         with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
             date_info = zipf.getinfo(DATASET_FILENAMES[source]).date_time
             creation = datetime.datetime(*date_info)
     else:
         creation = datetime.datetime.fromtimestamp(file_path.stat().st_mtime)
 
-    age = (datetime.datetime.now() - creation).days  # Calculate age in days
+    # Calculate age in days
+    age = (datetime.datetime.now() - creation).days
 
     print(f"Last modified: {creation} ({age} days ago)")
+
     return age
 
 
@@ -260,7 +283,9 @@ def load_dataset(
     pd.DataFrame or None
         The loaded dataset as a DataFrame.
     """
+
     source = source.lower()  # Ensure lowercase
+
     if source not in DATASET_FILENAMES:  # Check if source is valid
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
@@ -268,14 +293,19 @@ def load_dataset(
         only_rows and only_index
     ):  # Check if only one of the options is provided
         raise ValueError("Cannot specify both only_rows and only_index.")
+
     elif only_rows:  # If only_rows is provided, set up the skip_rows function
+
         whole = False  # Flag to store the whole dataset in memory
+
         if isinstance(only_rows, int):
             only_rows = [only_rows]
+
         if source == "nasa":
             only_rows = [
                 x + 291 for x in only_rows
             ]  # NASA data starts at row 292
+
         only_rows = [0] + [
             x + 1 for x in set(only_rows)
         ]  # Add header row move 1-indexed
@@ -315,9 +345,11 @@ def load_dataset(
     try:
         # Check if the .csv is in the .zip without extracting
         if not file_path.exists() and zip_path.exists():
-            with ZipFile(zip_path, "r") as zipf:
+
+            with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
+
                 if DATASET_FILENAMES[source] in zipf.namelist():
-                    if verbose:
+                    if verbose:  # Print message if verbose
                         aux = (
                             "only the index columns from "
                             if only_index
@@ -327,6 +359,7 @@ def load_dataset(
                             f" Loading {aux}{DATASET_FILENAMES[source]} "
                             + f"directly from {ZIP_FILENAME}..."
                         )
+
                     # Load directly from the .zip
                     with zipf.open(DATASET_FILENAMES[source]) as file:
                         data = pd.read_csv(
@@ -336,11 +369,14 @@ def load_dataset(
                             dtype=dtype_dict,
                         )
                         from_zip = True
-                        if extract:
+
+                        if extract:  # Extract the file if requested
                             file.seek(0)
                             with open(file_path, "wb") as f:
                                 f.write(file.read())
+
         else:
+
             # Fallback: Load the dataset from the extracted file if present
             data = pd.read_csv(
                 file_path,
@@ -348,11 +384,13 @@ def load_dataset(
                 usecols=usecols,
                 dtype=dtype_dict,
             )
-            if verbose:
+
+            if verbose:  # Print message if verbose
                 print(f" Loading {file_path}...")
+
             from_zip = False
 
-        if check_age:
+        if check_age:  # Check the file's age if requested
             check_file_age(
                 source=source,
                 from_zip=from_zip,
@@ -360,28 +398,33 @@ def load_dataset(
 
     except FileNotFoundError as error:
         if download_if_missing:
+
             print(f" {file_path} not found, attempting download...")
             download_dataset(source=source, verbose=verbose)
             data = pd.read_csv(file_path, skiprows=skip_rows, usecols=usecols)
         else:
+
             print(
                 f" {file_path} not found.\n"
                 + "Use download_if_missing=True to download."
             )
             raise error
-            # return
 
     if not whole:  # Can't store just part of the dataset
         return data
+
     if store_index:
         if store and not only_index:
-            if verbose:
+            if verbose:  # Print message if verbose
                 print(" Storing the entire dataset into memory...")
+
             IN_MEMORY_DATASETS[source] = data.copy()
             IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]]
+
         else:
-            if verbose:
+            if verbose:  # Print message if verbose
                 print(" Storing the index columns into memory...")
+
             IN_MEMORY_INDEXES[source] = data.copy()
 
     return data
@@ -397,7 +440,9 @@ def clear_memory(source: str) -> None:
         If provided, only clears the memory for the specified source.
         If 'both', clears both sources.
     """
+
     source = source.lower()  # Ensure lowercase
+
     if source == "both":
         for key in IN_MEMORY_DATASETS:
             IN_MEMORY_DATASETS[key] = None  # Clear the memory address
