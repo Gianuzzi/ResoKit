@@ -16,6 +16,7 @@
 
 import datetime
 import os
+import warnings
 from pathlib import Path
 from typing import Union
 from zipfile import ZipFile
@@ -269,6 +270,8 @@ def load_dataset(
         If True, loads only the index columns.
     only_rows : list|int, optional. Default: [].
         If provided, loads only the specified rows.
+        Remember that python is 0-indexed, so
+        the first row (system) is 0.
     verbose : bool, optional. Default: True.
         If True, prints messages about the process.
     store : bool, optional. Default: False.
@@ -291,7 +294,9 @@ def load_dataset(
     ):  # Check if only one of the options is provided
         raise ValueError("Cannot specify both only_rows and only_index.")
 
-    elif only_rows:  # If only_rows is provided, set up the skip_rows function
+    elif (
+        not isinstance(only_rows, bool) and isinstance(only_rows, int)
+    ) or only_rows:  # If only_rows is provided, set up the skip_rows function
 
         whole = False  # Flag to store the whole dataset in memory
 
@@ -302,32 +307,49 @@ def load_dataset(
             only_rows = [only_rows]
 
         if source == "nasa":
-            only_rows = [
-                x + 291 for x in only_rows
+            only_rows = [291] + [
+                x + 291 + 1 for x in set(only_rows)
             ]  # NASA data starts at row 292
 
-        only_rows = [0] + [
-            x + 1 for x in set(only_rows)
-        ]  # Add header row move 1-indexed
+        else:
+            only_rows = [0] + [
+                x + 1 for x in set(only_rows)
+            ]  # Add header row move 1-indexed
 
         def skip_rows(x: int) -> bool:  # Skip rows not in the list
             return x not in only_rows
+
+    elif only_rows:
+        raise ValueError("only_rows must be a list or an integer.")
 
     else:  # If not only_rows...
         whole = True  # Flag to store the whole dataset in memory
         skip_rows = 291 if source == "nasa" else None
 
+    # Check if the index columns are already stored in memory
+    if only_index and IN_MEMORY_INDEXES[source] is not None:
+        if verbose:
+            print(" Loading memory stored index columns...")
+        return IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
+
     # Check if the dataset is already stored in memory
-    if IN_MEMORY_DATASETS[source] is not None and not only_index:
+    if (
+        not (only_index or only_rows)
+        and IN_MEMORY_DATASETS[source] is not None
+    ):
         if verbose:
             print(" Loading memory stored dataset...")
         return IN_MEMORY_DATASETS[source].copy()  # dataframes are mutable
 
-    # Check if the index columns are already stored in memory
-    elif IN_MEMORY_INDEXES[source] is not None and only_index:
+    # Check if dataset stored and only rows requested
+    if only_rows and IN_MEMORY_DATASETS[source] is not None:
         if verbose:
-            print(" Loading memory stored index columns...")
-        return IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
+            print(" Loading memory stored dataset with only rows...")
+        if source == "nasa":
+            used_rows = [x - 292 for x in only_rows[1:]]
+        else:
+            used_rows = [x - 1 for x in only_rows[1:]]
+        return IN_MEMORY_DATASETS[source].iloc[used_rows].copy()
 
     # Define paths and ZIP extraction flag
     file_path = BASE_PATH / DATASET_FILENAMES[source]
@@ -410,27 +432,41 @@ def load_dataset(
             )
             raise error
 
+    # Check empty dataset
+    if data.empty:
+        warnings.warn("Empty dataset loaded.", stacklevel=2)
+
+    # Reindex according to only_rows if provided
+    elif only_rows:
+        if source == "nasa":
+            new_index = [x - 292 for x in only_rows[1:]]
+        else:
+            new_index = [x - 1 for x in only_rows[1:]]
+        data.set_index(pd.Index(new_index), inplace=True)
+
+    # Check if only part of the dataset is requested
     if not whole:  # Can't store just part of the dataset
         return data
 
-    if store_index:
+    # Store the dataset in memory if requested
+    if store_index or store:
         if store and not only_index:
             if verbose:  # Print message if verbose
                 print(" Storing the entire dataset into memory...")
 
             IN_MEMORY_DATASETS[source] = data.copy()
-            IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]]
+            IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
 
         else:
             if verbose:  # Print message if verbose
                 print(" Storing the index columns into memory...")
 
-            IN_MEMORY_INDEXES[source] = data.copy()
+            IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
 
     return data
 
 
-def clear_memory(source: str) -> None:
+def clear_memory(source: str, verbose: bool = True) -> None:
     """Clear the memory address of stored datasets.
 
     Parameters
@@ -438,17 +474,23 @@ def clear_memory(source: str) -> None:
     source : str
         If provided, only clears the memory for the specified source.
         If 'both', clears both sources.
+    verbose : bool, optional. Default: True.
+        If True, prints messages about the process.
     """
     source = source.lower()  # Ensure lowercase
 
     if source == "both":
         for key in IN_MEMORY_DATASETS:
             IN_MEMORY_DATASETS[key] = None  # Clear the memory address
+            if verbose:
+                print(f" Cleared memory for source: {key}")
         return
 
     if source not in IN_MEMORY_DATASETS:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
     IN_MEMORY_DATASETS[source] = None  # Clear the memory address
+    if verbose:
+        print(f" Cleared memory for source: {source}")
 
     return

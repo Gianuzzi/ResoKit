@@ -38,7 +38,7 @@ from scipy.optimize import minimize
 
 def mmr3b(
     x: Union[float, np.ndarray], resonance: tuple[int, int, int]
-) -> np.ndarray:
+) -> Union[float | np.ndarray]:
     """Compute the 3-body mean-motion resonance (MMR) curve.
 
     Parameters
@@ -50,7 +50,7 @@ def mmr3b(
 
     Returns
     -------
-    np.ndarray
+    y : float or np.ndarray
         The corresponding values of the 3-body resonance curve.
         Singularities are replaced with NaN.
     """
@@ -118,9 +118,12 @@ def mmrs_in_area(
 
     Returns
     -------
-    out: list
+    resonances: list
         A list containing detected 3P-MMRs and optionally
-        2P-MMRs along the x and y axes.
+        2P-MMRs along the x and y axes. This last case is
+        returned as [r3, r2x, r2y], where r3, r2x, and r2y
+        are lists of 3P-MMRs, 2P-MMRs along the x-axis, and
+        2P-MMRs along the y-axis, respectively.
     """
     x_min, x_max, y_min, y_max = bounds
     r3p_resonances = []
@@ -201,7 +204,7 @@ def mmrs_in_area(
 
 
 def _is_curve_within_bounds(
-    resonance: list[int, int, int], bounds: tuple[float, float, float, float]
+    resonance: list[int], bounds: tuple[float, float, float, float]
 ) -> bool:
     """Determine if a resonance curve intersects a bounded region.
 
@@ -277,9 +280,9 @@ def mindist_mmr3b(
     a: float,
     b: float,
     resonance: tuple[int, int, int],
-    x0: float = None,
+    x0: Union[float, None] = None,
     **minimize_kwargs,
-) -> tuple[float, float]:
+) -> tuple[list[float], float]:
     """Calculate the minimum distance to a 3-body resonance curve.
 
     Parameters
@@ -292,12 +295,13 @@ def mindist_mmr3b(
         Coefficients defining the resonance.
     x0 : float, optional. Default: None
         Initial guess for the optimization.
+        If None, the function will use the middle point of the curve.
     minimize_kwargs : dict, optional
         Additional arguments for the optimization function.
 
     Returns
     -------
-    tuple[float, float]
+    [x_min, y_min], distance_min : list[float], float
         The x-y coordinates of the minimum distance and the distance value.
     """
     # Singularity handling
@@ -352,7 +356,7 @@ def mindist_mmr3b(
 
 def label_mmr3b(
     resonance: tuple, ax: plt.Axes, lims: tuple = None, warn: bool = True
-):
+) -> None:
     """Annotate a plot with the label of a resonance line.
 
     The label is placed where the resonance line crosses either the
@@ -380,11 +384,7 @@ def label_mmr3b(
     """
     a, b, c = resonance  # Coefficients of the resonance line
 
-    # Define the resonance line and its inverse
-    def r(x):
-        """Calculate y for a given x using the line equation."""
-        return -c / (a * x + b)
-
+    # Define the inverse of the line equation
     def rinv(y):
         """Calculate x for a given y using the line equation."""
         return -(b * y + c) / (a * y)
