@@ -23,6 +23,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 
+from resokit.datasets.utils import DATASET_DTYPES
 from resokit.utils.utils import assert_module_imported
 
 try:
@@ -361,9 +362,6 @@ def load_dataset(
     else:
         usecols = None
 
-    # Define dtype for object columns in NASA dataset, to avoid mixed types
-    dtype_dict = {4: "object", 5: "object"} if source == "nasa" else None
-
     try:
         # Check if the .csv is in the .zip without extracting
         if not file_path.exists() and zip_path.exists():
@@ -388,7 +386,7 @@ def load_dataset(
                             file,
                             skiprows=skip_rows,
                             usecols=usecols,
-                            dtype=dtype_dict,
+                            dtype=DATASET_DTYPES[source],
                         )
                         from_zip = True
 
@@ -404,7 +402,7 @@ def load_dataset(
                 file_path,
                 skiprows=skip_rows,
                 usecols=usecols,
-                dtype=dtype_dict,
+                dtype=DATASET_DTYPES[source],
             )
 
             if verbose:  # Print message if verbose
@@ -423,7 +421,12 @@ def load_dataset(
 
             print(f" {file_path} not found, attempting download...")
             download_dataset(source=source, verbose=verbose)
-            data = pd.read_csv(file_path, skiprows=skip_rows, usecols=usecols)
+            data = pd.read_csv(
+                file_path,
+                skiprows=skip_rows,
+                usecols=usecols,
+                dtype=DATASET_DTYPES[source],
+            )
         else:
 
             print(
