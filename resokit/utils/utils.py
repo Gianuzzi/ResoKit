@@ -46,7 +46,7 @@ DEFAULT_METADATA = MappingProxyType(
 # CONSTANTS
 # =============================================================================
 
-# Planet columns
+# EU column to resokit
 _EU_MAPPING = MappingProxyType(
     {
         "name": "name",
@@ -97,7 +97,7 @@ _EU_MAPPING = MappingProxyType(
     }
 )
 
-# Planet columns
+# Nasa columns to resokit
 _NASA_MAPPING = MappingProxyType(
     {
         "pl_name": "name",
