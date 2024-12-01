@@ -13,6 +13,8 @@
 
 import zipfile
 
+import numpy as np
+
 import pandas as pd
 
 import pytest
@@ -53,10 +55,8 @@ class TestDatabases:
         # Load the dataset from the zip file with pandas
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             this_source = "exoplanet_" + source if source == "eu" else source
-            df = pd.read_csv(
-                zip_ref.extract(this_source + ".csv"),
-                skiprows=skip_rows[source],
-            )
+            with zip_ref.open(this_source + ".csv") as filestream:
+                df = pd.read_csv(filestream, skiprows=skip_rows[source])
 
         # Check if the data is equal to the DataFrame loaded from the zip file
         pd.testing.assert_frame_equal(data, df)
@@ -192,26 +192,37 @@ class TestDatabases:
         # Check if the data is equal to loaded from the original zip file
         pd.testing.assert_frame_equal(index1, index2)
 
+    @pytest.mark.parametrize("n_times", range(5))
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_dataset_only_rows(self, index_cols: dict, source: str):
+    def test_load_dataset_only_rows(
+        self, n_times: int, source: str, random_int: int
+    ):
         """Test the load_dataset function with the only_rows parameter.
 
         - Test ValueError if True. (only_rows=True)
         - Test ValueError if used with only_index=True.
         - Test if only the rows are loaded. (only_rows=<int>)
-        - Test if  only the rows are loaded. (only_rows=<list>)
+        -- Test if nothing is cached if only rows are loaded.
+        - Test if only the rows are loaded. (only_rows=<list>)
         - Test if the rows are loaded from the cache if saved.
         - Test empty df if the number of rows is greater than the dataset.
         """
-        # Empty the dictionary of the datasets
+        # Get the dataset
+        data = databases.load_dataset(
+            source=source, store_index=False, store=False
+        )
+
+        # Force empty the dictionaries of the datasets and indexes
         databases.IN_MEMORY_DATASETS[source] = None
+        databases.IN_MEMORY_INDEXES[source] = None
 
         # Ensure correct zip name
         databases.ZIP_FILENAME = "datasets.zip"
 
-        # Get the name column
-
-        name_col = index_cols[source][0]
+        # Define the row number
+        # Use rng
+        rng = np.random.default_rng(seed=random_int)
+        good_row = rng.integers(low=0, high=data.shape[1] - 1).tolist()
 
         # -------------------------------------------------------------------
         # ValueError if True. (only_rows=True)
@@ -222,13 +233,13 @@ class TestDatabases:
             databases.load_dataset(source=source, only_rows=True)
 
         # -------------------------------------------------------------------
-        # ValueError if used with only_index=True
+        # ValueError if used with only_index=True.
         # -------------------------------------------------------------------
 
         # Load the dataset
         with pytest.raises(ValueError):
             databases.load_dataset(
-                source=source, only_index=True, only_rows=10
+                source=source, only_index=True, only_rows=good_row
             )
 
         # -------------------------------------------------------------------
@@ -236,7 +247,7 @@ class TestDatabases:
         # -------------------------------------------------------------------
 
         # Load the dataset
-        data1 = databases.load_dataset(source=source, only_rows=10)
+        data1 = databases.load_dataset(source=source, only_rows=good_row)
 
         # Check if the data is a pandas DataFrame
         assert isinstance(data1, pd.DataFrame)
@@ -247,5 +258,29 @@ class TestDatabases:
         else:
             assert data1.shape == (1, 98)
 
-        # Check the index
-        assert data1.index.tolist() == [10]
+        # Check the values
+        pd.testing.assert_series_equal(data.loc[good_row], data1.squeeze())
+
+        # -------------------------------------------------------------------
+        # - Nothing is cached if only rows are loaded.
+        # -------------------------------------------------------------------
+
+        # Check the dictionary of the indexes are empty
+        assert databases.IN_MEMORY_INDEXES[source] is None
+        assert databases.IN_MEMORY_DATASETS[source] is None
+
+        # -------------------------------------------------------------------
+        # The rows are loaded from the cache if saved.
+        # -------------------------------------------------------------------
+
+        # Load and store the whole dataset
+        databases.load_dataset(source=source, store=True)
+
+        # Temporarily change the path of the zip file
+        databases.ZIP_FILENAME = "wrong.zip"
+
+        # Load with only_rows
+        data2 = databases.load_dataset(source=source, only_rows=good_row)
+
+        # Check if it is the same as before
+        pd.testing.assert_frame_equal(data1, data2)
