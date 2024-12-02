@@ -43,6 +43,9 @@ def index_cols():
 
 
 @pytest.fixture(scope="session")
-def random_int():
-    rng = np.random.default_rng(seed=42)
-    return rng.integers(low=1)
+def random_int_gen():
+    def _random_int(size=1):
+        rng = np.random.default_rng(seed=42)
+        return rng.integers(1, 999999999, size=size)
+
+    return _random_int

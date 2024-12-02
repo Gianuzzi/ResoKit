@@ -192,11 +192,9 @@ class TestDatabases:
         # Check if the data is equal to loaded from the original zip file
         pd.testing.assert_frame_equal(index1, index2)
 
-    @pytest.mark.parametrize("n_times", range(5))
+    # @pytest.mark.parametrize("random_seed", random_int(2))
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_dataset_only_rows(
-        self, n_times: int, source: str, random_int: int
-    ):
+    def test_load_dataset_only_rows(self, random_int_gen: int, source: str):
         """Test the load_dataset function with the only_rows parameter.
 
         - Test ValueError if True. (only_rows=True)
@@ -219,10 +217,12 @@ class TestDatabases:
         # Ensure correct zip name
         databases.ZIP_FILENAME = "datasets.zip"
 
-        # Define the row number
+        # Define the row numbers
         # Use rng
-        rng = np.random.default_rng(seed=random_int)
-        good_row = rng.integers(low=0, high=data.shape[1] - 1).tolist()
+        random_seed = random_int_gen()[0]
+        rng = np.random.default_rng(seed=random_seed)
+        good_row = rng.integers(low=0, high=data.shape[0]).tolist()
+        bad_row = rng.integers(low=data.shape[0], high=999999999).tolist()
 
         # -------------------------------------------------------------------
         # ValueError if True. (only_rows=True)
@@ -284,3 +284,23 @@ class TestDatabases:
 
         # Check if it is the same as before
         pd.testing.assert_frame_equal(data1, data2)
+
+        # -------------------------------------------------------------------
+        # Empty df if the number of rows is greater than the dataset.
+        # -------------------------------------------------------------------
+
+        # Force empty the dictionaries of the datasets and indexes
+        databases.IN_MEMORY_DATASETS[source] = None
+        databases.IN_MEMORY_INDEXES[source] = None
+
+        # Ensure correct zip name
+        databases.ZIP_FILENAME = "datasets.zip"
+
+        # Load the dataset
+        data3 = databases.load_dataset(
+            source=source, only_rows=bad_row, store=False
+        )
+
+        # Check if the data is empty
+        # assert data3.empty
+        assert data3.shape == (0, data.shape[1])
