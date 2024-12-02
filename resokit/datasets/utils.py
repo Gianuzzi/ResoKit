@@ -415,5 +415,5 @@ _NASA_MAPPING = {
     "pl_ndispec": "int64",
 }
 
-
+# Mapping of dataset names to their respective dtypes
 DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
