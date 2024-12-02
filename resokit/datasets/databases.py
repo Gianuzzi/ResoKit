@@ -24,7 +24,7 @@ from zipfile import ZipFile
 import pandas as pd
 
 from resokit.datasets.utils import DATASET_DTYPES
-from resokit.utils.utils import assert_module_imported
+from resokit.utils.utils import assert_module_imported, parse_to_iter
 
 try:
     import requests
@@ -304,18 +304,22 @@ def load_dataset(
         if isinstance(only_rows, bool):
             raise ValueError("only_rows must be a list or an integer.")
 
-        if isinstance(only_rows, int):
-            only_rows = [only_rows]
+        only_rows = parse_to_iter(only_rows)  # Convert to iterable
 
-        if source == "nasa":
-            only_rows = [291] + [
-                x + 291 + 1 for x in set(only_rows)
-            ]  # NASA data starts at row 292
+        # Remove duplicates
+        seen = set()
+        seen_add = seen.add
+        requested_rows = [
+            x for x in only_rows if not (x in seen or seen_add(x))
+        ]
 
-        else:
-            only_rows = [0] + [
-                x + 1 for x in set(only_rows)
-            ]  # Add header row move 1-indexed
+        # Check no negative values
+        if any(x < 0 for x in requested_rows):
+            raise ValueError("only_rows must be positive integers.")
+
+        # Add header row move 1-indexed. Also, update only_rows
+        base = 291 if source == "nasa" else 0  # Base row for NASA data
+        only_rows = [base] + [x + base + 1 for x in requested_rows]
 
         def skip_rows(x: int) -> bool:  # Skip rows not in the list
             return x not in only_rows
@@ -326,6 +330,7 @@ def load_dataset(
     else:  # If not only_rows...
         whole = True  # Flag to store the whole dataset in memory
         skip_rows = 291 if source == "nasa" else None
+        only_rows = False
 
     # Check if the index columns are already stored in memory
     if only_index and IN_MEMORY_INDEXES[source] is not None:
@@ -346,11 +351,7 @@ def load_dataset(
     if only_rows and IN_MEMORY_DATASETS[source] is not None:
         if verbose:
             print(" Loading memory stored dataset with only rows...")
-        if source == "nasa":
-            used_rows = [x - 292 for x in only_rows[1:]]
-        else:
-            used_rows = [x - 1 for x in only_rows[1:]]
-        return IN_MEMORY_DATASETS[source].iloc[used_rows].copy()
+        return IN_MEMORY_DATASETS[source].iloc[requested_rows].copy()
 
     # Define paths and ZIP extraction flag
     file_path = BASE_PATH / DATASET_FILENAMES[source]
@@ -441,11 +442,29 @@ def load_dataset(
 
     # Reindex according to only_rows if provided
     elif only_rows:
-        if source == "nasa":
-            new_index = [x - 292 for x in only_rows[1:]]
-        else:
-            new_index = [x - 1 for x in only_rows[1:]]
-        data.set_index(pd.Index(new_index), inplace=True)
+        # Get ordered list of rows to keep, and remove header row
+        sorted_rows = sorted(requested_rows)
+
+        n_used_rows = len(data)  # Number of rows effectively used
+
+        # Warn if the number of rows is less than the requested
+        # This means that the user requested more rows than the dataset has
+        if n_used_rows < len(sorted_rows):
+            out_of_bounds_rows = sorted_rows[n_used_rows:]
+            warnings.warn(
+                f"Rows {out_of_bounds_rows} are out of bounds.",
+                stacklevel=2,
+            )
+
+        used_rows = sorted_rows[:n_used_rows]  # Keep only the used rows
+
+        # Reindex the dataset
+        data.set_index(pd.Index(used_rows), inplace=True)
+
+        # Finally, get the original order
+        new_index = [x for x in requested_rows if x in used_rows]
+
+        data = data.reindex(new_index, copy=False)
 
     # Check if only part of the dataset is requested
     if not whole:  # Can't store just part of the dataset
