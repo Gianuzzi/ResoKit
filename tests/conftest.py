@@ -49,3 +49,14 @@ def random_int_gen():
         return rng.integers(1, 999999999, size=size)
 
     return _random_int
+
+
+@pytest.fixture(scope="session")
+def has_requests():
+    try:
+        import requests
+
+        requests  # silence flake8
+        return True
+    except ImportError:
+        return False
