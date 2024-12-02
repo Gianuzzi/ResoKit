@@ -38,7 +38,7 @@ from scipy.optimize import minimize
 
 def mmr3b(
     x: Union[float, np.ndarray], resonance: tuple[int, int, int]
-) -> Union[float | np.ndarray]:
+) -> Union[float, np.ndarray]:
     """Compute the 3-body mean-motion resonance (MMR) curve.
 
     Parameters
