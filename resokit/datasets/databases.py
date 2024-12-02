@@ -50,8 +50,9 @@ DATASET_URLS = {
 ZIP_FILENAME = "datasets.zip"  # Name for the ZIP archive
 
 # In-memory storage for datasets and indexes
-IN_MEMORY_DATASETS = {"eu": None, "nasa": None}
+IN_MEMORY_DATASETS = {"eu": pd.DataFrame(), "nasa": pd.DataFrame()}
 IN_MEMORY_INDEXES = {"eu": None, "nasa": None}
+IS_FULLY_STORED = {"eu": False, "nasa": False}
 
 # Index columns for each dataset
 INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
@@ -109,11 +110,11 @@ def download_dataset(
     if (  # Check if the file exists and not overwrite
         file_path.exists() and not overwrite
     ):
-        if verbose:
-            print(
-                f" {file_path} already exists. \n"
-                + "Use overwrite=True to redownload and overwrite."
-            )
+        raise FileExistsError(
+            f" {file_path} already exists. \n"
+            + "Use overwrite=True to redownload and overwrite.",
+            stacklevel=2,
+        )
 
         return
 
@@ -122,13 +123,12 @@ def download_dataset(
         and DATASET_FILENAMES[source] in ZipFile(zip_path).namelist()
         and not overwrite
     ):
-
-        if verbose:
-            print(
-                f" {DATASET_FILENAMES[source]} found in {ZIP_FILENAME}. \n"
-                + "Use overwrite=True to redownload, or run load_dataset"
-                + f"(source='{source}', extract=True) to extract it."
-            )
+        warnings.warn(
+            f" {DATASET_FILENAMES[source]} found in {ZIP_FILENAME}. \n"
+            + "Use overwrite=True to redownload, or run load_dataset"
+            + f"(source='{source}', extract=True) to extract it.",
+            stacklevel=2,
+        )
 
         return
 
@@ -202,7 +202,7 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
     return zip_path
 
 
-def check_file_age(source: str, from_zip: bool = False) -> int:
+def check_file_age(source: str, from_zip: bool = True) -> int:
     """Check the dataset file's age and prints a warning if it's outdated.
 
     Parameters
@@ -223,6 +223,18 @@ def check_file_age(source: str, from_zip: bool = False) -> int:
         BASE_PATH / DATASET_FILENAMES[source]
     )  # Path to the dataset file
 
+    if not from_zip:
+        try:
+            creation = datetime.datetime.fromtimestamp(
+                file_path.stat().st_mtime
+            )
+        except FileNotFoundError:
+            warnings.warn(
+                f"File {file_path} not found. Checking age from ZIP.",
+                stacklevel=2,
+            )
+            from_zip = True
+
     if from_zip:  # Get the creation date from inside the ZIP archive
 
         zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
@@ -230,8 +242,6 @@ def check_file_age(source: str, from_zip: bool = False) -> int:
         with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
             date_info = zipf.getinfo(DATASET_FILENAMES[source]).date_time
             creation = datetime.datetime(*date_info)
-    else:
-        creation = datetime.datetime.fromtimestamp(file_path.stat().st_mtime)
 
     # Calculate age in days
     age = (datetime.datetime.now() - creation).days
@@ -239,6 +249,82 @@ def check_file_age(source: str, from_zip: bool = False) -> int:
     print(f"Last modified: {creation} ({age} days ago)")
 
     return age
+
+
+def _load_stored_rows(
+    source: str,
+    rows: Union[list, None] = None,
+    full: bool = False,
+    copy: bool = True,
+) -> tuple[pd.DataFrame, list]:
+    """Load specific rows by index from memory.
+
+    Parameters
+    ----------
+    source : str
+        Dataset source ('eu' or 'nasa').
+    rows : list, optional
+        Row indexes to load (0-indexed).
+    full : bool, optional
+        Whether to load the full dataset.
+    copy : bool, optional
+        Whether to return a copy of the DataFrame.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, list]
+        The loaded dataset as a DataFrame and a list of not stored rows.
+    """
+    if full:
+        if not IS_FULLY_STORED[source]:
+            raise ValueError(f"Source {source} is not fully stored.")
+        aux = IN_MEMORY_DATASETS[source]
+        not_stored = []
+
+    elif rows is not None:
+        stored = [x for x in rows if x in IN_MEMORY_DATASETS[source].index]
+        aux = IN_MEMORY_DATASETS[source].loc[stored]
+        not_stored = [x for x in rows if x not in stored]
+
+    else:
+        raise ValueError("No rows provided.")
+
+    if copy:
+        return aux.copy(), not_stored
+    return aux, not_stored
+
+
+def _store_rows(
+    source: str,
+    rows_df: pd.DataFrame,
+    verbose: bool = True,
+) -> None:
+    """Store specific rows by index in memory.
+
+    Parameters
+    ----------
+    source : str
+        Dataset source ('eu' or 'nasa').
+    rows_df : pd.DataFrame
+        DataFrame with rows to store.
+    verbose : bool, optional
+        Whether to print informational messages.
+    """
+    if IS_FULLY_STORED[source] or rows_df.empty:
+        return  # No need to store if already fully stored, or empty
+
+    not_stored = [
+        x for x in rows_df.index if x not in IN_MEMORY_DATASETS[source].index
+    ]
+
+    IN_MEMORY_DATASETS[source] = pd.concat(
+        [IN_MEMORY_DATASETS[source], rows_df.loc[not_stored]]
+    )
+
+    if verbose and not_stored:
+        print(f" Stored rows {not_stored} in memory for source {source}.")
+
+    return
 
 
 def load_dataset(
@@ -290,6 +376,13 @@ def load_dataset(
     if source not in DATASET_FILENAMES:  # Check if source is valid
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
+    # Check store_index
+    if store and only_index:
+        store_index = True
+
+    # Define base for header and skip_rows
+    base = 291 if source == "nasa" else 0  # Base row for NASA data
+
     if (
         only_rows and only_index
     ):  # Check if only one of the options is provided
@@ -298,8 +391,6 @@ def load_dataset(
     elif (
         not isinstance(only_rows, bool) and isinstance(only_rows, int)
     ) or only_rows:  # If only_rows is provided, set up the skip_rows function
-
-        whole = False  # Flag to store the whole dataset in memory
 
         if isinstance(only_rows, bool):
             raise ValueError("only_rows must be a list or an integer.")
@@ -317,9 +408,33 @@ def load_dataset(
         if any(x < 0 for x in requested_rows):
             raise ValueError("only_rows must be positive integers.")
 
-        # Add header row move 1-indexed. Also, update only_rows
-        base = 291 if source == "nasa" else 0  # Base row for NASA data
-        only_rows = [base] + [x + base + 1 for x in requested_rows]
+        # Load stored rows if available
+        data_stored, not_stored_rows = _load_stored_rows(
+            source,
+            rows=requested_rows,
+            full=False,
+        )
+
+        # Define stored_rows and not_stored
+        stored_rows = list(data_stored.index)
+
+        # Message
+        if verbose and not data_stored.empty:
+            print(
+                f" Loading memory stored rows {stored_rows} "
+                + f"from {source}..."
+            )
+
+        if len(data_stored) == len(requested_rows):
+            return data_stored
+
+        # Add header and update only_rows
+        only_rows = [base] + [
+            x + base + 1 for x in requested_rows if x in not_stored_rows
+        ]
+
+        # Redefine base for header
+        base = 0
 
         def skip_rows(x: int) -> bool:  # Skip rows not in the list
             return x not in only_rows
@@ -328,8 +443,7 @@ def load_dataset(
         raise ValueError("only_rows must be a list or an integer.")
 
     else:  # If not only_rows...
-        whole = True  # Flag to store the whole dataset in memory
-        skip_rows = 291 if source == "nasa" else None
+        skip_rows = None
         only_rows = False
 
     # Check if the index columns are already stored in memory
@@ -339,29 +453,27 @@ def load_dataset(
         return IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
 
     # Check if the dataset is already stored in memory
-    if (
-        not (only_index or only_rows)
-        and IN_MEMORY_DATASETS[source] is not None
-    ):
+    if not (only_index or only_rows) and IS_FULLY_STORED[source]:
         if verbose:
             print(" Loading memory stored dataset...")
-        return IN_MEMORY_DATASETS[source].copy()  # dataframes are mutable
-
-    # Check if dataset stored and only rows requested
-    if only_rows and IN_MEMORY_DATASETS[source] is not None:
-        if verbose:
-            print(" Loading memory stored dataset with only rows...")
-        return IN_MEMORY_DATASETS[source].iloc[requested_rows].copy()
+        df = _load_stored_rows(source, full=True)[0]
+        # Return the sorted dataset
+        return df.reindex(sorted(df.index), copy=False)
 
     # Define paths and ZIP extraction flag
     file_path = BASE_PATH / DATASET_FILENAMES[source]
     zip_path = BASE_PATH / ZIP_FILENAME
 
     # Define columns to load
-    if only_index:
-        usecols = INDEX_COLUMNS[source]
-    else:
-        usecols = None
+    usecols = INDEX_COLUMNS[source] if only_index else None
+
+    # Aux message
+    if verbose:  # Print message if verbose
+        aux = (
+            "only the index columns from "
+            if only_index
+            else (f"rows {not_stored_rows} from " if only_rows else "")
+        )
 
     try:
         # Check if the .csv is in the .zip without extracting
@@ -371,20 +483,15 @@ def load_dataset(
 
                 if DATASET_FILENAMES[source] in zipf.namelist():
                     if verbose:  # Print message if verbose
-                        aux = (
-                            "only the index columns from "
-                            if only_index
-                            else ""
-                        )
                         print(
                             f" Loading {aux}{DATASET_FILENAMES[source]} "
                             + f"directly from {ZIP_FILENAME}..."
                         )
-
                     # Load directly from the .zip
                     with zipf.open(DATASET_FILENAMES[source]) as file:
                         data = pd.read_csv(
                             file,
+                            header=base,
                             skiprows=skip_rows,
                             usecols=usecols,
                             dtype=DATASET_DTYPES[source],
@@ -395,19 +502,25 @@ def load_dataset(
                             file.seek(0)
                             with open(file_path, "wb") as f:
                                 f.write(file.read())
+                            if verbose:
+                                print(
+                                    f" Extracted {DATASET_FILENAMES[source]} "
+                                    + f"from {ZIP_FILENAME} into {file_path}"
+                                )
 
         else:
 
             # Fallback: Load the dataset from the extracted file if present
             data = pd.read_csv(
                 file_path,
+                header=base,
                 skiprows=skip_rows,
                 usecols=usecols,
                 dtype=DATASET_DTYPES[source],
             )
 
             if verbose:  # Print message if verbose
-                print(f" Loading {file_path}...")
+                print(f" Loading {aux}{file_path} ")
 
             from_zip = False
 
@@ -424,6 +537,7 @@ def load_dataset(
             download_dataset(source=source, verbose=verbose)
             data = pd.read_csv(
                 file_path,
+                header=base,
                 skiprows=skip_rows,
                 usecols=usecols,
                 dtype=DATASET_DTYPES[source],
@@ -437,13 +551,14 @@ def load_dataset(
             raise error
 
     # Check empty dataset
-    if data.empty:
+    if data.empty and not only_rows:
         warnings.warn("Empty dataset loaded.", stacklevel=2)
 
     # Reindex according to only_rows if provided
     elif only_rows:
-        # Get ordered list of rows to keep, and remove header row
-        sorted_rows = sorted(requested_rows)
+
+        # Get ordered list of rows to keep
+        sorted_rows = sorted(not_stored_rows)
 
         n_used_rows = len(data)  # Number of rows effectively used
 
@@ -461,29 +576,33 @@ def load_dataset(
         # Reindex the dataset
         data.set_index(pd.Index(used_rows), inplace=True)
 
+        # Concatenate the stored rows with the loaded rows
+        if not data_stored.empty:
+            data = pd.concat([data_stored, data])
+
         # Finally, get the original order
-        new_index = [x for x in requested_rows if x in used_rows]
+        new_index = [x for x in requested_rows if x in used_rows + stored_rows]
 
         data = data.reindex(new_index, copy=False)
 
-    # Check if only part of the dataset is requested
-    if not whole:  # Can't store just part of the dataset
+    # Check storeing
+    if not store_index and not store:
         return data
 
-    # Store the dataset in memory if requested
-    if store_index or store:
-        if store and not only_index:
-            if verbose:  # Print message if verbose
-                print(" Storing the entire dataset into memory...")
+    # Store with only_rows
+    if only_rows and store:
+        _store_rows(source, rows_df=data, verbose=verbose)
 
-            IN_MEMORY_DATASETS[source] = data.copy()
-            IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
+    elif store_index and not only_rows:
+        if verbose:
+            print(" Storing the index columns into memory...")
+        IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
 
-        else:
-            if verbose:  # Print message if verbose
-                print(" Storing the index columns into memory...")
-
-            IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
+    if store and not only_index and not only_rows:
+        if verbose:
+            print(" Storing the entire dataset into memory...")
+        IN_MEMORY_DATASETS[source] = data.copy()
+        IS_FULLY_STORED[source] = True
 
     return data
 
@@ -504,6 +623,7 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     if source == "both":
         for key in IN_MEMORY_DATASETS:
             IN_MEMORY_DATASETS[key] = None  # Clear the memory address
+            IS_FULLY_STORED[key] = False
             if verbose:
                 print(f" Cleared memory for source: {key}")
         return
@@ -511,7 +631,9 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     if source not in IN_MEMORY_DATASETS:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
-    IN_MEMORY_DATASETS[source] = None  # Clear the memory address
+    IN_MEMORY_DATASETS[source] = pd.DataFrame()  # Clear the memory address
+    IS_FULLY_STORED[source] = False  # Reset the fully stored flag
+
     if verbose:
         print(f" Cleared memory for source: {source}")
 
