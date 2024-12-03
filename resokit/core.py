@@ -25,7 +25,7 @@ import attrs
 
 import matplotlib.pyplot as plt
 
-from numpy import isnan, pi
+from numpy import isnan, pi, sqrt
 
 import pandas as pd
 
@@ -254,6 +254,104 @@ class ResokitDataFrame:
         """Return a copy of the metadata as a dictionary."""
         return dict(self.metadata)
 
+    def plot(
+        self,
+        x: str,
+        y: str,
+        error_x: bool = False,
+        error_y: bool = False,
+        ax: plt.Axes = None,
+        label: str = "",
+        plot_kwargs: dict = None,
+    ):
+        """Plot the x vs y data of the ResokitDataFrame.
+
+        Parameters
+        ----------
+        x : str
+            Name of the column to use as x-axis.
+        y : str
+            Name of the column to use as y-axis.
+        error_x : bool, optional. Default: False.
+            Whether to plot the x error bars.
+        error_y : bool, optional. Default: False.
+            Whether to plot the y error bars.
+        ax : plt.Axes, optional. Default: None.
+            Matplotlib Axes to plot on.
+        label : str, optional. Default: "".
+            Label for the data plotted.
+        plot_kwargs : dict
+            Additional keyword arguments for the plot function.
+
+        Returns
+        -------
+        plt.Axes
+            Matplotlib Axes with the plot.
+        """
+        if ax is None:
+            ax = plt.gca()
+
+        x_data = self[x]
+        y_data = self[y]
+
+        if not isinstance(x_data, str) and isnan(x_data):
+            return ax
+
+        if not isinstance(y_data, str) and isnan(y_data):
+            return ax
+
+        if not isinstance(error_x, bool) or not isinstance(error_y, bool):
+            raise TypeError("error_x and error_y must be booleans.")
+
+        # Check error columns
+        if error_x:
+            try:
+                xerr_min = self[f"{x}_err_min"]
+                xerr_max = self[f"{x}_err_max"]
+            except KeyError:
+                error_x = False
+
+        if error_y:
+            try:
+                yerr_min = self[f"{y}_err_min"]
+                yerr_max = self[f"{y}_err_max"]
+            except KeyError:
+                error_y = False
+
+        # Check label
+        if label:
+            label = str(label)
+        else:
+            label = None
+
+        # Check plot_kwargs
+        if plot_kwargs is None:
+            plot_kwargs = {}
+
+        # Check fmt
+        fmt = plot_kwargs.pop("fmt", "o")
+
+        # Plot the data
+        ax.errorbar(
+            x_data,
+            y_data,
+            xerr=[[xerr_min], [xerr_max]] if error_x else None,
+            yerr=[[yerr_min], [yerr_max]] if error_y else None,
+            label=label,
+            fmt=fmt,
+            **plot_kwargs,
+        )
+
+        return ax
+
+    def copy(self):
+        """Return a copy of the ResokitDataFrame."""
+        return ResokitDataFrame(
+            data_df=self.data_df.copy(),
+            source=self.source,
+            metadata=self.metadata,
+        )
+
 
 def df_to_resokit(
     df: pd.DataFrame,
@@ -458,7 +556,7 @@ class StaticPlanet(ResokitDataFrame):
         error_x: bool = False,
         error_y: bool = False,
         ax: plt.Axes = None,
-        planet_legend: bool = True,
+        planet_label: bool = True,
         plot_kwargs: dict = None,
     ):
         """Plot the x vs y data of the planet.
@@ -475,8 +573,8 @@ class StaticPlanet(ResokitDataFrame):
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        planet_legend : bool, optional. Default: True.
-            Whether to add a legend with the planet name.
+        planet_label : bool, optional. Default: True.
+            Whether to add a label with the planet name.
         plot_kwargs : dict
             Additional keyword arguments for the plot function.
 
@@ -485,57 +583,23 @@ class StaticPlanet(ResokitDataFrame):
         plt.Axes
             Matplotlib Axes with the plot.
         """
-        if ax is None:
-            ax = plt.gca()
-
-        x_data = self[x]
-        y_data = self[y]
-
-        if isnan(x_data) or isnan(y_data):
-            return ax
-
-        if not isinstance(error_x, bool) or not isinstance(error_y, bool):
-            raise TypeError("error_x and error_y must be booleans.")
-
-        if error_x:
-            try:
-                xerr_min = self[f"{x}_err_min"]
-                xerr_max = self[f"{x}_err_max"]
-            except KeyError:
-                error_x = False
-
-        if error_y:
-            try:
-                yerr_min = self[f"{y}_err_min"]
-                yerr_max = self[f"{y}_err_max"]
-            except KeyError:
-                error_y = False
-
-        if planet_legend:
-            if isinstance(planet_legend, bool):
-                legend = self.name
-            else:
-                legend = str(planet_legend)
-        else:
-            legend = None
-
-        # Check plot_kwargs
-        if plot_kwargs is None:
-            plot_kwargs = {}
-
-        fmt = plot_kwargs.pop("fmt", "o")
-
-        ax.errorbar(
-            x_data,
-            y_data,
-            xerr=[[xerr_min], [xerr_max]] if error_x else None,
-            yerr=[[yerr_min], [yerr_max]] if error_y else None,
-            label=legend,
-            fmt=fmt,
-            **plot_kwargs,
+        return super().plot(
+            x=x,
+            y=y,
+            error_x=error_x,
+            error_y=error_y,
+            ax=ax,
+            label=planet_label,
+            plot_kwargs=plot_kwargs,
         )
 
-        return ax
+    def copy(self):
+        """Return a copy of the StaticPlanet."""
+        return StaticPlanet(
+            data_df=self.data_df.copy(),
+            source=self.source,
+            metadata=self.metadata,
+        )
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
@@ -624,7 +688,7 @@ class StaticStar(ResokitDataFrame):
         error_x: bool = False,
         error_y: bool = False,
         ax: plt.Axes = None,
-        star_legend: bool = True,
+        star_label: bool = True,
         plot_kwargs: dict = None,
     ):
         """Plot the x vs y data of the star.
@@ -641,8 +705,8 @@ class StaticStar(ResokitDataFrame):
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        star_legend : bool, optional. Default: True.
-            Whether to add a legend with the star name.
+        star_label : bool, optional. Default: True.
+            Whether to add a label with the star name.
         plot_kwargs : dict
             Additional keyword arguments for the plot function.
 
@@ -651,56 +715,23 @@ class StaticStar(ResokitDataFrame):
         plt.Axes
             Matplotlib Axes with the plot.
         """
-        if ax is None:
-            ax = plt.gca()
-
-        x_data = self[x]
-        y_data = self[y]
-
-        if isnan(x_data) or isnan(y_data):
-            return ax
-
-        if not isinstance(error_x, bool) or not isinstance(error_y, bool):
-            raise TypeError("error_x and error_y must be booleans.")
-
-        if error_x:
-            try:
-                xerr_min = self[f"{x}_err_min"]
-                xerr_max = self[f"{x}_err_max"]
-            except KeyError:
-                error_x = False
-
-        if error_y:
-            try:
-                yerr_min = self[f"{y}_err_min"]
-                yerr_max = self[f"{y}_err_max"]
-            except KeyError:
-                error_y = False
-
-        if star_legend:
-            if isinstance(star_legend, bool):
-                legend = self.name
-            else:
-                legend = str(star_legend)
-        else:
-            legend = None
-
-        # Check plot_kwargs
-        if plot_kwargs is None:
-            plot_kwargs = {}
-
-        fmt = plot_kwargs.pop("fmt", "o")
-
-        ax.errorbar(
-            x_data,
-            y_data,
-            xerr=[[xerr_min], [xerr_max]] if error_x else None,
-            yerr=[[yerr_min], [yerr_max]] if error_y else None,
-            label=legend,
-            fmt=fmt,
+        return super().plot(
+            x=x,
+            y=y,
+            error_x=error_x,
+            error_y=error_y,
+            ax=ax,
+            label=star_label,
+            plot_kwargs=plot_kwargs,
         )
 
-        return ax
+    def copy(self):
+        """Return a copy of the StaticStar."""
+        return StaticStar(
+            data_df=self.data_df.copy(),
+            source=self.source,
+            metadata=self.metadata,
+        )
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
@@ -756,6 +787,7 @@ class StaticSystem:
     planet_names_: list = attrs.field(init=False)
 
     period_ratios_: Union[float, pd.DataFrame] = attrs.field(init=False)
+    __error_ratios__: Union[float, pd.DataFrame] = attrs.field(init=False)
 
     @n_planets_.default
     def _n_planets__default(self):
@@ -789,7 +821,22 @@ class StaticSystem:
         if self.n_planets_ == 1:
             return None
         elif self.n_planets_ == 2:
-            return self.planets[0].P / self.planets[1].P
+            return self.planets[1].P / self.planets[0].P
+
+        return pd.DataFrame()  # Empty mutable DataFrame
+
+    @__error_ratios__.default
+    def ___error_ratios__default(self):
+        """Set the default value for __error_ratios__."""
+        if self.n_planets_ == 1:
+            return None
+        elif self.n_planets_ == 2:
+            error_0 = max(self.planets[0].P_err_min, self.planets[0].P_err_max)
+            error_1 = max(self.planets[1].P_err_min, self.planets[1].P_err_max)
+            return self.period_ratios_ * sqrt(
+                (error_0 / self.planets[0].P) ** 2
+                + (error_1 / self.planets[1].P) ** 2
+            )
 
         return pd.DataFrame()  # Empty mutable DataFrame
 
@@ -878,7 +925,7 @@ class StaticSystem:
 
         Returns
         -------
-        An existing StaticPlanet or list of StaticPlanet objects.
+        A copy of an existing StaticPlanet or list of StaticPlanet objects.
         """
         indices = parse_to_iter(indices, to=list)
 
@@ -886,13 +933,9 @@ class StaticSystem:
             raise TypeError("Indices must be integers.")
 
         if len(indices) == 1:
-            # QUESTION1: Should we return a NEW StaticPlanet
-            # with the sliced planet?
-            return self.planets[indices[0]]
+            return self.planets[indices[0]].copy()
 
-        # QUESTION2: Should we return a NEW StaticSystem
-        # with the sliced planets?
-        return [self.planets[i] for i in indices]
+        return [self.planets[i].copy() for i in indices]
 
     def _get_planets_items(
         self, items: Union[str, list[str]], return_values: bool = True
@@ -1014,7 +1057,7 @@ class StaticSystem:
         error_x: bool = False,
         error_y: bool = False,
         ax: plt.Axes = None,
-        legends: Union[bool, str, Iterable[str]] = True,
+        label: Union[bool, str, Iterable[str]] = True,
         plot_kwargs: dict = None,
     ):
         """Plot the x vs y data of the system. Uses plt.errorbar internally.
@@ -1031,10 +1074,10 @@ class StaticSystem:
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        legends : bool, str, Iterable, optional. Default: True.
-            Whether to add a legend with the planet (or star) names.
-            If str, use the string as the legend.
-            If Iterable, use the list of strings as the legends.
+        label : bool, str, Iterable, optional. Default: True.
+            Whether to add a label with the planet (or star) names.
+            If str, use the string as the label.
+            If Iterable, use the list of strings as the label.
         plot_kwargs : dict
             Additional keyword arguments for the plt.errorbar function.
         """
@@ -1054,12 +1097,12 @@ class StaticSystem:
 
         if not star_plot:  # Planet plot
 
-            # Check legends
-            if (legends is True) or isinstance(legends, str):
-                legends = [legends] * self.n_planets_  # Anything is True
-            elif len(legends) != self.n_planets_:
+            # Check label
+            if (label is True) or isinstance(label, str):
+                label = [label] * self.n_planets_  # Anything is True
+            elif len(label) != self.n_planets_:
                 raise ValueError(
-                    "Length of planet_legends must be equal "
+                    "Length of planet_label must be equal "
                     + "to the number of planets."
                 )
 
@@ -1071,7 +1114,7 @@ class StaticSystem:
                     error_x,
                     error_y,
                     ax,
-                    legends[i],
+                    label[i],
                     plot_kwargs,
                 )
 
@@ -1081,10 +1124,15 @@ class StaticSystem:
         x = x.replace("star_", "")
         y = y.replace("star_", "")
 
-        return self.star.plot(x, y, error_x, error_y, ax, legends, plot_kwargs)
+        return self.star.plot(x, y, error_x, error_y, ax, label, plot_kwargs)
 
     def plot_triplet(
-        self, which: Union[str, int] = "all", ax: plt.Axes = None, **kwargs
+        self,
+        which: Union[str, int] = "all",
+        error: bool = False,
+        ax: plt.Axes = None,
+        label: Union[str, list] = "",
+        **kwargs,
     ):
         """Plot each CONSECUTIVE triplet of planets in the period ratio space.
 
@@ -1099,10 +1147,14 @@ class StaticSystem:
             For example:
             - 0 will plot the first triplet: (0, 1, 2).
             - 1 will plot the second triplet: (1, 2, 3).
+        error : bool, optional. Default: False.
+            Whether to plot the error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
+        label : str, list, optional. Default: "".
+            Label for the data plotted.
         **kwargs : dict
-            Additional keyword arguments for the plt.scatter function.
+            Additional keyword arguments for the plt.errorbar function.
 
         Returns
         -------
@@ -1113,8 +1165,12 @@ class StaticSystem:
         if self.n_planets_ < 3:
             raise ValueError("There must be at least 3 planets to compare.")
 
-        # Get period ratios
+        # Get (all) period ratios
         period_ratios = self.period_ratios
+
+        # Get (all) error ratios if needed
+        if error:
+            error_ratios = self.pair_ratio(error=True, verbose=False)
 
         # Check which triplets to plot. Remember they are consecutive.
         if which == "all":
@@ -1130,21 +1186,54 @@ class StaticSystem:
         if ax is None:
             ax = plt.gca()
 
-        # For the label, use suffixes if they are unique
-        suffixes = [planet.suffix_ for planet in self.planets]
-        use_suffix = len(suffixes) == len(set(suffixes))
+        # Check label
+        if label:
+            if label is True:
+                # For the label, use suffixes if they are unique
+                suffixes = [planet.suffix_ for planet in self.planets]
+                use_suffix = len(suffixes) == len(set(suffixes))
+            elif isinstance(label, str):
+                use_suffix = False
+                label = [label] * len(triplets)
+            elif isinstance(label, Iterable):
+                use_suffix = False
+                if len(label) != len(triplets):
+                    raise ValueError(
+                        "Length of label must be equal to the number of triplets to plot."
+                    )
+            else:
+                raise ValueError("Invalid value for 'label'.")
+        else:
+            label_aux = False
+
+        # Check plot_kwargs
+        if kwargs is None:
+            kwargs = {}
+
+        # Extract the format from kwargs
+        fmt = kwargs.pop("fmt", "o")
 
         # Plot each triplet
-        for i, j, k in triplets:
-            if not use_suffix:
-                label_aux = [str(i), str(j), str(k)]
-            else:
-                label_aux = [self.planets[idx].suffix_ for idx in [i, j, k]]
-            label = "".join(label_aux)
-            ax.scatter(
-                period_ratios.iloc[j, i],
-                period_ratios.iloc[k, j],
-                label=label,
+        for trip, (i, j, k) in enumerate(triplets):
+            if label is True and not use_suffix:
+                label_aux = "".join([str(i), str(j), str(k)])
+            elif label is True and use_suffix:
+                label_aux = "".join(
+                    [self.planets[idx].suffix_ for idx in [i, j, k]]
+                )
+            elif label:
+                label_aux = label[trip]
+            x = period_ratios.iloc[i, j]
+            y = period_ratios.iloc[j, k]
+            err_x = error_ratios.iloc[i, j] if error else None
+            err_y = error_ratios.iloc[j, k] if error else None
+            ax.errorbar(
+                x,
+                y,
+                xerr=err_x,
+                yerr=err_y,
+                label=label_aux,
+                fmt=fmt,
                 **kwargs,
             )
 
@@ -1277,6 +1366,7 @@ class StaticSystem:
         *pair: Union[list, tuple, str],
         verbose: bool = True,
         fraction_kwargs: dict = None,
+        error: bool = False,
     ) -> Union[float, pd.DataFrame]:
         """Return the period ratio of the specified pair of planets.
 
@@ -1285,39 +1375,52 @@ class StaticSystem:
         pair : list, tuple, str, optional. Default: 'all'.
             Which pair of planets to consider.
             Either 'all' or a list/tuple of planet names/indexes.
-        fraction_kwargs : dict, optional. Default: {}.
-            Keyword arguments for the float_to_fraction function.
-            See float_to_fraction for more information.
+            If pair=(i,j), then the period ratio is P_j/P_i, and
+            remember that the first planet is 0.
         verbose : bool, optional. Default: False.
             Whether to print the steps of the calculation if a single pair,
             and fraction_arg is not 0.
+        fraction_kwargs : dict, optional. Default: {}.
+            Keyword arguments for the float_to_fraction function.
+            See float_to_fraction for more information.
+        error : bool, optional. Default: False.
+            Whether to return the error of the period ratio.
 
         Returns
         -------
         float, pd.DataFrame
-            Period ratio of the planets
+            Float with period ratio of the pair of planets, or DataFrame
+            with all the period ratios.
         """
+        # Check if there are at least 2 planets
         if self.n_planets_ < 2:
             raise ValueError("There must be at least 2 planets to compare.")
 
         # Extract pair
-        if not pair:
+        if not pair or pair == ("all",):
             pair = "all"
         elif len(pair) > 2:
             raise ValueError("Pair must have 2 elements.")
         elif len(pair) == 1:
             pair = pair[0]
+            if not isinstance(pair, Iterable) or len(pair) != 2:
+                raise ValueError("Pair must have 2 elements.")
+
+        # If error is True, return the error of the period ratio
+        if error:
+            return self._pair_ratio_error(pair)
 
         # Check fraction_kwargs
         if fraction_kwargs is None:
             fraction_kwargs = {}
 
+        # This calculates all the period ratios
         if isinstance(pair, str):
 
             if not pair == "all":
                 raise ValueError("Invalid pair value.")
             if self.n_planets_ == 2:
-                return self.planets[0].P / self.planets[1].P
+                return self.period_ratios_  # Already calculated
 
             if not self.period_ratios_.empty:
                 if fraction_kwargs:
@@ -1333,14 +1436,13 @@ class StaticSystem:
             # Create a DataFrame with all the period ratios
             periods = self.get_item("P")
             df = pd.DataFrame(
-                [[p1 / p2 for p2 in periods] for p1 in periods],
+                [[p2 / p1 for p2 in periods] for p1 in periods],
                 index=periods.index,
                 columns=periods.index,
             )
 
             # Store the DataFrame
-            if self.period_ratios_.empty:
-                self.period_ratios_[df.columns] = df
+            self.period_ratios_[df.columns] = df
 
             if fraction_kwargs:
                 return df.map(
@@ -1373,15 +1475,111 @@ class StaticSystem:
 
         # Calculate the ratio
         if not self.period_ratios_.empty:
-            ratio = self.period_ratios_.iloc[idxs[0], idxs[1]]
+            ratio = self.period_ratios_.iloc[idxs[1], idxs[0]]
         else:
-            ratio = self.planets[idxs[0]].P / self.planets[idxs[1]].P
+            ratio = self.planets[idxs[1]].P / self.planets[idxs[0]].P
 
         # Return the ratio
         if fraction_kwargs:
             return float_to_fraction(ratio, **fraction_kwargs)
 
         return ratio
+
+    def _pair_ratio_error(
+        self, *pair: Union[list, tuple, str]
+    ) -> Union[float, pd.DataFrame]:
+        """Return the period ratio error of the specified pair of planets.
+
+        Parameters
+        ----------
+        pair : list, tuple, str, optional. Default: 'all'.
+            Which pair of planets to consider.
+            Either 'all' or a list/tuple of planet names/indexes.
+
+        Returns
+        -------
+        float, pd.DataFrame
+            Float with period ratio error of the pair of planets, or DataFrame
+            with all the period ratio errors.
+        """
+        if self.n_planets_ <= 2:  # No error for 1 planet.
+            return self.__error_ratios__  # Already calculated for 2 planets.
+
+        # Extract pair ratio
+        pair_ratio = self.pair_ratio(*pair, error=False)
+
+        # Formula: sqrt((err1/P1)^2 + (err2/P2)^2) * ratio
+
+        # If pair is all
+        if isinstance(pair_ratio, pd.DataFrame):
+            # Return the DataFrame if it's already calculated
+            if not self.__error_ratios__.empty:
+                return self.__error_ratios__
+            # Create a DataFrame with all the period ratios
+            sigma2 = pd.DataFrame(
+                [
+                    [
+                        (
+                            max(
+                                abs(self.planets[i].P_err_min),
+                                abs(self.planets[i].P_err_max),
+                            )
+                            / self.planets[i].P
+                        )
+                        ** 2
+                        + (
+                            max(
+                                abs(self.planets[j].P_err_min),
+                                abs(self.planets[j].P_err_max),
+                            )
+                            / self.planets[j].P
+                        )
+                        ** 2
+                        for i in range(self.n_planets_)
+                    ]
+                    for j in range(self.n_planets_)
+                ],
+                index=pair_ratio.index,
+                columns=pair_ratio.columns,
+            )
+            # Calculate the error
+            df = pair_ratio * sqrt(sigma2)
+
+            # Store the DataFrame
+            self.__error_ratios__[df.columns] = df
+
+            return df
+
+        # If pair is a single pair
+
+        idxs = []  # Indexes of the pair
+        for idx in pair:
+
+            if isinstance(idx, str):
+                if len(idx) == 1:  # Suffix
+                    idxs.append(
+                        [planet.suffix_ for planet in self.planets].index(idx)
+                    )
+                else:  # Name
+                    idxs.append(self.planet_names_.index(idx))
+            elif isinstance(idx, int):  # Index
+                idxs.append(idx)
+            else:
+                raise ValueError("Invalid pair value.")
+
+        # Extract the indexes
+        i, j = idxs
+
+        # Calculate sigma2
+        sigma2 = (
+            max(self.planets[i].P_err_min, self.planets[i].P_err_max)
+            / self.planets[i].P
+        ) ** 2 + (
+            max(self.planets[j].P_err_min, self.planets[j].P_err_max)
+            / self.planets[j].P
+        ) ** 2
+
+        return pair_ratio * sqrt(sigma2)  # Return the error
 
     def to_dataframe(self, columns: list = None) -> pd.DataFrame:
         """Return data_df as a new DataFrame.
@@ -1408,6 +1606,15 @@ class StaticSystem:
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
         return dict(self.metadata)
+
+    def copy(self):
+        """Return a copy of the StaticSystem."""
+        return StaticSystem(
+            star=self.star.copy(),
+            planets=[planet.copy() for planet in self.planets],
+            name=self.name,
+            metadata=self.metadata,
+        )
 
 
 # =============================================================================
