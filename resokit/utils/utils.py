@@ -22,6 +22,9 @@ import sys
 from fractions import Fraction
 from types import MappingProxyType
 from typing import Iterable, Union
+import warnings
+
+from numpy import log, sqrt, pi, random
 
 from resokit import __version__ as version
 
@@ -45,6 +48,35 @@ DEFAULT_METADATA = MappingProxyType(
 # =============================================================================
 # CONSTANTS
 # =============================================================================
+
+# Gravitational constant in SI units
+G = 6.67430e-11  # m^3 kg^-1 s^-2
+
+# Astronomical unit in meters
+AU = 1.496e11  # m
+# Parsec in meters
+PC = 3.086e16  # m
+# Solar radius in m
+R_SUN = 6.957e8  # m
+# Jupiter radius in m
+R_JUP = 6.9911e7  # m
+# Earth radius in m
+R_EAR = 6.371e6  # m
+
+# Solar mass in kg
+M_SUN = 1.989e30  # kg
+# Jupiter mass in kg
+M_JUP = 1.898e27  # kg
+# Earth mass in kg
+M_EAR = 5.972e24  # kg
+
+# Hour in seconds
+HOUR = 3600  # s
+# Day in seconds
+DAY = 86400  # s
+# Year in seconds
+YEAR = 3.154e7  # s
+
 
 # EU column to resokit
 _EU_MAPPING = MappingProxyType(
@@ -437,3 +469,298 @@ def parse_to_iter(value: any, to: type = list) -> Iterable:
         return to(value)
 
     return value
+
+
+def calc_P(a: float, m_star: float, m_planet) -> float:
+    """Calculate the orbital period of a planet.
+
+    Parameters
+    ----------
+    a : float
+        Semi-major axis of the planet.
+    m_star : float
+        Mass of the star.
+    m_planet : float
+        Mass of the planet.
+
+    Returns
+    -------
+    float
+        Orbital period of the planet, in days.
+    """
+
+    ene = sqrt(G * (m_star * M_SUN + m_planet * M_JUP) / (a * AU) ** 3)
+
+    return 2 * pi / ene / DAY
+
+
+def calc_a(P: float, m_star: float, m_planet: float) -> float:
+    """Calculate the semi-major axis of a planet.
+
+    Parameters
+    ----------
+    P : float
+        Orbital period of the planet, in days.
+    m_star : float
+        Mass of the star.
+    m_planet : float
+        Mass of the planet.
+
+    Returns
+    -------
+    float
+        Semi-major axis of the planet, in AU.
+    """
+
+    ene = 2 * pi / P / DAY
+
+    return (G * (m_star * M_SUN + m_planet * M_JUP) / ene**2) ** (1 / 3) / AU
+
+
+def chen_kipping_mass(
+    radius: float,
+    radius_err_min: float = 0.0,
+    radius_err_max: float = 0.0,
+    bivariate: float = 0.8,
+    method: int = 1,
+) -> tuple[float, float]:
+    """Calculate the mass of a planet using the Chen & Kipping (2017).
+
+    We follow a naive approximation of the mass-radius relation for exoplanets
+    proposed by Chen, J., & Kipping, D. (2017, ApJ, 834, 17). Instead of using
+    markov chain monte carlo (MCMC) methods, we use a simple power-law
+    approximation with naive error propagation.
+    Equation (1) defines: r / R_EAR = C x (m / M_EAR)**S, which can be rewritten
+    as Equation(2): R = C_10 + M x S, where
+     > R is log_10(r / R_EAR), where r is the radius of the planet
+     > M is log_10(m / M_EAR), where m is the mass of the planet
+     > S is the slope of the power-law relation
+     > C_10 is log_10(C), where C is the constant of the power-law relation
+
+    Parameters
+    ----------
+    radius : float
+        Radius of the planet, in Earth radii.
+    radius_err_min : float
+        Lower error of the radius, in Earth radii.
+    radius_err_max : float
+        Upper error of the radius, in Earth radii.
+    bivariate : float, optional. Default: 0.8
+        Probability (from 0 to 1) that the returned radius that falls in the
+        bivariate region is calculated with the third (right side) branch of
+        the power-law approximation.
+    method : int, optional. Default: 1
+        Which method implement for error calculation.
+        Method 1: (Naive) Error propagation with the power-law approximation,
+         using the radius error as the maximum of the two extremes.
+        Method 2: Evalaute the radius extremes and calculate each mass extreme
+         with the power-law approximation.
+
+    Returns
+    -------
+    tuple[float, float]
+        Mass of the planet and its errors, in Earth masses.
+    """
+    # Define coefficients of the power-law approximation
+
+    # ------------------------------------------------------------------------
+    # C1 = (1.008, -0.0045, 0.0046)
+    # S1 = (0.279, -0.0094, 0.0092)
+    # S2 = (0.589, -0.031, 0.044)
+    # S3 = (-0.044, -0.019, 0.017)
+    # S4 = (0.881, -0.024, 0.025)
+    # M1_tr = (2.04, -0.59, 0.66)
+    # M2_tr = tuple(x * M_JUP / M_EAR for x in [0.414, -0.065, 0.057])
+    # M3_tr = tuple(x * M_SUN / M_EAR for x in [0.08, -0.0072, 0.0081])
+    # ------------------------------------------------------------------------
+
+    # Constant 1 of the power-law approximation
+    C1 = (1.008, 0.0046)
+
+    # Slope of the power-law approximation
+    S1 = (0.279, 0.0094)
+    S2 = (0.589, 0.044)
+    S3 = (-0.044, 0.019)
+    S4 = (0.881, 0.025)
+
+    # ------------------------------------------------------------------------
+    # # Transition mass
+    # M1_tr = (2.04, 0.66)
+    M2_tr = tuple(x * M_JUP / M_EAR for x in [0.414, 0.065])
+    # M3_tr = tuple(x * M_SUN / M_EAR for x in [0.08, 0.0081])
+
+    # # Auxiliary calculations
+    # aux_1 = M1_tr[0] ** S1[0]
+    # aux_1 = (
+    #     aux_1,
+    #     sqrt(
+    #         (aux_1 * S1[0] / M1_tr[0] * M1_tr[1]) ** 2
+    #         + (aux_1 * log(M1_tr[0]) * S1[1]) ** 2
+    #     ),
+    # )
+
+    # # Calculate the transition radius 1
+    # R1_tr = C1[0] * aux_1[0]  # Transition Radius 1
+    # R1_tr = (R1_tr, sqrt((aux_1[0] * C1[1]) ** 2
+    #                         + (C1[0] * aux_1[1]) ** 2))
+
+    # # Auxiliary calculations
+    # aux_2 = M1_tr[0] ** S2[0]
+    # aux_2 = (
+    #     aux_2,
+    #     sqrt(
+    #         (aux_2 * S2[0] / M1_tr[0] * M1_tr[1]) ** 2
+    #         + (aux_2 * log(M1_tr[0]) * S2[1]) ** 2
+    #     ),
+    # )
+
+    # # Calculate the Constant 2
+    # C2 = R1_tr[0] / aux_2[0]  # Constant 2
+    # C2 = (
+    #     C2,
+    #     sqrt(
+    #         (1.0 / aux_2[0] * R1_tr[1]) ** 2 +
+    #         (C2 / aux_2[0] * aux_2[1]) ** 2
+    #     ),
+    # )
+
+    # # Calculate the transition radius 2
+    # R2_tr = C2[0] * M2_tr[0] ** S2[0]  # Transition Radius 2
+    # R2_tr = (
+    #     R2_tr,
+    #     sqrt(
+    #         (R2_tr / C2[0] * C2[1]) ** 2
+    #         + (R2_tr * S2[0] / M2_tr[0] * M2_tr[1]) ** 2
+    #         + (R2_tr * log(M2_tr[0]) * S2[1]) ** 2
+    #     ),
+    # )
+
+    # # Auxiliary calculations
+    # aux_3 = M2_tr[0] ** S3[0]
+    # aux_3 = (
+    #     aux_3,
+    #     sqrt(
+    #         (aux_3 * S3[0] / M2_tr[0] * M2_tr[1]) ** 2
+    #         + (aux_3 * log(M2_tr[0]) * S3[1]) ** 2
+    #     ),
+    # )
+
+    # # Calculate the Constant 3
+    # C3 = R2_tr[0] / aux_3[0]  # Constant 3
+    # C3 = (
+    #     C3,
+    #     sqrt(
+    #         (1.0 / aux_3[0] * R2_tr[1]) ** 2 +
+    #         (C3 / aux_3[0] * aux_3[1]) ** 2
+    #     ),
+    # )
+
+    # # Calculate the transition radius 3
+    # R3_tr = C3[0] * M3_tr[0] ** S3[0]  # Transition Radius 3
+    # R3_tr = (
+    #     R3_tr,
+    #     sqrt(
+    #         (R3_tr / C3[0] * C3[1]) ** 2
+    #         + (R3_tr * S3[0] / M3_tr[0] * M3_tr[1]) ** 2
+    #         + (R3_tr * log(M3_tr[0]) * S3[1]) ** 2
+    #     ),
+    # )
+
+    # # Auxiliary calculations
+    # aux_4 = M3_tr[0] ** S4[0]
+    # aux_4 = (
+    #     aux_4,
+    #     sqrt(
+    #         (aux_4 * S4[0] / M3_tr[0] * M3_tr[1]) ** 2
+    #         + (aux_4 * log(M3_tr[0]) * S4[1]) ** 2
+    #     ),
+    # )
+
+    # # Calculate the Constant 4
+    # C4 = R3_tr[0] / aux_4[0]  # Constant 4
+    # C4 = (
+    #     C4,
+    #     sqrt(
+    #         (1.0 / aux_4[0] * R3_tr[1]) ** 2 +
+    #         (C4 / aux_4[0] * aux_4[1]) ** 2
+    #     ),
+    # )
+
+    # ------------------------------------------------------------------------
+
+    # print(f"Transition M: {M1_tr:.6f}, {M2_tr:.6f}, {M3_tr:.6f} M_EAR")
+    # print(f" Errors: {M1_tr[1]:.6f}, {M2_tr[1]:.6f}, {M3_tr[1]:.6f} M_EAR")
+    # print(
+    #     f"Transition R: {R1_tr[0]:.6f}, {R2_tr[0]:.6f}, {R3_tr[0]:.6f} R_EAR"
+    # )
+    # print(f" Errors: {R1_tr[1]:.6f}, {R2_tr[1]:.6f}, {R3_tr[1]:.6f} R_EAR")
+    # print(f"Constants: {C1[0]:.6f}, {C2[0]:.6f}, {C3[0]:.6f}, {C4[0]:.6f}")
+    # print(f" Errors: {C1[1]:.6f}, {C2[1]:.6f}, {C3[1]:.6f}, {C4[1]:.6f}")
+    # print(f"Slopes: {S1[0]:.6f}, {S2[0]:.6f}, {S3[0]:.6f}, {S4[0]:.6f}")
+    # print(f" Errors: {S1[1]:.6f}, {S2[1]:.6f}, {S3[1]:.6f}, {S4[1]:.6f}")
+
+    # ------------------------------------------------------------------------
+
+    # Transition radii
+    R1_tr = (1.229836, 0.111458)
+    R2_tr = (14.31101, 4.529131)
+    R3_tr = (11.328892, 4.333345)
+
+    # Constants of the power-law approximation
+    C2 = (0.808119, 0.0172397)
+    C3 = (17.738384, 5.851034)
+    C4 = (0.00143, 0.000669)
+
+    # Error propagation function
+    def calc_err(m, r, r_err, c, c_err, s, s_err):
+        return sqrt(
+            (-m * log(c / r) / s**2 * s_err) ** 2  # s_err
+            + (-m / r / s * r_err) ** 2  # r_err
+            + (m / c / s * c_err) ** 2  # c_err
+        )
+
+    # return S1, S2, S3, S4, C1, C2, C3, C4, R1_tr, R2_tr, R3_tr, M1_tr, M2_tr, M3_tr
+
+    # Separate the power-law approximation
+    if radius <= R1_tr[0]:  # First branch
+        C = C1
+        S = S1
+    elif radius > R2_tr[0]:  # Fourth branch
+        C = C4
+        S = S4
+    elif radius < R3_tr[0]:  # Second branch
+        C = C2
+        S = S2
+    else:  # Bivariate region
+        warnings.warn(
+            f"Radius falls in the bivariate region: {R3_tr[0]} < R < {R2_tr[0]}"
+            + "\n The mass-radius relation may not be accurate.",
+            stacklevel=2,
+        )
+        if random.rand() > bivariate:  # Second branch
+            C = C2
+            S = S2
+        else:  # Third branch
+            C = C3
+            S = S3
+
+    # Handle errors as absolute values
+    radius_err_min = abs(radius_err_min)
+    radius_err_max = abs(radius_err_max)
+
+    mass = (radius / C[0]) ** (1.0 / S[0])
+    if method == 1:
+        radius_err = max(radius_err_min, radius_err_max)
+        mass_err_max = calc_err(
+            mass, radius, radius_err, C[0], C[1], S[0], S[1]
+        )
+        mass_err_min = -mass_err_max if S != S3 else M2_tr[0] - mass
+    else:
+        # Calculate the mass extremes
+        mass_min = ((radius - radius_err_min) / C[0]) ** (1.0 / S[0])
+        mass_max = ((radius + radius_err_max) / C[0]) ** (1.0 / S[0])
+        # Calculate the mass error. Safe sign
+        mass_err_min = min(min(mass_min, mass_max), mass) - mass
+        mass_err_max = max(max(mass_min, mass_max), mass) - mass
+
+    return mass, mass_err_min, mass_err_max
