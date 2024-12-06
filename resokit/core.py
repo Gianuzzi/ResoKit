@@ -1199,7 +1199,8 @@ class StaticSystem:
                 use_suffix = False
                 if len(label) != len(triplets):
                     raise ValueError(
-                        "Length of label must be equal to the number of triplets to plot."
+                        "Length of label must be equal to the number of "
+                        + "triplets to plot."
                     )
             else:
                 raise ValueError("Invalid value for 'label'.")
