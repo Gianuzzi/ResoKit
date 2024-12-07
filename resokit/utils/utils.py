@@ -596,216 +596,6 @@ def power_law_error(
     )
 
 
-def otegi_2020_mass(
-    radius: float,
-    density: float = 0.0,
-    bivariate: float = 0.5,
-    silent: bool = False,
-) -> tuple[float, float, float]:
-    """Calculate the mass of a planet using Otegi et al. (2020).
-
-    Power law approximation:
-        mass = C x radius^S.
-    Citation:
-        Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
-
-    Parameters
-    ----------
-    radius : float
-        Mass of the planet, in Earth radii.
-    density : float, optional. Default: 0.0
-        Density of the planet, in kg m^-3.
-    bivariate : float, optional. Default: 0.5
-        Probability that the returned radius that falls in the bivariate
-        region is calculated with lower (rho < 3300 kg m^-3) branch, instead
-        of using the upper (rho > 3300 kg m^-3) branch of the power-law
-        approximation. Must be a number between 0 and 1.
-    silent : bool, optional. Default: False
-        Whether to print a warning if the radius is greater than the maximum
-        value used by Otegi et al. (2020), or if the estimation falls
-        in a multivariate region.
-
-    Returns
-    -------
-    tuple[float, tuple, tuple]
-        Mass of the planet, in Earth masses, and the constant and slope used.
-    """
-    if radius > 14.3 and not silent:
-        warnings.warn(
-            "Radius is greater than the maximum value "
-            + "used by Otegi et al. (2020): R = 14.3 R_earth.\n"
-            + "The power-law approximation may not be accurate.",
-            stacklevel=2,
-        )
-
-    # Otegi cuts at rho = 3300 kg m^-3 = 3.3 g cm^-3
-    # Constants
-    c1 = (1.74, 0.38)  # lower branch: <= 3300 kg m^-3
-    c2 = (0.90, 0.06)  # upper branch: > 3300 kg m^-3
-    # Slopes
-    s1 = (1.58, 0.10)  # lower branch: <= 3300 kg m^-3
-    s2 = (3.45, 0.12)  # upper branch: > 3300 kg m^-3
-
-    dens_cut = 3300  # kg m^-3
-
-    if density > 0.0:  # If density is set
-        if density > dens_cut:
-            c = c1
-            s = s1
-        else:
-            c = c2
-            s = s2
-        mass = power_law(radius, c[0], s[0])
-    else:  # If density is not set
-        scaled_dens = dens_cut / M_EAR * R_EAR**3  # dens [M_ear R_ear^-3]
-        # Try both branches
-        mass1 = power_law(radius, c1[0], s1[0])
-        mass2 = power_law(radius, c2[0], s2[0])
-        # Calculate the density
-        density1 = mass1 / (4 / 3 * pi * radius**3)
-        density2 = mass2 / (4 / 3 * pi * radius**3)
-        # Check if lower or upper branch
-        if density1 <= scaled_dens and density2 <= scaled_dens:
-            # First branch is valid
-            c = c1
-            s = s1
-            mass = mass1
-        elif density1 > scaled_dens and density2 > scaled_dens:
-            # Second branch is valid
-            c = c2
-            s = s2
-            mass = mass2
-        elif density1 <= scaled_dens and density2 > scaled_dens:
-            if not silent:
-                warnings.warn(
-                    "The estimation falls in a multivariate region. "
-                    + "The power-law approximation may not be accurate.",
-                    stacklevel=2,
-                )
-            # Both branches are valid.
-            if not isinstance(bivariate, (int, float)):
-                raise ValueError("Bivariate must be a number between 0 and 1.")
-            if bivariate < 0 or bivariate > 1:
-                raise ValueError("Bivariate must be a number between 0 and 1.")
-            if random.rand() < bivariate:
-                c = c1
-                s = s1
-                mass = mass1
-            else:
-                c = c2
-                s = s2
-                mass = mass2
-        else:
-            raise ValueError("Error in the density calculation.")
-
-    return mass, c, s
-
-
-def otegi_2020_radius(
-    mass: float,
-    density: float = 0.0,
-    bivariate: float = 0.5,
-    silent: bool = False,
-) -> tuple[float, float, float]:
-    """Calculate the radius of a planet using Otegi et al. (2020).
-
-    Power law approximation:
-        radius = C x mass^S
-    Citation:
-        Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
-
-    Parameters
-    ----------
-    mass : float
-        Mass of the planet, in Earth radii.
-    density : float, optional. Default: 0.0
-        Density of the planet, in kg m^-3.
-    bivariate : float, optional. Default: 0.5
-        Probability that the returned mass that falls in the bivariate
-        region is calculated with lower (rho < 3300 kg m^-3) branch, instead
-        of using the upper (rho > 3300 kg m^-3) branch of the power-law
-        approximation. Must be a number between 0 and 1.
-    silent : bool, optional. Default: False
-        Whether to silence the warning if the radius is greater than the maximum
-        value used by Otegi et al. (2020), or if the estimation falls
-        in a multivariate region.
-
-    Returns
-    -------
-    tuple[float, tuple, tuple]
-        Radius of the planet, in Earth radii, and the constant and slope used.
-    """
-    if mass > 120 and not silent:
-        warnings.warn(
-            "Radius is greater than the maximum value "
-            + "used by Otegi et al. (2020): M = 120 M_earth.\n"
-            + "The power-law approximation may not be accurate.",
-            stacklevel=2,
-        )
-
-    # Otegi cuts at rho = 3300 kg m^-3 = 3.3 g cm^-3
-    # Constants
-    c1 = (0.70, 0.11)  # lower branch: <= 3300 kg m^-3
-    c2 = (1.03, 0.02)  # upper branch: > 3300 kg m^-3
-    # Slopes
-    s1 = (0.63, 0.04)  # lower branch: <= 3300 kg m^-3
-    s2 = (0.29, 0.01)  # upper branch: > 3300 kg m^-3
-
-    dens_cut = 3300  # kg m^-3
-
-    if density > 0.0:  # If density is set
-        if density > dens_cut:
-            c = c1
-            s = s1
-        else:
-            c = c2
-            s = s2
-        radius = power_law(mass, c[0], s[0])
-    else:  # If density is not set
-        scaled_dens = dens_cut / M_EAR * R_EAR**3  # dens [M_ear R_ear^-3]
-        # Try both branches
-        radius1 = power_law(mass, c1[0], s1[0])
-        radius2 = power_law(mass, c2[0], s2[0])
-        # Calculate the density
-        density1 = mass / (4 / 3 * pi * radius1**3)
-        density2 = mass / (4 / 3 * pi * radius2**3)
-        # Check if lower or upper branch
-        if density1 <= scaled_dens and density2 <= scaled_dens:
-            # First branch is valid
-            c = c1
-            s = s1
-            radius = radius1
-        elif density1 > scaled_dens and density2 > scaled_dens:
-            # Second branch is valid
-            c = c2
-            s = s2
-            radius = radius2
-        elif density1 <= scaled_dens and density2 > scaled_dens:
-            if not silent:
-                warnings.warn(
-                    "The estimation falls in a multivariate region. "
-                    + "The power-law approximation may not be accurate.",
-                    stacklevel=2,
-                )
-            # Both branches are valid.
-            if not isinstance(bivariate, (int, float)):
-                raise ValueError("Bivariate must be a number between 0 and 1.")
-            if bivariate < 0 or bivariate > 1:
-                raise ValueError("Bivariate must be a number between 0 and 1.")
-            if random.rand() < bivariate:
-                c = c1
-                s = s1
-                radius = radius1
-            else:
-                c = c2
-                s = s2
-                radius = radius2
-        else:
-            raise ValueError("Error in the density calculation.")
-
-    return radius, c, s
-
-
 def chen_kipp_2017_radius(mass: float) -> tuple[float, float, float]:
     """Calculate the radius of a planet using the Chen & Kipping (2017).
 
@@ -823,8 +613,9 @@ def chen_kipp_2017_radius(mass: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple]
-        Radius of the planet, in Earth radii, and the constant and slope used.
+    tuple[float, tuple, tuple, tuple]
+        Radius of the planet, in Earth radii, and the constant, slope,
+        and reference value used.
     """
     # Constants
     c1 = (1.008, 0.0046)
@@ -836,25 +627,21 @@ def chen_kipp_2017_radius(mass: float) -> tuple[float, float, float]:
     s2 = (0.589, 0.044)
     s3 = (-0.044, 0.019)
     s4 = (0.881, 0.025)
+    # Reference value
+    x0 = (1.0, 0.0)
     # Transition mass
     m1_tr = 2.04
     m2_tr = 0.414 * M_JUP / M_EAR
     m3_tr = 0.08 * M_SUN / M_EAR
 
-    if mass < m1_tr:
-        c = c1
-        s = s1
-    elif mass < m2_tr:
-        c = c2
-        s = s2
-    elif mass < m3_tr:
-        c = c3
-        s = s3
-    else:
-        c = c4
-        s = s4
-
-    return power_law(mass, c[0], s[0]), c, s
+    if mass < m1_tr:  # First branch
+        return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
+    elif mass < m2_tr:  # Second branch
+        return power_law(mass, c2[0], s2[0], x0[0]), c2, s2, x0
+    elif mass < m3_tr:  # Third branch
+        return power_law(mass, c3[0], s3[0], x0[0]), c3, s3, x0
+    # Fourth branch
+    return power_law(mass, c4[0], s4[0], x0[0]), c4, s4, x0
 
 
 def chen_kipp_2017_mass(
@@ -885,8 +672,9 @@ def chen_kipp_2017_mass(
 
     Returns
     -------
-    tuple[float, tuple, tuple]
-        Mass of the planet and the constant and slope used.
+    tuple[float, tuple, tuple, tuple]
+        Mass of the planet, in Earth masses, and the constant, slope,
+        and reference value used.
     """
     # Constants
     c1 = (1.008, 0.0046)
@@ -898,53 +686,301 @@ def chen_kipp_2017_mass(
     s2 = (0.589, 0.044)
     s3 = (-0.044, 0.019)
     s4 = (0.881, 0.025)
+    # Reference value
+    x0 = (1.0, 0.0)
     # Transition radius
     r1_tr = (1.229836, 0.111458)
     r2_tr = (14.31101, 4.529131)
     r3_tr = (11.328892, 4.333345)
 
-    if radius < r1_tr:  # First branch
-        c = c1
-        s = s1
-    elif radius > r2_tr:  # Pure fourth branch
-        c = c4
-        s = s4
-    elif radius < r3_tr:  # Pure second branch
-        c = c2
-        s = s2
-    else:  # Trivariate region
-        if not silent:
-            warnings.warn(
-                "Radius falls in the trivariate region: "
-                + f"{r3_tr[0]} < R < {r2_tr[0]}"
-                + "\n The mass-radius relation may not be accurate.",
-                stacklevel=2,
-            )
-        if len(trivariate) != 2:
-            raise ValueError("Bivariate must have lenght 2.")
-        sumb = sum(trivariate)
-        if sumb < 0 or sumb > 1:
-            raise ValueError(
-                "Sum of trivariate must be a number between 0 and 1."
-            )
-        prob = random.rand()
-        if prob < trivariate[0]:  # Second branch
-            c = c2
-            s = s2
-        elif prob < sumb:  # Third branch
-            c = c3
-            s = s3
-        else:  # Fourth branch
-            c = c4
-            s = s4
-
     # We use the inverse of the constant and slope,
     # so the error is recaclulated with propagation error.
+
+    if radius < r1_tr[0]:  # First branch
+        return (
+            power_law(radius, x0[0], 1.0 / s1[0], c1[0]),
+            x0,
+            (1.0 / s1[0], s1[1] / s1[0]),
+            c1,
+        )
+    elif radius > r2_tr[0]:  # Pure fourth branch
+        return (
+            power_law(radius, x0[0], 1.0 / s4[0], c4[0]),
+            x0,
+            (1.0 / s4[0], s4[1] / s4[0]),
+            c4,
+        )
+    elif radius < r3_tr[0]:  # Pure second branch
+        return (
+            power_law(radius, x0[0], 1.0 / s2[0], c2[0]),
+            x0,
+            (1.0 / s2[0], s2[1] / s2[0]),
+            c2,
+        )
+
+    # Trivariate region
+    if not silent:
+        warnings.warn(
+            "Radius falls in the trivariate region: "
+            + f"{r3_tr[0]} < R < {r2_tr[0]}"
+            + "\n The mass-radius relation may not be accurate.",
+            stacklevel=2,
+        )
+
+    if isinstance(trivariate, (float, int)) or len(trivariate) != 2:
+        raise ValueError("Trivariate must be a tuple|list with length 2.")
+
+    sumb = sum(trivariate)  # Probability of second branch
+    if sumb < 0 or sumb > 1:
+        raise ValueError("Sum of trivariate must be a number between 0 and 1.")
+
+    prob = random.rand()  # Get a random probability
+
+    if prob < trivariate[0]:  # Use second branch
+        return (
+            power_law(radius, x0[0], 1.0 / s2[0], c2[0]),
+            x0,
+            (1.0 / s2[0], s2[1] / s2[0]),
+            c2,
+        )
+    elif prob < sumb:  # Use third branch
+        return (
+            power_law(radius, x0[0], 1.0 / s3[0], c3[0]),
+            x0,
+            (1.0 / s3[0], s3[1] / s3[0]),
+            c3,
+        )
+    # Use fourth branch
     return (
-        power_law(radius, 1.0 / c[0], 1.0 / s[0]),
-        (1.0 / c[0], c[1] / c[0]),
-        (1.0 / s[0], s[1] / s[0]),
+        power_law(radius, x0[0], 1.0 / s4[0], c4[0]),
+        x0,
+        (1.0 / s4[0], s4[1] / s4[0]),
+        c4,
     )
+
+
+def otegi_2020_radius(
+    mass: float,
+    density: float = 0.0,
+    bivariate: float = 0.5,
+    silent: bool = False,
+) -> tuple[float, float, float]:
+    """Calculate the radius of a planet using Otegi et al. (2020).
+
+    Power law approximation:
+        radius = C x mass^S
+    Citation:
+        Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
+
+    Parameters
+    ----------
+    mass : float
+        Mass of the planet, in Earth radii.
+    density : float, optional. Default: 0.0
+        Density of the planet, in kg m^-3.
+    bivariate : float, optional. Default: 0.5
+        Probability that the returned mass that falls in the bivariate
+        region is calculated with lower (rho >= 3300 kg m^-3) branch, instead
+        of using the upper (rho < 3300 kg m^-3) branch of the power-law
+        approximation. Must be a number between 0 and 1.
+    silent : bool, optional. Default: False
+        Whether to silence the warning if the radius is greater than the maximum
+        value used by Otegi et al. (2020), or if the estimation falls
+        in a multivariate region.
+
+    Returns
+    -------
+    tuple[float, tuple, tuple, tuple]
+        Radius of the planet, in Earth radii, and the constant, slope,
+        and reference value used.
+    """
+    if mass > 120 and not silent:
+        warnings.warn(
+            "Radius is greater than the maximum value "
+            + "used by Otegi et al. (2020): M = 120 M_earth.\n"
+            + "The power-law approximation may not be accurate.",
+            stacklevel=2,
+        )
+
+    # Otegi cuts at rho = 3300 kg m^-3 = 3.3 g cm^-3
+    # Constants
+    c1 = (1.03, 0.02)  # lower branch: >= 3300 kg m^-3
+    c2 = (0.70, 0.11)  # upper branch: < 3300 kg m^-3
+    # Slopes
+    s1 = (0.29, 0.01)  # lower branch: >= 3300 kg m^-3
+    s2 = (0.63, 0.04)  # upper branch: < 3300 kg m^-3
+    # Reference value
+    x0 = (1.0, 0.0)
+    # Density cut
+    dens_cut = 3300  # kg m^-3
+
+    # If densityty is set
+    if density > 0.0:  # If density is set
+        if density >= dens_cut:  # Dense planet
+            return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
+        return power_law(mass, c2[0], s2[0], x0[0]), c2, s2, x0
+
+    # Naive mass aproach
+    if mass < 5:  # Small dense planet
+        return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
+    elif mass > 40:  # Large subdense planet
+        return power_law(mass, c2[0], s2[0], x0[0]), c2, s2, x0
+
+    # If density is not set
+    scaled_dens = dens_cut / (M_EAR / R_EAR**3)  # dens [M_ear R_ear^-3]
+
+    # Try both branches
+    radius1 = power_law(mass, c1[0], s1[0], x0[0])
+    radius2 = power_law(mass, c2[0], s2[0], x0[0])
+
+    # Calculate the density
+    density1 = mass / (4 / 3 * pi * radius1**3)
+    density2 = mass / (4 / 3 * pi * radius2**3)
+
+    # Check if lower or upper branch
+
+    if density1 >= scaled_dens and density2 > scaled_dens:
+        # First branch is valid
+        return radius1, c1, s1, x0
+    elif density1 < scaled_dens and density2 < scaled_dens:
+        # Second branch is valid
+        return radius2, c2, s2
+    elif density1 >= scaled_dens and density2 < scaled_dens:
+        if not silent:
+            warnings.warn(
+                "The estimation falls in a multivariate region. "
+                + "The power-law approximation may not be accurate.",
+                stacklevel=2,
+            )
+        # Both branches are valid.
+        if not isinstance(bivariate, (int, float)):
+            raise ValueError("Bivariate must be a number between 0 and 1.")
+        if bivariate < 0 or bivariate > 1:
+            raise ValueError("Bivariate must be a number between 0 and 1.")
+
+        if random.rand() < bivariate:  # Use first branch
+            return radius1, c1, s1, x0
+        return radius2, c2, s2, x0  # Use second branch
+
+    # If nothing works, we use the closest branch
+    if abs(density1 - scaled_dens) < abs(density2 - scaled_dens):
+        # First branch is closer
+        return radius1, c1, s1, x0
+
+    # Second branch is closer
+    return radius2, c2, s2, x0
+
+
+def otegi_2020_mass(
+    radius: float,
+    density: float = 0.0,
+    bivariate: float = 0.5,
+    silent: bool = False,
+) -> tuple[float, float, float]:
+    """Calculate the mass of a planet using Otegi et al. (2020).
+
+    Power law approximation:
+        mass = C x radius^S.
+    Citation:
+        Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
+
+    Parameters
+    ----------
+    radius : float
+        Mass of the planet, in Earth radii.
+    density : float, optional. Default: 0.0
+        Density of the planet, in kg m^-3.
+    bivariate : float, optional. Default: 0.5
+        Probability that the returned radius that falls in the bivariate
+        region is calculated with lower (rho >= 3300 kg m^-3) branch, instead
+        of using the upper (rho < 3300 kg m^-3) branch of the power-law
+        approximation. Must be a number between 0 and 1.
+    silent : bool, optional. Default: False
+        Whether to print a warning if the radius is greater than the maximum
+        value used by Otegi et al. (2020), or if the estimation falls
+        in a multivariate region.
+
+    Returns
+    -------
+    tuple[float, tuple, tuple, tuple]
+        Mass of the planet, in Earth masses, and the constant, slope,
+        and reference value used.
+    """
+    if radius > 14.3 and not silent:
+        warnings.warn(
+            "Radius is greater than the maximum value "
+            + "used by Otegi et al. (2020): R = 14.3 R_earth.\n"
+            + "The power-law approximation may not be accurate.",
+            stacklevel=2,
+        )
+
+    # Otegi cuts at rho = 3300 kg m^-3 = 3.3 g cm^-3
+    # Constants
+    c1 = (0.90, 0.06)  # lower branch: >= 3300 kg m^-3
+    c2 = (1.74, 0.38)  # upper branch: < 3300 kg m^-3
+    # Slopes
+    s1 = (3.45, 0.12)  # lower branch: >= 3300 kg m^-3
+    s2 = (1.58, 0.10)  # upper branch: < 3300 kg m^-3
+    # Reference value
+    x0 = (1.0, 0.0)
+    # Density cut
+    dens_cut = 3300  # kg m^-3
+
+    # If densityty is set
+    if density > 0.0:  # If density is set
+        if density >= dens_cut:  # Dense planet
+            return power_law(radius, c1[0], s1[0], x0[0]), c1, s1, x0
+        return power_law(radius, c2[0], s2[0], x0[0]), c2, s2, x0
+
+    # Naive radius aproach
+    if radius < 1.5:  # Small dense planet
+        return power_law(radius, c1[0], s1[0], x0[0]), c1, s1, x0
+    elif radius > 3.1:  # Large subdense planet
+        return power_law(radius, c2[0], s2[0], x0[0]), c2, s2, x0
+
+    # If density is not set
+    scaled_dens = dens_cut / (M_EAR / R_EAR**3)  # dens [M_ear R_ear^-3]
+
+    # Try both branches
+    mass1 = power_law(radius, c1[0], s1[0], x0[0])
+    mass2 = power_law(radius, c2[0], s2[0], x0[0])
+
+    # Calculate the density
+    density1 = mass1 / (4 / 3 * pi * radius**3)
+    density2 = mass2 / (4 / 3 * pi * radius**3)
+
+    # Check if lower or upper branch
+
+    if density1 >= scaled_dens and density2 > scaled_dens:
+        # First branch is valid
+        return mass1, c1, s1, x0
+    elif density1 < scaled_dens and density2 < scaled_dens:
+        # Second branch is valid
+        return mass2, c2, s2, x0
+    elif density1 >= scaled_dens and density2 < scaled_dens:
+        if not silent:
+            warnings.warn(
+                "The estimation falls in a multivariate region. "
+                + "The power-law approximation may not be accurate.",
+                stacklevel=2,
+            )
+        # Both branches are valid.
+        if not isinstance(bivariate, (int, float)):
+            raise ValueError("Bivariate must be a number between 0 and 1.")
+        if bivariate < 0 or bivariate > 1:
+            raise ValueError("Bivariate must be a number between 0 and 1.")
+
+        if random.rand() < bivariate:  # Use first branch
+            return mass1, c1, s1, x0
+        return mass2, c2, s2, x0  # Use second branch
+
+    # If nothing works, we use the closest branch
+    if abs(density1 - scaled_dens) < abs(density2 - scaled_dens):
+        # First branch is closer
+        return mass1, c1, s1, x0
+
+    # Second branch is closer
+    return mass2, c2, s2, x0
 
 
 def edmonson_2023_radius(mass: float) -> tuple[float, float, float]:
@@ -963,8 +999,9 @@ def edmonson_2023_radius(mass: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple]
-        Radius of the planet, in Earth radii, and the constant and slope used.
+    tuple[float, tuple, tuple, tuple]
+        Radius of the planet, in Earth radii, and the constant, slope,
+        and reference value used.
     """
     # Constants
     c1 = (1.01, 0.03)
@@ -974,21 +1011,18 @@ def edmonson_2023_radius(mass: float) -> tuple[float, float, float]:
     s1 = (0.28, 0.03)
     s2 = (0.68, 0.02)
     s3 = (0.012, 0.003)
+    # Reference value
+    x0 = (1.0, 0.0)
     # Transition mass
     m1_tr = 4.95
     m2_tr = 115
 
     if mass < m1_tr:  # First branch
-        c = c1
-        s = s1
+        return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
     elif mass < m2_tr:  # Second branch
-        c = c2
-        s = s2
-    else:  # Third branch
-        c = c3
-        s = s3
-
-    return power_law(mass, c[0], s[0]), c, s
+        return power_law(mass, c2[0], s2[0], x0[0]), c2, s2, x0
+    # Third branch
+    return power_law(mass, c3[0], s3[0], x0[0]), c3, s3, x0
 
 
 def edmonson_2023_mass(radius: float) -> tuple[float, float, float]:
@@ -1007,8 +1041,9 @@ def edmonson_2023_mass(radius: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple]
-        Mass of the planet and the constant and slope used.
+    tuple[float, tuple, tuple, tuple]
+        Mass of the planet, in Earth masses, and the constant, slope,
+        and reference value used.
     """
     # Constants
     c1 = (1.01, 0.03)
@@ -1018,26 +1053,42 @@ def edmonson_2023_mass(radius: float) -> tuple[float, float, float]:
     s1 = (0.28, 0.03)
     s2 = (0.68, 0.02)
     s3 = (0.012, 0.003)
+    # Reference value
+    x0 = (1.0, 0.0)
     # Transition radius
-    r1_tr = power_law(4.95, c1[0], s1[0])  # 4.95 Earth masses
-    r2_tr = power_law(115, c2[0], s2[0])  # 115 Earth masses
+    r1_tr = power_law(4.95, c1[0], s1[0], x0[0])  # 4.95 Earth masses
+    r2_tr = power_law(115, c2[0], s2[0], x0[0])  # 115 Earth masses
+    rmax = power_law(1e4, c3[0], s3[0], x0[0])  # 10000 earth masses
 
     # No multivariate region, because the power-law is always defined positive.
 
     if radius < r1_tr:  # First branch
-        c = c1
-        s = s1
+        return (
+            power_law(radius, x0[0], 1.0 / s1[0], c1[0]),
+            x0,
+            (1.0 / s1[0], s1[1] / s1[0]),
+            c1,
+        )
     elif radius < r2_tr:  # Second branch
-        c = c2
-        s = s2
-    else:  # Third branch
-        c = c3
-        s = s3
+        return (
+            power_law(radius, x0[0], 1.0 / s2[0], c2[0]),
+            x0,
+            (1.0 / s2[0], s2[1] / s2[0]),
+            c2,
+        )
+    elif radius > rmax:  # No estimation
+        print(radius, rmax)
+        raise ValueError(
+            "Radius is greater than the maximum value used by "
+            + f"Edmonson et al. (2023): R = {rmax} R_earth."
+        )
 
+    # Third branch
     return (
-        power_law(radius, 1.0 / c[0], 1.0 / s[0]),
-        (1.0 / c[0], c[1] / c[0]),
-        (1.0 / s[0], s[1] / s[0]),
+        power_law(radius, x0[0], 1.0 / s3[0], c3[0]),
+        x0,
+        (1.0 / s3[0], s3[1] / s3[0]),
+        c3,
     )
 
 
@@ -1056,8 +1107,9 @@ def muller_2024_radius(mass: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple]
-        Radius of the planet, in Earth radii, and the constant and slope used.
+    tuple[float, tuple, tuple, tuple]
+        Radius of the planet, in Earth radii, and the constant, slope,
+        and reference value used.
     """
     # Constants
     c1 = (1.02, 0.03)
@@ -1066,22 +1118,19 @@ def muller_2024_radius(mass: float) -> tuple[float, float, float]:
     # Slopes
     s1 = (0.27, 0.04)
     s2 = (0.67, 0.05)
-    s3 = (-0.006, 0.07)
+    s3 = (-0.06, 0.07)
+    # Reference value
+    x0 = (1.0, 0.0)
     # Transition mass
     m1_tr = 4.37
     m2_tr = 127
 
     if mass < m1_tr:  # First branch
-        c = c1
-        s = s1
+        return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
     elif mass < m2_tr:  # Second branch
-        c = c2
-        s = s2
-    else:  # Third branch
-        c = c3
-        s = s3
-
-    return power_law(mass, c[0], s[0]), c, s
+        return power_law(mass, c2[0], s2[0], x0[0]), c2, s2, x0
+    # Third branch
+    return power_law(mass, c3[0], s3[0], x0[0]), c3, s3, x0
 
 
 def muller_2024_mass(
@@ -1109,8 +1158,9 @@ def muller_2024_mass(
 
     Returns
     -------
-    tuple[float, tuple, tuple]
-        Mass of the planet, in Earth masses, and the constant and slope used.
+    tuple[float, tuple, tuple, tuple]
+        Mass of the planet, in Earth masses, and the constant, slope,
+        and reference value used.
     """
     # Constants
     c1 = (1.02, 0.03)
@@ -1119,49 +1169,63 @@ def muller_2024_mass(
     # Slopes
     s1 = (0.27, 0.04)
     s2 = (0.67, 0.05)
-    s3 = (-0.006, 0.07)
+    s3 = (-0.06, 0.07)
+    # Reference value
+    x0 = (1.0, 0.0)
     # Transition radius
-    r1_tr = power_law(4.37, c1[0], s1[0])  # 4.37 Earth masses
-    r2_tr = power_law(127, c2[0], s2[0])  # 127 Earth masses
-    r3_tr = power_law(1e4, c3[0], s3[0])  # Top: 1e4 Earth masses
+    r1_tr = 1.64
+    r2_tr = power_law(127, c2[0], s2[0], x0[0])  # 127 Earth masses
+    r3_tr = power_law(1e4, c3[0], s3[0], x0[0])  # Top: 1e4 Earth masses
+
+    # We use the inverse of the constant and slope,
+    # so the error is recaclulated with propagation error.
 
     if radius < r1_tr:  # First branch
-        c = c1
-        s = s1
+        return (
+            power_law(radius, x0[0], 1.0 / s1[0], c1[0]),
+            x0,
+            (1.0 / s1[0], s1[1] / s1[0]),
+            c1,
+        )
     elif radius < r3_tr:  # Pure second branch
-        c = c2
-        s = s2
+        return (
+            power_law(radius, x0[0], 1.0 / s2[0], c2[0]),
+            x0,
+            (1.0 / s2[0], s2[1] / s2[0]),
+            c2,
+        )
     elif radius > r2_tr:  # No estimation
         raise ValueError(
             "Radius is greater than the maximum value used by "
             + f"Müller et al. (2024): R = {r2_tr} R_earth."
         )
-    else:  # Bivariate region
-        if not silent:
-            warnings.warn(
-                "Radius falls in the bivariate region: "
-                + f"{r1_tr} < R < {r2_tr}"
-                + "\n The mass-radius relation may not be accurate.",
-                stacklevel=2,
-            )
-        if not isinstance(bivariate, (int, float)):
-            raise ValueError("Bivariate must be a number between 0 and 1.")
-        if bivariate < 0 or bivariate > 1:
-            raise ValueError("Bivariate must be a number between 0 and 1.")
-        if random.rand() < bivariate:  # Second branch
-            c = c2
-            s = s2
-        else:  # Third branch
-            c = c3
-            s = s3
 
-    # We use the inverse of the constant and slope,
-    # so the error is recaclulated with propagation error.
+    # Bivariate region
+    if not silent:
+        warnings.warn(
+            "Radius falls in the bivariate region: "
+            + f"{r1_tr} < R < {r2_tr}"
+            + "\n The mass-radius relation may not be accurate.",
+            stacklevel=2,
+        )
+    if not isinstance(bivariate, (int, float)):
+        raise ValueError("Bivariate must be a number between 0 and 1.")
+    if bivariate < 0 or bivariate > 1:
+        raise ValueError("Bivariate must be a number between 0 and 1.")
 
+    if random.rand() < bivariate:  # Second branch
+        return (
+            power_law(radius, x0[0], 1.0 / s2[0], c2[0]),
+            x0,
+            (1.0 / s2[0], s2[1] / s2[0]),
+            c2,
+        )
+    # Third branch
     return (
-        power_law(radius, 1.0 / c[0], 1.0 / s[0]),
-        (1.0 / c[0], c[1] / c[0]),
-        (1.0 / s[0], s[1] / s[0]),
+        power_law(radius, x0[0], 1.0 / s3[0], c3[0]),
+        x0,
+        (1.0 / s3[0], s3[1] / s3[0]),
+        c3,
     )
 
 
@@ -1169,9 +1233,10 @@ def estimate_mass(
     radius: float,
     radius_err_min: float = 0.0,
     radius_err_max: float = 0.0,
-    multivariate: float = 0.5,
     model: str = "ck17",
+    multivariate: float = 0.5,
     method: int = 1,
+    density: float = 0.0,
     silent: bool = False,
 ) -> tuple[float, float, float]:
     """Calculate the mass of a planet using a power-law approximation.
@@ -1186,23 +1251,30 @@ def estimate_mass(
         Lower error of the radius, in Earth radii.
     radius_err_max : float
         Upper error of the radius, in Earth radii.
-    multivariate : float, tuple, optional. Default: 0.5
-        Probability of using the (first, second, ...) branch if the estimation
-        falls in a multivariate region. If a float, must be a number between
-        0 and 1. If a tuple, must be a tuple of two floats between 0 and 1,
-        where the sum of them must be lower equal than 1.
     model : str, optional. Default: "ck17"
         Model to use for the mass-radius power-law relation.
-        "ck17": Chen & Kipping (2017)
-        "o20": Otegi et al. (2020)
-        "e23": Edmondson et al. (2023)
-        "m24": Müller et al. (2024)
+        'ck17': Chen & Kipping (2017) [trivariate]
+        'o20': Otegi et al. (2020) [density|bivariate]
+        'e23': Edmondson et al. (2023)
+        'm24': Müller et al. (2024) [bivariate]
+    multivariate : float, tuple, optional. Default: 0.5
+        Probability of using the (first, second, ...) branch if the estimation
+        falls in a multivariate region.
+        For bivariate models ('o20', 'm24'), it must be a float between 0 and 1.
+        For trivariate model "ck17", it must be a tuple of two floats between 0 and 1,
+        where the sum of them must be lower equal than 1.
     method : int, optional. Default: 1
         Which method implement for error calculation.
         Method 1: (Naive) Error propagation with the power-law approximation,
             using the radius error as the maximum of the two extremes.
+            Warning: May return excecively large errors for multivariate sections.
         Method 2: Evalaute the radius extremes and calculate each mass
             extreme with the power-law approximation.
+        Method 3: Returns the approximate model error as value errors.
+    density : float, optional. Default: 0.0
+        Density of the planet, in kg m^-3.
+        Only used if model is 'o20'. If equal to 0.0, the code uses multivariate
+        float instead, to determine which branch to use.
     silent : bool, optional. Default: False
         Whether to silence the warning if the radius falls in a
         multivariate region.
@@ -1214,19 +1286,44 @@ def estimate_mass(
     """
     # Calculate the mass
     if model == "ck17":
-        mass, c, s = chen_kipp_2017_mass(radius, multivariate, silent)
+        mass, c, s, x0 = chen_kipp_2017_mass(
+            radius, trivariate=multivariate, silent=silent
+        )
     elif model == "o20":
-        mass, c, s = otegi_2020_mass(radius, 0.0, 0.0, multivariate, silent)
+        mass, c, s, x0 = otegi_2020_mass(
+            radius, density=density, bivariate=multivariate, silent=silent
+        )
     elif model == "e23":
-        mass, c, s = edmonson_2023_mass(radius)
+        mass, c, s, x0 = edmonson_2023_mass(radius)
     elif model == "m24":
-        mass, c, s = muller_2024_mass(radius, multivariate, silent)
+        mass, c, s, x0 = muller_2024_mass(
+            radius, bivariate=multivariate, silent=silent
+        )
     else:
         raise ValueError("Model not implemented.")
 
     # Calculate the mass error
+
+    # Warn if necessary
+    if not silent and model in ["ck17", "o20", "m24"] and method == 1:
+        warnings.warn(
+            "Using the naive error propagation method may generate"
+            + " excecively large errors in multivariate sections",
+            stacklevel=2,
+        )
+
+    # Use auxiliar error function
     mass_err_min, mass_err_max = _aux_error_estimator(
-        radius, radius_err_max, radius_err_min, mass, c, s, method, silent, 0
+        radius,
+        radius_err_max,
+        radius_err_min,
+        mass,
+        c,
+        s,
+        x0,
+        method,
+        silent,
+        0,
     )
 
     return mass, mass_err_min, mass_err_max
@@ -1236,8 +1333,8 @@ def estimate_radius(
     mass: float,
     mass_err_min: float = 0.0,
     mass_err_max: float = 0.0,
-    bivariate: float = 0.0,
     model: str = "ck17",
+    bivariate: float = 0.5,
     method: int = 1,
     density: float = 0.0,
     silent: bool = False,
@@ -1254,24 +1351,26 @@ def estimate_radius(
         Lower error of the mass, in Earth masses.
     mass_err_max : float
         Upper error of the mass, in Earth masses.
-    bivariate : float, optional. Default: 0.0
-        Probability of using the first branch if the estimation falls in a
-        bivariate region. Must be a number between 0 and 1.
-        Only used if model is "o20".
     model : str, optional. Default: "ck17"
         Model to use for the mass-radius power-law relation.
-        "ck17": Chen & Kipping (2017) [trivariate]
-        "o20": Otegi et al. (2020) [bivariate]
-        "e23": Edmondson et al. (2023)
-        "m24": Müller et al. (2024)
+        'ck17': Chen & Kipping (2017)
+        'o20': Otegi et al. (2020) [density|bivariate]
+        'e23': Edmondson et al. (2023)
+        'm24': Müller et al. (2024)
+    bivariate : float, optional. Default: 0.5
+        Probability of using the lower branch if the estimation falls in a
+        bivariate region. Must be a number between 0 and 1.
+        Only used if model is 'o20'.
     method : int, optional. Default: 1
         Which method implement for error calculation.
         Method 1: (Naive) Error propagation with the power-law approximation,
             using the mass error as the maximum of the two extremes.
         Method 2: Evalaute the mass extremes and calculate each radius extreme.
+        Method 3: Returns the approximate model error as value errors.
     density : float, optional. Default: 0.0
         Density of the planet, in kg m^-3.
-        Only used if model is "o20".
+        Only used if model is 'o20'. If equal to 0.0, the code uses multivariate
+        float instead, to determine which branch to use.
     silent : bool, optional. Default: False
         Whether to silence the warning if the radius falls in a
         multivariate region,
@@ -1279,23 +1378,21 @@ def estimate_radius(
     """
     # Calculate the radius
     if model == "ck17":
-        radius, c, s = chen_kipp_2017_radius(mass)
+        radius, c, s, x0 = chen_kipp_2017_radius(mass)
     elif model == "o20":
-        if density == 0.0 and bivariate == 0:
-            raise ValueError(
-                "Density or bivariate must be set if model is 'o20'."
-            )
-        radius, c, s = otegi_2020_radius(mass, density, bivariate, silent)
+        radius, c, s, x0 = otegi_2020_radius(
+            mass, density=density, bivariate=bivariate, silent=silent
+        )
     elif model == "e23":
-        radius, c, s = edmonson_2023_radius(mass)
+        radius, c, s, x0 = edmonson_2023_radius(mass)
     elif model == "m24":
-        radius, c, s = muller_2024_radius(mass)
+        radius, c, s, x0 = muller_2024_radius(mass)
     else:
         raise ValueError("Model not implemented.")
 
     # Calculate the radius error
     radius_err_min, radius_err_max = _aux_error_estimator(
-        mass, mass_err_max, mass_err_min, radius, c, s, method, silent, 1
+        mass, mass_err_max, mass_err_min, radius, c, s, x0, method, silent, 1
     )
 
     return radius, radius_err_min, radius_err_max
@@ -1308,6 +1405,7 @@ def _aux_error_estimator(
     output: float,
     c: tuple,
     s: tuple,
+    x0: tuple,
     method: int,
     silent: bool,
     which: int,
@@ -1322,7 +1420,7 @@ def _aux_error_estimator(
     if method == 1:  # Naive error propagation
         val_err = max(val_err_min, val_err_max)
         output_err_max = power_law_error(
-            val, val_err, c[0], c[1], s[0], s[1], y=output
+            val, val_err, c[0], c[1], s[0], s[1], x0[0], x0[1], y=output
         )
         output_err_min = -output_err_max
     elif method == 2:  # Calculate the error at output extremes
@@ -1333,12 +1431,20 @@ def _aux_error_estimator(
                 + f"a {txt[1]} error generates no {txt[0]} error",
                 stacklevel=2,
             )
-        output_min = power_law(val - val_err_min, c[0], s[0])
-        output_max = power_law(val + val_err_max, c[0], s[0])
+        output_min = power_law(val - val_err_min, c[0], s[0], x0[0])
+        output_max = power_law(val + val_err_max, c[0], s[0], x0[0])
+        # Calculate the output error. Safe sign
+        output_err_min = min(min(output_min, output_max), output) - output
+        output_err_max = max(max(output_min, output_max), output) - output
+    elif (
+        method == 3
+    ):  # Give the error from the model [eg.: y+ = pw(x, c+, s+)]
+        output_min = power_law(val, c[0] - c[1], s[0] - s[1], x0[0] + x0[1])
+        output_max = power_law(val, c[0] + c[1], s[0] + s[1], x0[0] - x0[1])
         # Calculate the output error. Safe sign
         output_err_min = min(min(output_min, output_max), output) - output
         output_err_max = max(max(output_min, output_max), output) - output
     else:
-        raise ValueError("Method not implemented.")
+        raise ValueError(f"Error method '{method}' not implemented.")
 
     return output_err_min, output_err_max
