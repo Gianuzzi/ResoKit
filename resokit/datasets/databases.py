@@ -18,7 +18,7 @@ import datetime
 import os
 import warnings
 from pathlib import Path
-from typing import Union
+from typing import Tuple, Union
 from zipfile import ZipFile
 
 import pandas as pd
@@ -256,7 +256,7 @@ def _load_stored_rows(
     rows: Union[list, None] = None,
     full: bool = False,
     copy: bool = True,
-) -> tuple[pd.DataFrame, list]:
+) -> Tuple[pd.DataFrame, list]:
     """Load specific rows by index from memory.
 
     Parameters
@@ -272,7 +272,7 @@ def _load_stored_rows(
 
     Returns
     -------
-    tuple[pd.DataFrame, list]
+    Tuple[pd.DataFrame, list]
         The loaded dataset as a DataFrame and a list of not stored rows.
     """
     if full:

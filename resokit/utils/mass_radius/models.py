@@ -22,6 +22,7 @@ This module provides tools for estimating the mass (or radius) from the radius
 # ============================================================================
 
 import warnings
+from typing import Tuple
 
 from numpy import log, pi, random, sqrt
 
@@ -114,7 +115,7 @@ def power_law_error(
     )
 
 
-def chen_kipp_2017_radius(mass: float) -> tuple[float, float, float]:
+def chen_kipp_2017_radius(mass: float) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
@@ -131,7 +132,7 @@ def chen_kipp_2017_radius(mass: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Radius of the planet, in Earth radii, and the constant, slope,
         and reference value used.
     """
@@ -164,7 +165,7 @@ def chen_kipp_2017_radius(mass: float) -> tuple[float, float, float]:
 
 def chen_kipp_2017_mass(
     radius: float, trivariate: tuple = (0.15, 0.8), silent: bool = False
-) -> tuple[float, float]:
+) -> Tuple[float, float]:
     """Calculate the mass of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
@@ -190,7 +191,7 @@ def chen_kipp_2017_mass(
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Mass of the planet, in Earth masses, and the constant, slope,
         and reference value used.
     """
@@ -282,7 +283,7 @@ def otegi_2020_radius(
     density: float = 0.0,
     bivariate: float = 0.5,
     silent: bool = False,
-) -> tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using Otegi et al. (2020).
 
     Power law approximation:
@@ -309,7 +310,7 @@ def otegi_2020_radius(
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Radius of the planet, in Earth radii, and the constant, slope,
         and reference value used.
     """
@@ -395,7 +396,7 @@ def otegi_2020_mass(
     density: float = 0.0,
     bivariate: float = 0.5,
     silent: bool = False,
-) -> tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     """Calculate the mass of a planet using Otegi et al. (2020).
 
     Power law approximation:
@@ -421,7 +422,7 @@ def otegi_2020_mass(
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Mass of the planet, in Earth masses, and the constant, slope,
         and reference value used.
     """
@@ -502,7 +503,7 @@ def otegi_2020_mass(
     return mass2, c2, s2, x0
 
 
-def edmonson_2023_radius(mass: float) -> tuple[float, float, float]:
+def edmonson_2023_radius(mass: float) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
@@ -518,7 +519,7 @@ def edmonson_2023_radius(mass: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Radius of the planet, in Earth radii, and the constant, slope,
         and reference value used.
     """
@@ -544,7 +545,7 @@ def edmonson_2023_radius(mass: float) -> tuple[float, float, float]:
     return power_law(mass, c3[0], s3[0], x0[0]), c3, s3, x0
 
 
-def edmonson_2023_mass(radius: float) -> tuple[float, float, float]:
+def edmonson_2023_mass(radius: float) -> Tuple[float, float, float]:
     """Calculate the mass of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
@@ -560,7 +561,7 @@ def edmonson_2023_mass(radius: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Mass of the planet, in Earth masses, and the constant, slope,
         and reference value used.
     """
@@ -611,7 +612,7 @@ def edmonson_2023_mass(radius: float) -> tuple[float, float, float]:
     )
 
 
-def muller_2024_radius(mass: float) -> tuple[float, float, float]:
+def muller_2024_radius(mass: float) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the Müller et al. (2024).
 
     Power law approximation:
@@ -626,7 +627,7 @@ def muller_2024_radius(mass: float) -> tuple[float, float, float]:
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Radius of the planet, in Earth radii, and the constant, slope,
         and reference value used.
     """
@@ -654,7 +655,7 @@ def muller_2024_radius(mass: float) -> tuple[float, float, float]:
 
 def muller_2024_mass(
     radius: float, bivariate: float = 0.5, silent: bool = False
-) -> tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     """Calculate the mass of a planet using the Müller et al. (2024).
 
     Power law approximation:
@@ -677,7 +678,7 @@ def muller_2024_mass(
 
     Returns
     -------
-    tuple[float, tuple, tuple, tuple]
+    Tuple[float, tuple, tuple, tuple]
         Mass of the planet, in Earth masses, and the constant, slope,
         and reference value used.
     """
@@ -758,7 +759,7 @@ def estimate_mass(
     density: float = 0.0,
     silent: bool = False,
     error: bool = False,
-) -> tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     """Calculate the mass of a planet using a power-law approximation.
 
     Equation: mass = C x radius^S
@@ -806,7 +807,7 @@ def estimate_mass(
 
     Returns
     -------
-    tuple[float, float, float]
+    Tuple[float, float, float]
         Estimated mass, and its minimum ad maximum errors, in Earth masses.
         If error=False, it returns only the mass.
     """
@@ -867,7 +868,7 @@ def estimate_radius(
     density: float = 0.0,
     silent: bool = False,
     error: bool = False,
-) -> tuple[float, float, float]:
+) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the power-law approximation.
 
     Equation: radius = (1/C) x mass^(1/S)
@@ -909,7 +910,7 @@ def estimate_radius(
 
     Returns
     -------
-    tuple[float, float, float]
+    Tuple[float, float, float]
         Estimated radius, and its minimum ad maximum errors, in Earth radii.
         If error=False, it returns only the radius.
     """
@@ -958,7 +959,7 @@ def _aux_error_estimator(
     method: int,
     silent: bool,
     which: int,
-) -> tuple[float, float]:
+) -> Tuple[float, float]:
     """Auxiliary function to estimate the error of a power-law relation."""
     # Handle errors as absolute values
     val_err_min = abs(val_err_min)

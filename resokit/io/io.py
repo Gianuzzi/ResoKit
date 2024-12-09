@@ -18,7 +18,7 @@
 # =============================================================================
 
 from difflib import SequenceMatcher
-from typing import Union
+from typing import Tuple, Union
 
 import pandas as pd
 
@@ -63,7 +63,7 @@ def _search_system_index(
     store_index: bool = True,
     verbose: bool = False,
     raw_df: pd.DataFrame = None,
-) -> tuple[pd.Index, pd.Series, float]:
+) -> Tuple[pd.Index, pd.Series, float]:
     """Search for the index of the system in the dataset.
 
     Parameters
@@ -83,7 +83,7 @@ def _search_system_index(
 
     Returns
     -------
-    tuple[pd.Index, pd.Series, float]
+    Tuple[pd.Index, pd.Series, float]
         Index, values, and similarity ratio.
     """
     # Define the column to search

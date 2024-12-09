@@ -21,7 +21,7 @@ import platform
 import sys
 from fractions import Fraction
 from types import MappingProxyType
-from typing import Iterable, Union
+from typing import Iterable, Tuple, Union
 
 from numpy import pi, sqrt
 
@@ -299,7 +299,7 @@ def float_to_fraction(
     as_fraction: bool = False,
     stop_func: callable = None,
     verbose: bool = True,
-) -> Union[Fraction, tuple[int, int]]:
+) -> Union[Fraction, Tuple[int, int]]:
     """Calculate the continued fraction approximation of a value.
 
     Parameters
@@ -323,7 +323,7 @@ def float_to_fraction(
 
     Returns
     -------
-    Union[Fraction, tuple[int, int]]
+    Union[Fraction, Tuple[int, int]]
         Tuple with the numerator and denominator of the best approximation,
         or a Fraction object if `as_fraction` is True.
     """

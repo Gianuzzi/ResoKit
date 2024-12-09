@@ -19,7 +19,7 @@
 
 import warnings
 from collections.abc import Mapping
-from typing import Iterable, Union
+from typing import Iterable, List, Tuple, Union
 
 import attrs
 
@@ -527,7 +527,7 @@ class StaticPlanet(ResokitDataFrame):
 
     def get_item(
         self,
-        items: Union[list[str], str],
+        items: Union[List[str], str],
         error: bool = False,
         silent: bool = False,
     ):
@@ -765,7 +765,7 @@ class StaticSystem:
     ----------
     star : StaticStar
         StaticStar instance.
-    planets : Union[list[StaticPlanet], tuple[StaticPlanet], StaticPlanet]
+    planets : Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet]
         List, or tuple of StaticPlanet instances, a StaticPlanet.
     name : str
         Name of the system.
@@ -777,7 +777,7 @@ class StaticSystem:
         Source of the data.
     ``user_defined_`` : bool
         Flag indicating if the system is user-defined.
-    ``planet_names_`` : list[str]
+    ``planet_names_`` : List[str]
         List of planet names.
     period_ratios : Union[float, pd.DataFrame]
         Period ratios of the planets.
@@ -787,7 +787,7 @@ class StaticSystem:
     star: StaticStar = attrs.field(
         validator=attrs.validators.instance_of(StaticStar),
     )
-    planets: Union[list[StaticPlanet], tuple[StaticPlanet], StaticPlanet] = (
+    planets: Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet] = (
         attrs.field(
             validator=attrs.validators.instance_of(
                 (list, tuple, StaticPlanet)
@@ -959,13 +959,13 @@ class StaticSystem:
         return [self.planets[i].copy() for i in indices]
 
     def _get_planets_items(
-        self, items: Union[str, list[str]], return_values: bool = True
+        self, items: Union[str, List[str]], return_values: bool = True
     ):
         """Retrieve specific attributes of planets.
 
         Parameters
         ----------
-        items : str, list[str]
+        items : str, List[str]
             Names of planet attributes.
         return_values : bool, default=True
             Whether to return values or full objects.
@@ -985,12 +985,12 @@ class StaticSystem:
 
         return [item for item in data]
 
-    def get_item(self, items: Union[str, list[str]], error: bool = False):
+    def get_item(self, items: Union[str, List[str]], error: bool = False):
         """Retrieve specific attributes of the system (star/planets).
 
         Parameters
         ----------
-        items : str or list[str]
+        items : str or List[str]
             Names of the desired attributes.
         error : bool, optional. Default: False.
             Whether to return the error columns.
@@ -1035,7 +1035,7 @@ class StaticSystem:
 
         return self.planets[0][item]
 
-    def _get_single_planet_items(self, items: list[str]):
+    def _get_single_planet_items(self, items: List[str]):
         """Retrieve attributes when there's only one planet."""
         return pd.Series(
             {
@@ -1049,7 +1049,7 @@ class StaticSystem:
             name=self.name,
         )
 
-    def _get_multiple_planet_items(self, items: list[str]):
+    def _get_multiple_planet_items(self, items: List[str]):
         """Retrieve attributes when there are multiple planets."""
         # Create a DataFrame with the requested items
         df = pd.DataFrame(

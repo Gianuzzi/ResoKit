@@ -23,7 +23,7 @@ to MMRs in the phase space.
 
 import warnings
 from itertools import product
-from typing import Union
+from typing import List, Tuple, Union
 
 import matplotlib.pyplot as plt
 
@@ -37,7 +37,7 @@ from scipy.optimize import minimize
 
 
 def mmr3b(
-    x: Union[float, np.ndarray], resonance: tuple[int, int, int]
+    x: Union[float, np.ndarray], resonance: Tuple[int, int, int]
 ) -> Union[float, np.ndarray]:
     """Compute the 3-body mean-motion resonance (MMR) curve.
 
@@ -45,7 +45,7 @@ def mmr3b(
     ----------
     x : float or np.ndarray
         The independent variable for the curve.
-    resonance : tuple[int, int, int]
+    resonance : Tuple[int, int, int]
         Coefficients (a, b, c) defining the resonance.
 
     Returns
@@ -80,7 +80,7 @@ def mmr3b(
 
 
 def mmrs_in_area(
-    bounds: tuple[float, float, float, float],
+    bounds: Tuple[float, float, float, float],
     order3: int = 0,
     max_coeff3: int = 10,
     max_order3: int = 0,
@@ -97,7 +97,7 @@ def mmrs_in_area(
 
     Parameters
     ----------
-    bounds : tuple[float, float, float, float]
+    bounds : Tuple[float, float, float, float]
         The limits of the region (x_min, x_max, y_min, y_max).
     order3 : int
         Exact order for 3P-MMRs (default: 0).
@@ -204,15 +204,15 @@ def mmrs_in_area(
 
 
 def _is_curve_within_bounds(
-    resonance: list[int], bounds: tuple[float, float, float, float]
+    resonance: List[int], bounds: Tuple[float, float, float, float]
 ) -> bool:
     """Determine if a resonance curve intersects a bounded region.
 
     Parameters
     ----------
-    resonance : list[int, int, int]
+    resonance : List[int, int, int]
         Coefficients defining the resonance.
-    bounds : tuple[float, float, float, float]
+    bounds : Tuple[float, float, float, float]
         The bounding region as (x_min, x_max, y_min, y_max).
 
     Returns
@@ -279,10 +279,10 @@ def _is_curve_within_bounds(
 def mindist_mmr3b(
     a: float,
     b: float,
-    resonance: tuple[int, int, int],
+    resonance: Tuple[int, int, int],
     x0: Union[float, None] = None,
     **minimize_kwargs,
-) -> tuple[list[float], float]:
+) -> Tuple[List[float], float]:
     """Calculate the minimum distance to a 3-body resonance curve.
 
     Parameters
@@ -291,7 +291,7 @@ def mindist_mmr3b(
         The x-coordinate of the point.
     b : float
         The y-coordinate of the point.
-    resonance : tuple[int, int, int]
+    resonance : Tuple[int, int, int]
         Coefficients defining the resonance.
     x0 : float, optional. Default: None
         Initial guess for the optimization.
@@ -301,7 +301,7 @@ def mindist_mmr3b(
 
     Returns
     -------
-    [x_min, y_min], distance_min : list[float], float
+    [x_min, y_min], distance_min : List[float], float
         The x-y coordinates of the minimum distance and the distance value.
     """
     # Singularity handling
@@ -427,7 +427,7 @@ def label_mmr3b(
 
 
 def plot_mmrs(
-    bounds: tuple[float, float, float, float] = None,
+    bounds: Tuple[float, float, float, float] = None,
     order3: int = 0,
     max_coeff3: int = 10,
     max_order3: int = 0,
@@ -448,7 +448,7 @@ def plot_mmrs(
 
     Parameters
     ----------
-    bounds : tuple[float, float, float, float], optional
+    bounds : Tuple[float, float, float, float], optional
         The limits of the region (x_min, x_max, y_min, y_max).
         If ax is provided, the bounds will be adjusted to the axis limits.
         Default: (1, 10, 1, 10).
