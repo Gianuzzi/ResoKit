@@ -1,8 +1,11 @@
 # Welcome to **ResoKit**
 
-[![https://github.com/leliel12/diseno_sci_sfw](https://img.shields.io/badge/DiSoftCompCi-FAMAF-ffda00)](https://github.com/leliel12/diseno_sci_sfw)
+<!-- BODY -->
+
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://badge.fury.io/py/uttrs)
+[![Documentation Status](https://readthedocs.org/projects/resokit/badge/?version=latest)](https://resokit.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://tldrlegal.com/license/mit-license)
+[![https://github.com/leliel12/diseno_sci_sfw](https://img.shields.io/badge/DiSoftCompCi-FAMAF-ffda00)](https://github.com/leliel12/diseno_sci_sfw)
 
 **ResoKit** is a toolkit package for the analysis and diagnostics of resonances in n-body planetary systems.
 
@@ -13,9 +16,9 @@ Given the vast number of exoplanetary systems surveyed, and the expectation of m
 ## Features
 ResoKit currently has two main functions:
 
-- Analyse exoplanetary systems properties obtained from [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) or the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/).
+- Analyze exoplanetary systems properties obtained from [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) or the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/).
 
-- Analyse exoplanetary systems integrated with a n-body code.
+- Analyze exoplanetary systems integrated with a n-body code.
 
 -------------------------------------------------------------------------------
 
@@ -26,10 +29,20 @@ You need Python `3.8`, or greater to run ResoKit.
 
 ### Standard Installation
 
-You could find **ResoKit** at PyPI. The standar instalation via pip:
+You could find **ResoKit** at PyPI. The standard installation via pip:
 
 ```bash
 $ python -m pip install resokit
+```
+
+#### Extra dependencies
+
+If online databases features (queries, requests) will be used, packages [requests](https://pypi.org/project/requests/) and [astropy](https://pypi.org/project/astropy/) are needed.
+
+You can install all extra ResoKit requirements via pip:
+
+```bash
+$ python -m pip install resokit[query]
 ```
 
 ### Development Install

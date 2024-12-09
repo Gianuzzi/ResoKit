@@ -4,4 +4,4 @@ Sphinx
 sphinx-rtd-theme
 nbsphinx
 m2r
-lxml[html_clean]
+lxml_html_clean
