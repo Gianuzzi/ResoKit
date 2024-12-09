@@ -224,9 +224,9 @@ def _load_system_from_db(
     # Check if the system was found
     if ratio < 1:
         if is_planet:
-            print(f" Planet {name} not found in {source} dataset.")
+            print(f"Planet {name} not found in {source} dataset.")
         else:
-            print(f" Star {name} not found in {source} dataset.")
+            print(f"Star {name} not found in {source} dataset.")
         if ratio == 0:  # No similar names found
             return pd.DataFrame()
 

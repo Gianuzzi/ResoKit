@@ -19,5 +19,6 @@
 # IMPORTS
 # =============================================================================
 
+from . import mass_radius  # noqa
 from . import mmr  # noqa
 from .utils import float_to_fraction  # noqa

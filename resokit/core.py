@@ -210,16 +210,16 @@ class ResokitDataFrame:
         """Return a HTML representation of the DataFrame."""
         ad_id = id(self)
 
-        with pd.option_context("display.show_dimensions", False):
-            df_html = self.data_df._repr_html_()
+        rows = f"{self.n_objects_} row{'s' if self.n_objects_ > 1 else ''}"
+        columns = f"{self.n_columns_} columns"
+        footer = "ResokitDataFrame" if self.n_objects_ > 1 else "ResokitSeries"
+        footer = footer + f" - {rows} x {columns}"
 
-        if self.n_objects_ > 1:
-            rows = f"{self.n_objects_} rows"
-            columns = f"{self.n_columns_} columns"
-            footer = f"ResokitDataFrame - {rows} x {columns}"
-        else:
-            rows = "1 row"
-            columns = f"{self.n_columns_} columns"
+        with pd.option_context("display.show_dimensions", False):
+            if self.n_objects_ > 1:  # It is a DataFrame
+                df_html = self.data_df._repr_html_()
+            else:  # It is a Series
+                df_html = self.data_df.to_frame()._repr_html_()
 
         parts = [
             f'<div class="resokit-data-container" id={ad_id}>',
@@ -508,6 +508,23 @@ class StaticPlanet(ResokitDataFrame):
             else "user defined."
         )
 
+    def _repr_html_(self):
+        """Return a HTML representation of the StaticPlanet."""
+        ad_id = id(self)
+
+        # footer = f"ResokitSeries - 1 row x {self.n_columns_} columns"
+        repre = self.__repr__()
+
+        parts = [
+            f'<div class="resokit-data-container" id={ad_id}>',
+            repre,
+            "</div>",
+        ]
+
+        html = "".join(parts)
+
+        return html
+
     def get_item(
         self,
         items: Union[list[str], str],
@@ -583,6 +600,8 @@ class StaticPlanet(ResokitDataFrame):
         plt.Axes
             Matplotlib Axes with the plot.
         """
+        if planet_label is True:
+            planet_label = self.name
         return super().plot(
             x=x,
             y=y,
@@ -616,7 +635,7 @@ class StaticStar(ResokitDataFrame):
         Metadata of the dataset.
     name : str
         Name of the star.
-    user_defined_ : bool
+    ``user_defined_`` : bool
         Flag indicating if the star is user-defined.
     """
 
@@ -715,6 +734,8 @@ class StaticStar(ResokitDataFrame):
         plt.Axes
             Matplotlib Axes with the plot.
         """
+        if star_label is True:
+            star_label = self.name
         return super().plot(
             x=x,
             y=y,
@@ -744,21 +765,21 @@ class StaticSystem:
     ----------
     star : StaticStar
         StaticStar instance.
-    planets : list, tuple, StaticPlanet
-        List of StaticPlanet instances.
+    planets : Union[list[StaticPlanet], tuple[StaticPlanet], StaticPlanet]
+        List, or tuple of StaticPlanet instances, a StaticPlanet.
     name : str
         Name of the system.
     metadata : dict
         Metadata of the dataset.
-    n_planets_ : int
+    ``n_planets_`` : int
         Number of planets in this static system.
-    source_ : str
+    ``source_`` : str
         Source of the data.
-    user_defined_ : bool
+    ``user_defined_`` : bool
         Flag indicating if the system is user-defined.
-    planet_names_ : list
+    ``planet_names_`` : list[str]
         List of planet names.
-    period_ratios : float, pd.DataFrame
+    period_ratios : Union[float, pd.DataFrame]
         Period ratios of the planets.
         Created after calling the period_ratios method.
     """
@@ -1131,7 +1152,7 @@ class StaticSystem:
         which: Union[str, int] = "all",
         error: bool = False,
         ax: plt.Axes = None,
-        label: Union[str, list] = "",
+        label: Union[str, list, bool] = True,
         **kwargs,
     ):
         """Plot each CONSECUTIVE triplet of planets in the period ratio space.
@@ -1151,8 +1172,10 @@ class StaticSystem:
             Whether to plot the error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        label : str, list, optional. Default: "".
+        label : str, list, bool, optional. Default: True.
             Label for the data plotted.
+            If True, will (try to) concatenate each three planets suffixes to
+            create triplets labels.
         **kwargs : dict
             Additional keyword arguments for the plt.errorbar function.
 

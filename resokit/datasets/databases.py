@@ -593,12 +593,17 @@ def load_dataset(
     if only_rows and store:
         _store_rows(source, rows_df=data, verbose=verbose)
 
-    elif store_index and not only_rows:
+    elif store_index and not only_rows and IN_MEMORY_INDEXES[source] is None:
         if verbose:
             print(" Storing the index columns into memory...")
         IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
 
-    if store and not only_index and not only_rows:
+    if (
+        store
+        and not only_index
+        and not only_rows
+        and not IS_FULLY_STORED[source]
+    ):
         if verbose:
             print(" Storing the entire dataset into memory...")
         IN_MEMORY_DATASETS[source] = data.copy()
