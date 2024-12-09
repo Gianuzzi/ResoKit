@@ -5,4 +5,5 @@ recursive-include resokit *.zip
 
 exclude tox.ini
 exclude pyproject.toml
+recursive-exclude docs *
 recursive-exclude tests *
