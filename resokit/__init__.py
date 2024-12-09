@@ -18,7 +18,7 @@ ResoKit addresses the need for diagnosing and analyzing  mean motion
 resonances (MMR) in coplanar planetary systems."
 """
 
-__version__ = "0.1.0"
+__version__ = "0.0.1"
 
 
 # =============================================================================
