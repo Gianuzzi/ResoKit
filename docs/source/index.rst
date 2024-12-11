@@ -7,7 +7,7 @@ Welcome to ResoKit's documentation!
 ===================================
 
 .. Here we render the README.md of the repository as a main page
-.. include:: _dynamic/
+.. include:: _dynamic/README
 
 
 Contents

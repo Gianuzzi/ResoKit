@@ -1,7 +1,7 @@
-``resokit.io`` package
+``resokit.core`` module
 =======================
 
-.. automodule:: resokit.io
+.. automodule:: resokit.core
    :members:
    :show-inheritance:
    :member-order: bysource

@@ -1,30 +1,21 @@
-resokit.utils package
-=====================
-
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   resokit.utils.mass_radius
-   resokit.utils.mmr
-
-Submodules
-----------
-
-resokit.utils.utils module
---------------------------
-
-.. automodule:: resokit.utils.utils
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
+``resokit.utils`` package
+=========================
 
 .. automodule:: resokit.utils
    :members:
-   :undoc-members:
    :show-inheritance:
+   :member-order: bysource
+
+``resokit.utils.mass_radius`` package
+-------------------------------------
+.. automodule:: resokit.utils.mass_radius
+   :members:
+   :show-inheritance:
+   :member-order: bysource
+
+``resokit.utils.mmr`` package
+-----------------------------
+.. automodule:: resokit.utils.mmr
+   :members:
+   :show-inheritance:
+   :member-order: bysource

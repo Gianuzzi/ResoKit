@@ -1,31 +1,15 @@
-resokit package
-===============
+``resokit`` package
+===================
 
-Subpackages
------------
+.. automodule:: resokit
+   :members:
+   :show-inheritance:
+   :ignore-module-all:
 
 .. toctree::
    :maxdepth: 4
 
-   resokit.datasets
+   resokit.core
    resokit.io
+   resokit.datasets
    resokit.utils
-
-Submodules
-----------
-
-resokit.core module
--------------------
-
-.. automodule:: resokit.core
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: resokit
-   :members:
-   :undoc-members:
-   :show-inheritance:
