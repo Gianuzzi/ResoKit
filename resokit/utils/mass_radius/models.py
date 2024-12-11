@@ -36,7 +36,7 @@ from resokit.utils.utils import M_EAR, M_JUP, M_SUN, R_EAR
 def power_law(x: float, c: float, s: float, x0: float = 1.0) -> float:
     """Calculate a power-law.
 
-    Equation: ``y = c * (x / x0)^s``
+    Equation: :math:`y = c \\times \\left(\\frac{x}{x}\\right)^s`
 
     Parameters
     ----------
@@ -119,7 +119,7 @@ def chen_kipp_2017_radius(mass: float) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
-        radius = C x mass^S
+        :math:`radius = C \\times mass^S`
     Citation:
         Chen, J., & Kipping, D. 2017, ApJ, 834, 17
     The original code is available at:
@@ -169,7 +169,7 @@ def chen_kipp_2017_mass(
     """Calculate the mass of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
-        mass = (1/C) x radius^(1/S)
+        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
     Citation:
         Chen, J., & Kipping, D. 2017, ApJ, 834, 17
     The original code is available at:
@@ -287,7 +287,7 @@ def otegi_2020_radius(
     """Calculate the radius of a planet using Otegi et al. (2020).
 
     Power law approximation:
-        radius = C x mass^S
+        :math:`radius = C \\times mass^S`
     Citation:
         Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
 
@@ -400,7 +400,7 @@ def otegi_2020_mass(
     """Calculate the mass of a planet using Otegi et al. (2020).
 
     Power law approximation:
-        mass = C x radius^S.
+        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
     Citation:
         Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
 
@@ -507,7 +507,7 @@ def edmonson_2023_radius(mass: float) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
-        radius = C x mass^S
+        :math:`radius = C \\times mass^S`
     Citation:
         Edmondson, K., Norris, J., & Kerins, E. 2023, Open J. Astrophysics,
         submitted [arXiv:2310.16733]
@@ -549,7 +549,7 @@ def edmonson_2023_mass(radius: float) -> Tuple[float, float, float]:
     """Calculate the mass of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
-        mass = C x radius^S
+        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
     Citation:
         Edmondson, K., Norris, J., & Kerins, E. 2023, Open J. Astrophysics,
         submitted [arXiv:2310.16733]
@@ -616,7 +616,7 @@ def muller_2024_radius(mass: float) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the Müller et al. (2024).
 
     Power law approximation:
-        radius = C x mass^S
+        :math:`radius = C \\times mass^S`
     Citation:
         Müller S., Baron J., Helled R., Bouchy F. & Parc L. 2024, A&A, 686, A296
 
@@ -659,7 +659,7 @@ def muller_2024_mass(
     """Calculate the mass of a planet using the Müller et al. (2024).
 
     Power law approximation:
-        mass = C x radius^S
+        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
     Citation:
         Müller S., Baron J., Helled R., Bouchy F. & Parc L. 2024, A&A, 686, A296
 
@@ -755,14 +755,14 @@ def estimate_mass(
     radius_err_max: float = 0.0,
     model: str = "ck17",
     multivariate: float = 0.5,
-    method: int = 1,
+    err_method: int = 0,
     density: float = 0.0,
     silent: bool = False,
-    error: bool = False,
 ) -> Tuple[float, float, float]:
     """Calculate the mass of a planet using a power-law approximation.
 
-    Equation: mass = C x radius^S
+    Equation:
+        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
 
     Parameters
     ----------
@@ -785,13 +785,14 @@ def estimate_mass(
         0 and 1.
         For trivariate model "ck17", it must be a tuple of two floats between
         0 and 1, where the sum of them must be lower equal than 1.
-    method : int, optional. Default: 1
+    err_method : int, optional. Default: 0
         Which method implement for error calculation.
+        Method 0: Do not calculate errors. Return both as 0.0.
         Method 1: (Naive) Error propagation with the power-law approximation,
         using the radius error as the maximum of the two extremes.
-        Warning: May return excecively large errors for multivariate
+        Warning: May return excessively large errors for multivariate
         sections.
-        Method 2: Evalaute the radius extremes and calculate each mass
+        Method 2: Evaluate the radius extremes and calculate each mass
         extreme with the power-law approximation.
         Method 3: Returns the approximate model error as value errors.
     density : float, optional. Default: 0.0
@@ -801,15 +802,12 @@ def estimate_mass(
     silent : bool, optional. Default: False
         Whether to silence the warning if the radius falls in a
         multivariate region, or if the estimation is not accurate.
-    error: bool, optional. Default: False
-        Whether to return the mass error estimation. If False, only the
-        mass estimation is returned.
 
     Returns
     -------
     Tuple[float, float, float]
-        Estimated mass, and its minimum ad maximum errors, in Earth masses.
-        If error=False, it returns only the mass.
+        Estimated mass, and its minimum and maximum errors, in Earth masses.
+        If err_method=0, the tuple is (mass, 0.0, 0.0).
     """
     # Calculate the mass
     if model == "ck17":
@@ -830,11 +828,11 @@ def estimate_mass(
         raise ValueError("Model not implemented.")
 
     # Calculate the mass error
-    if not error:
-        return mass
+    if err_method == 0:
+        return mass, 0.0, 0.0
 
     # Warn if necessary
-    if not silent and model in ["ck17", "o20", "m24"] and method == 1:
+    if not silent and model in ["ck17", "o20", "m24"] and err_method == 1:
         warnings.warn(
             "Using the naive error propagation method may generate"
             + " excecively large errors in multivariate sections",
@@ -850,7 +848,7 @@ def estimate_mass(
         c,
         s,
         x0,
-        method,
+        err_method,
         silent,
         0,
     )
@@ -864,14 +862,14 @@ def estimate_radius(
     mass_err_max: float = 0.0,
     model: str = "ck17",
     bivariate: float = 0.5,
-    method: int = 1,
+    err_method: int = 0,
     density: float = 0.0,
     silent: bool = False,
-    error: bool = False,
 ) -> Tuple[float, float, float]:
     """Calculate the radius of a planet using the power-law approximation.
 
-    Equation: radius = (1/C) x mass^(1/S)
+    Equation:
+        :math:`radius = C \\times mass^S`
 
     Parameters
     ----------
@@ -891,8 +889,9 @@ def estimate_radius(
         Probability of using the lower branch if the estimation falls in a
         bivariate region. Must be a number between 0 and 1.
         Only used if model is 'o20'.
-    method : int, optional. Default: 1
+    err_method : int, optional. Default: 0
         Which method implement for error calculation.
+        Method 0: Do not calculate errors. Return both as 0.0.
         Method 1: (Naive) Error propagation with the power-law approximation,
         using the mass error as the maximum of the two extremes.
         Method 2: Evalaute the mass extremes and calculate each radius extreme.
@@ -904,15 +903,12 @@ def estimate_radius(
     silent : bool, optional. Default: False
         Whether to silence the warning if the radius falls in a
         bivariate region, or if the estimation is not accurate.
-    error: bool, optional. Default: False
-        Whether to return the radius error estimation. If False, only the
-        radius estimation is returned.
 
     Returns
     -------
     Tuple[float, float, float]
-        Estimated radius, and its minimum ad maximum errors, in Earth radii.
-        If error=False, it returns only the radius.
+        Estimated radius, and its minimum and maximum errors, in Earth radii.
+        If err_method=0, the tuple is (radius, 0.0, 0.0).
     """
     # Calculate the radius
     if model == "ck17":
@@ -929,11 +925,11 @@ def estimate_radius(
         raise ValueError("Model not implemented.")
 
     # Calculate the radius error
-    if not error:
-        return radius
+    if err_method == 0:
+        return radius, 0.0, 0.0
 
     # Warn if necessary
-    if not silent and model == "o20" and method == 1:
+    if not silent and model == "o20" and err_method == 1:
         warnings.warn(
             "Using the naive error propagation method may generate"
             + " excecively large errors in multivariate sections",
@@ -942,7 +938,16 @@ def estimate_radius(
 
     # Use auxiliar error function
     radius_err_min, radius_err_max = _aux_error_estimator(
-        mass, mass_err_max, mass_err_min, radius, c, s, x0, method, silent, 1
+        mass,
+        mass_err_max,
+        mass_err_min,
+        radius,
+        c,
+        s,
+        x0,
+        err_method,
+        silent,
+        1,
     )
 
     return radius, radius_err_min, radius_err_max
