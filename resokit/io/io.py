@@ -288,9 +288,9 @@ def load_system_from_eu(
 
     Returns
     -------
-    Union[ResokitDataFrame, StaticPlanet, StaticSystem]
-        ResoKit DataFrame (if as_resokit is True),
-        or StaticSystem.
+    system : ResokitDataFrame or StaticSystem
+        Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
+        or :py:class:`StaticSystem`.
     """
     if load_dataset_kwargs is None:
         load_dataset_kwargs = {}
@@ -377,9 +377,9 @@ def load_system_from_nasa(
 
     Returns
     -------
-    Union[ResokitDataFrame, StaticSystem]
-        ResoKit DataFrame (if as_resokit is True),
-        or StaticSystem.
+    system : ResokitDataFrame or StaticSystem
+        Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
+        or :py:class:`StaticSystem`.
     """
     if load_dataset_kwargs is None:
         load_dataset_kwargs = {}

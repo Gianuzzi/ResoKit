@@ -78,20 +78,20 @@ def download_dataset(
     source : str
         Identifier for the data source ('eu' or 'nasa').
     overwrite : bool, optional. Default: False.
-        If True, overwrites the existing file if it exists.
+        If `True`, overwrites the existing file if it exists.
     verbose : bool, optional. Default: True.
-        If True, displays messages about the download process.
+        If `True`, displays messages about the download process.
     return_data : bool, optional. Default: False.
-        If True, returns the downloaded dataset as a DataFrame.
+        If `True`, returns the downloaded dataset as a DataFrame.
     store : bool, optional. Default: False.
-        If True, stores the dataset in memory.
+        If `True`, stores the dataset in memory.
 
     Returns
     -------
-    Path or None or pd.DataFrame
-        Path to the downloaded dataset
-        or the dataset itself if return_data=True,
-        or None if the file already exists and overwrite=False.
+    dataset : Path or None or DataFrame
+        `Path` to the downloaded dataset
+        or the dataset itself if `return_data=True`,
+        or `None` if the file already exists and `overwrite=False`.
     """
     # Check if requests is imported
     assert_module_imported(requests_imported, "requests")
@@ -164,13 +164,13 @@ def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
     Parameters
     ----------
     overwrite : bool, optional. Default: False.
-        If True, overwrites the existing ZIP file if it exists.
+        If `True`, overwrites the existing ZIP file if it exists.
     verbose : bool, optional. Default: True.
-        If True, print messages about the zipping process.
+        If `True`, print messages about the zipping process.
 
     Returns
     -------
-    Path
+    zip_path : Path
         Path to the created ZIP file.
     """
     zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
@@ -210,11 +210,11 @@ def check_file_age(source: str, from_zip: bool = True) -> int:
     source : str
         Identifier for the data source ('eu' or 'nasa').
     from_zip : bool, optional. Default: False.
-        If True, the file was loaded from the ZIP archive.
+        If `True`, check the file inside the ZIP archive.
 
     Returns
     -------
-    int
+    age : int
         Age of the file in days.
     """
     source = source.lower()  # Ensure lowercase
@@ -348,28 +348,28 @@ def load_dataset(
     source : str
         Identifier for the data source ('eu' or 'nasa').
     check_age : bool, optional. Default: False.
-        If True, displays the file's last modified date.
+        If `True`, displays the file's last modified date.
     download_if_missing : bool, optional
-        If True, downloads if dataset is missing.
+        If `True`, downloads if dataset is missing.
     extract : bool, optional. Default: False.
-        If True, extracts from ZIP archive if available.
+        If `True`, extracts from ZIP archive if available.
     only_index : bool, optional. Default: False.
-        If True, loads only the index columns.
+        If `True`, loads only the index columns.
     only_rows : list|int, optional. Default: [].
         If provided, loads only the specified rows.
         Remember that python is 0-indexed, so
         the first row (system) is 0.
     verbose : bool, optional. Default: True.
-        If True, prints messages about the process.
+        If `True`, prints messages about the process.
     store : bool, optional. Default: False.
-        If True, stores the dataset in memory.
+        If `True`, stores the dataset in memory.
     store_index : bool, optional. Default: True.
-        If True, stores the dataset index in memory.
+        If `True`, stores the dataset index in memory.
 
     Returns
     -------
-    pd.DataFrame or None
-        The loaded dataset as a DataFrame.
+    dataset : DataFrame
+        The loaded dataset as a pandas Data frame.
     """
     source = source.lower()  # Ensure lowercase
 
@@ -618,10 +618,9 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     Parameters
     ----------
     source : str
-        If provided, only clears the memory for the specified source.
-        If 'both', clears both sources.
+        Source to clear ('eu' or 'nasa' or 'both').
     verbose : bool, optional. Default: True.
-        If True, prints messages about the process.
+        If `True`, prints messages about the process.
     """
     source = source.lower()  # Ensure lowercase
 

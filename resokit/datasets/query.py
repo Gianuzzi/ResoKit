@@ -187,14 +187,9 @@ def query_online_data(
 
     Returns
     -------
-    Union[ResokitDataFrame, StaticSystem]
-        ResoKit DataFrame (if as_resokit is True),
-        or StaticSystem.
-
-    Returns
-    -------
-    pd.DataFrame
-        Resulting dataset as a pandas DataFrame.
+    data : ResokitDataFrame or StaticSystem
+        Results of the query in a :py:class:`ResokitDataFrame`
+        (if `as_resokit=True`), or :py:class:`StaticSystem`.
     """
     # Ensure requests and astropy modules are imported
     assert_module_imported(requests_imported, "requests")
@@ -270,8 +265,8 @@ def get_dataset_length(source: str) -> int:
 
     Returns
     -------
-    int
-        Number of entries in the dataset.
+    length : int
+        Amount of entries (rows) in the dataset.
     """
     # Ensure requests and astropy modules are imported
     assert_module_imported(requests_imported, "requests")

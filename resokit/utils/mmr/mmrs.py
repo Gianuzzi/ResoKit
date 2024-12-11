@@ -45,7 +45,7 @@ def mmr3b(
     ----------
     x : float or np.ndarray
         The independent variable for the curve.
-    resonance : Tuple[int, int, int]
+    resonance : tuple[int, int, int]
         Coefficients (a, b, c) defining the resonance.
 
     Returns
@@ -97,7 +97,7 @@ def mmrs_in_area(
 
     Parameters
     ----------
-    bounds : Tuple[float, float, float, float]
+    bounds : tuple[float, float, float, float]
         The limits of the region (x_min, x_max, y_min, y_max).
     order3 : int
         Exact order for 3P-MMRs (default: 0).
@@ -210,15 +210,15 @@ def _is_curve_within_bounds(
 
     Parameters
     ----------
-    resonance : List[int, int, int]
+    resonance : list[int, int, int]
         Coefficients defining the resonance.
-    bounds : Tuple[float, float, float, float]
+    bounds : tuple[float, float, float, float]
         The bounding region as (x_min, x_max, y_min, y_max).
 
     Returns
     -------
     bool
-        True if the curve intersects the region, False otherwise.
+        `True` if the curve intersects the region, `False` otherwise.
     """
     x_min, x_max, y_min, y_max = bounds
     i, j, k = resonance
@@ -297,11 +297,12 @@ def mindist_mmr3b(
         Initial guess for the optimization.
         If None, the function will use the middle point of the curve.
     minimize_kwargs : dict, optional
-        Additional arguments for the optimization function.
+        Additional arguments for :py:func:scipy.optimize.minimize
+        function.
 
     Returns
     -------
-    [x_min, y_min], distance_min : List[float], float
+    x_min, y_min, distance_min : tuple[float, float, float]
         The x-y coordinates of the minimum distance and the distance value.
     """
     # Singularity handling
@@ -349,14 +350,14 @@ def mindist_mmr3b(
     if result.success:
         x_min = result.x[0]
         distance_min = np.sqrt(result.fun)
-        return [x_min, mmr3b(x_min, resonance)], distance_min
+        return x_min, mmr3b(x_min, resonance), distance_min
     else:
         raise ValueError("Optimization failed!")
 
 
 def label_mmr3b(
     resonance: tuple, ax: plt.Axes, lims: tuple = None, warn: bool = True
-) -> None:
+) -> plt.Axes:
     """Annotate a plot with the label of a resonance line.
 
     The label is placed where the resonance line crosses either the
@@ -380,7 +381,8 @@ def label_mmr3b(
 
     Returns
     -------
-    None
+    ax : Matplotlib Axes
+        The axis object with the annotations.
     """
     a, b, c = resonance  # Coefficients of the resonance line
 
@@ -423,7 +425,7 @@ def label_mmr3b(
             stacklevel=2,
         )
 
-    return
+    return ax
 
 
 def plot_mmrs(
@@ -482,7 +484,7 @@ def plot_mmrs(
 
     Returns
     -------
-    plt.Axes
+    ax : Matplotlib Axes
         The axis object on which the plot was drawn.
     """
     # Get the current axis if not provided
