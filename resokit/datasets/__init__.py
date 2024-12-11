@@ -23,3 +23,12 @@ from .databases import clear_memory  # noqa
 from .databases import download_dataset  # noqa
 from .databases import load_dataset  # noqa
 from .query import query_online_data  # noqa
+
+# Make the functions available at the package level
+
+__all__ = [
+    "clear_memory",
+    "download_dataset",
+    "load_dataset",
+    "query_online_data",
+]

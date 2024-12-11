@@ -21,3 +21,10 @@
 
 from .models import estimate_radius  # noqa
 from .models import estimate_mass  # noqa
+
+# Make the functions available at the package level
+
+__all__ = [
+    "estimate_radius",
+    "estimate_mass",
+]

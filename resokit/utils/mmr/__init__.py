@@ -24,3 +24,13 @@ from .mmrs import mindist_mmr3b  # noqa
 from .mmrs import mmr3b  # noqa
 from .mmrs import mmrs_in_area  # noqa
 from .mmrs import plot_mmrs  # noqa
+
+# Make the functions available at the package level
+
+__all__ = [
+    "label_mmr3b",
+    "mindist_mmr3b",
+    "mmr3b",
+    "mmrs_in_area",
+    "plot_mmrs",
+]
