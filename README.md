@@ -56,8 +56,8 @@ $ python -m pip install -e .
 ```
 
 ## Authors
-- Emmanuel Gianuzzi <[egianuzzi@unc.edu.ar](egianuzzi@unc.edu.ar)> ([IATE-OAC-CONICET][], [FaMAF-UNC][]).
-- Matías Cerioni <[matias.cerioni@unc.edu.ar](matias.cerioni@unc.edu.ar)> ([IATE-OAC-CONICET][]).
+- Emmanuel Gianuzzi [egianuzzi@unc.edu.ar](egianuzzi@unc.edu.ar) ([IATE-OAC-CONICET][], [FaMAF-UNC][]).
+- Matías Cerioni [matias.cerioni@unc.edu.ar](matias.cerioni@unc.edu.ar) ([IATE-OAC-CONICET][]).
 
 
 
