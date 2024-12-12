@@ -15,6 +15,7 @@
 # =============================================================================
 
 import datetime
+import io
 import os
 import warnings
 from pathlib import Path
@@ -24,15 +25,13 @@ from zipfile import ZipFile
 import pandas as pd
 
 from resokit.core import df_to_resokit
-from resokit.datasets.utils import DATASET_DTYPES
-from resokit.utils.utils import assert_module_imported, parse_to_iter
+from resokit.datasets.utils import (
+    DATASET_DTYPES,
+    remove_from_zip,
+    request_data,
+)
+from resokit.utils.utils import parse_to_iter
 
-try:
-    import requests
-
-    requests_imported = True
-except ImportError:
-    requests_imported = False
 
 # =============================================================================
 # CONSTANTS
@@ -63,39 +62,35 @@ INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
 # =============================================================================
 
 
-def download_dataset(
-    source: str,
-    overwrite: bool = False,
-    verbose: bool = True,
-    return_data: bool = False,
-    store: bool = False,
-) -> Union[Path, pd.DataFrame, None]:
-    """Download the dataset from a specified source and saves it locally.
+def update_dataset(
+    source: str, verbose: bool = True, in_zip: bool = True, store: bool = False
+) -> Union[Path, None]:
+    """Update the dataset from a specified source and saves it locally.
 
     The dataset is downloaded from the provided URL and saved as a CSV file.
+    This csv file can be stored in a ZIP archive if requested, updating it.
+
+    Note: Requires the requests library to download the dataset.
 
     Parameters
     ----------
     source : str
         Identifier for the data source ('eu' or 'nasa').
-    overwrite : bool, optional. Default: False.
-        If `True`, overwrites the existing file if it exists.
     verbose : bool, optional. Default: True.
-        If `True`, displays messages about the download process.
-    return_data : bool, optional. Default: False.
-        If `True`, returns the downloaded dataset as a DataFrame.
+        If `True`, displays messages about the download and update
+        process.
+    in_zip : bool, optional. Default: True.
+        If `True`, updates the dataset in the ZIP archive,
+        otherwise updates the file directly.
     store : bool, optional. Default: False.
         If `True`, stores the dataset in memory.
 
     Returns
     -------
-    dataset : Path or None or DataFrame
-        `Path` to the downloaded dataset
-        or the dataset itself if `return_data=True`,
-        or `None` if the file already exists and `overwrite=False`.
+    updated : Path or None
+        `Path` to the downloaded dataset (if `in_zip=False`),
+        or `None` if `in_zip=True`.
     """
-    # Check if requests is imported
-    assert_module_imported(requests_imported, "requests")
 
     source = source.lower()  # Ensure lowercase
 
@@ -108,99 +103,67 @@ def download_dataset(
     url = DATASET_URLS[source]
     zip_path = BASE_PATH / ZIP_FILENAME
 
-    if (  # Check if the file exists and not overwrite
-        file_path.exists() and not overwrite
-    ):
-        raise FileExistsError(
-            f" {file_path} already exists. \n"
-            + "Use overwrite=True to redownload and overwrite.",
-            stacklevel=2,
-        )
+    # Download the dataset
+    data = request_data(url, verbose=verbose)
 
-        return
+    # Create a dataframe from the data
+    df = pd.read_csv(
+        io.BytesIO(data), dtype=DATASET_DTYPES[source], low_memory=False
+    )
 
-    elif (  # Check if ZIP exists and contains the file, but not overwrite
-        zip_path.exists()
-        and DATASET_FILENAMES[source] in ZipFile(zip_path).namelist()
-        and not overwrite
-    ):
-        warnings.warn(
-            f" {DATASET_FILENAMES[source]} found in {ZIP_FILENAME}. \n"
-            + "Use overwrite=True to redownload, or run load_dataset"
-            + f"(source='{source}', extract=True) to extract it.",
-            stacklevel=2,
-        )
+    # Make a simple check to see if the data is valid
+    if df.empty:
+        raise ValueError(f"Empty dataset downloaded from {url}.")
 
-        return
-
-    # Download if not found
     if verbose:
-        print(f" Downloading data from {url}...")
+        print(" Data downloaded successfully.")
 
-    response = requests.get(url=url)  # Download the file
-    response.raise_for_status()  # Check for errors
+    # Store the data in memory
+    if store:
+        IN_MEMORY_INDEXES[source] = df[INDEX_COLUMNS[source]].copy()
+        IN_MEMORY_DATASETS[source] = df.copy()
+        IS_FULLY_STORED[source] = True
+
+    # Save the file...
+
+    # Check if we are updating the ZIP archive
+    if in_zip:
+        # Check if the ZIP archive exists
+        if not zip_path.exists():
+            warnings.warn(
+                f"ZIP archive {ZIP_FILENAME} not found.", stacklevel=2
+            )
+            if verbose:
+                print(f" Creating the ZIP archive {ZIP_FILENAME}...")
+        else:
+            # Remove the file from the ZIP archive
+            remove_from_zip(
+                zip_path, DATASET_FILENAMES[source], verbose=verbose
+            )
+
+        # Write (and create if necessary) the file to the ZIP archive
+        with ZipFile(zip_path, "a") as zipf:
+            zipf.writestr(DATASET_FILENAMES[source], data)
+
+        if verbose:
+            print(f" Updated {DATASET_FILENAMES[source]} in {ZIP_FILENAME}")
+
+        return
+
+    # Check if the file exists
+    if not file_path.exists():
+        warnings.warn(f"File {file_path} not found.", stacklevel=2)
+        if verbose:
+            print(f" Creating the file {file_path}...")
 
     # Write the file
-    if verbose:
-        print(" Writing data to file...")
-
-    # Save the file
     with open(file_path, "wb") as f:
-        f.write(response.content)
+        f.write(data)
 
-    # Print message if verbose
     if verbose:
-        print(f" File {file_path} successfully downloaded and saved.")
-
-    # Store in memory if requested, and return if requested
-    if return_data:
-        return load_dataset(source=source, verbose=verbose, store=store)
+        print(f" Updated {file_path}")
 
     return file_path
-
-
-def create_zip_archive(overwrite: bool = False, verbose: bool = True) -> Path:
-    """Create a ZIP archive containing both EU and NASA dataset CSV files.
-
-    Parameters
-    ----------
-    overwrite : bool, optional. Default: False.
-        If `True`, overwrites the existing ZIP file if it exists.
-    verbose : bool, optional. Default: True.
-        If `True`, print messages about the zipping process.
-
-    Returns
-    -------
-    zip_path : Path
-        Path to the created ZIP file.
-    """
-    zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
-
-    if zip_path.exists() and not overwrite:  # Check if ZIP already exists
-        raise FileExistsError(
-            "ZIP archive already exists. Use overwrite=True."
-        )
-
-    with ZipFile(zip_path, "w") as zipf:
-        for _, filename in DATASET_FILENAMES.items():
-
-            file_path = BASE_PATH / filename  # Path to the dataset file
-
-            # Check if the file exists before adding to ZIP
-            if file_path.exists():
-                zipf.write(file_path, arcname=filename)  # Add to ZIP
-                if verbose:
-                    print(f" Added {filename} to {ZIP_FILENAME}")
-            else:
-                raise FileNotFoundError(
-                    f"{filename} not found, please download it first."
-                )
-
-    # Print message if verbose
-    if verbose:
-        print(f" Created ZIP archive: {zip_path}")
-
-    return zip_path
 
 
 def check_file_age(source: str, from_zip: bool = True) -> int:
@@ -560,7 +523,7 @@ def load_dataset(
         if download_if_missing:
 
             print(f" {file_path} not found, attempting download...")
-            download_dataset(source=source, verbose=verbose)
+            update_dataset(source=source, verbose=verbose, in_zip=False)
             data = pd.read_csv(
                 file_path,
                 header=base,

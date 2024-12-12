@@ -14,7 +14,20 @@
 # IMPORTS
 # =============================================================================
 
+import os
+import shutil
+import tempfile
+import zipfile
 from types import MappingProxyType
+
+from resokit.utils import assert_module_imported
+
+try:
+    import requests
+
+    requests_imported = True
+except ImportError:
+    requests_imported = False
 
 # =============================================================================
 # CONSTANTS
@@ -417,3 +430,92 @@ _NASA_MAPPING = {
 
 # Mapping of dataset names to their respective dtypes
 DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
+
+
+# =============================================================================
+# FUNCTIONS
+# =============================================================================
+
+
+def remove_from_zip(zipfname: str, *filenames: str, verbose: bool = False):
+    """Remove files from a zip archive.
+
+    This function removes files from a zip archive without extracting it.
+    It is unefficient (especially for large archives) because it decompresses
+    and recompresses the whole archive.
+
+    Parameters
+    ----------
+    zipfname : str
+        Path to the zip archive.
+    filenames : str
+        Names of the files to remove from the archive.
+    verbose : bool, optional
+        If True, print messages about the process.
+
+    Returns
+    -------
+    None
+    """
+    # Check if any of the files to remove is in the archive
+    has_files = False
+    with zipfile.ZipFile(zipfname, "r") as zipread:
+        for filename in filenames:
+            if filename in zipread.namelist():
+                has_files = True
+                break
+    if not has_files:
+        return
+
+    # Create a temporary directory
+    tempdir = tempfile.mkdtemp()
+    try:
+        # Create a new zip archive
+        tempname = os.path.join(tempdir, "new.zip")
+        # Read the original archive
+        with zipfile.ZipFile(zipfname, "r") as zipread:
+            # Write the new archive
+            with zipfile.ZipFile(tempname, "w") as zipwrite:
+                # Copy all files except the ones to remove
+                for item in zipread.infolist():
+                    if item.filename not in filenames:
+                        data = zipread.read(item.filename)
+                        zipwrite.writestr(item, data)
+        # Replace the original archive with the new one
+        shutil.move(tempname, zipfname)
+        if verbose:
+            print(f"Removed files: {', '.join(filenames)} from {zipfname}")
+    finally:
+        # Remove the temporary directory
+        shutil.rmtree(tempdir)
+
+
+def request_data(
+    url: str,
+    verbose: bool = True,
+) -> bytes:
+    """Download the data from a specified URL.
+
+    Parameters
+    ----------
+    url : str
+        URL to download the data from.
+    verbose : bool, optional
+        If True, print messages about the download process.
+
+    Returns
+    -------
+    content : bytes
+        The downloaded data.
+    """
+    # Check if requests is imported
+    assert_module_imported(requests_imported, "requests")
+
+    if verbose:
+        print(f" Downloading data from {url}...")
+
+    # Download the file
+    response = requests.get(url=url)  # Download the file
+    response.raise_for_status()  # Check for errors
+
+    return response.content

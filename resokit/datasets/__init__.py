@@ -20,7 +20,7 @@
 # =============================================================================
 
 from .databases import clear_memory  # noqa
-from .databases import download_dataset  # noqa
+from .databases import update_dataset  # noqa
 from .databases import load_dataset  # noqa
 from .query import query_online_data  # noqa
 
@@ -28,7 +28,7 @@ from .query import query_online_data  # noqa
 
 __all__ = [
     "clear_memory",
-    "download_dataset",
+    "update_dataset",
     "load_dataset",
     "query_online_data",
 ]
