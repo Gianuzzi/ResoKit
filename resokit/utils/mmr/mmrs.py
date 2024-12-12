@@ -448,6 +448,13 @@ def plot_mmrs(
     2-body mean-motion resonances (2P-MMRs) in a specified region of the phase
     space.
 
+    Note
+    ----
+    The function will adjust the bounds to the axis limits if the axis object
+    is provided. If the `label_mmrs` option is used, it is recommended to set
+    the `xlim` and `ylim` before calling this function, or the labels may be
+    placed outside the plot.
+
     Parameters
     ----------
     bounds : Tuple[float, float, float, float], optional
