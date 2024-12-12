@@ -32,16 +32,16 @@ import pandas as pd
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.utils import (
     MAPPINGS,
+    M_EAR,
+    M_JUP,
     RESO_DTYPES,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
+    R_EAR,
+    R_JUP,
     float_to_fraction,
     parse_to_iter,
-    R_JUP,
-    R_EAR,
-    M_JUP,
-    M_EAR,
 )
 
 # =============================================================================
@@ -227,7 +227,7 @@ class ResokitDataFrame:
         return html
 
     def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:
-        """Converts data to pandas data frame.
+        """Convert data to pandas data frame.
 
         This method constructs a data frame with the data inside the
         data_df attribute.
@@ -254,7 +254,7 @@ class ResokitDataFrame:
         return df.copy() if copy else df
 
     def to_dict(self) -> dict:
-        """Converts metadata to a dictionary.
+        """Convert metadata to a dictionary.
 
         This method constructs a dictionary with the data inside the
         metadata attribute.
@@ -374,9 +374,15 @@ def df_to_resokit(
     source: str,
     drop: bool = True,
     copy: bool = False,
+    sort_by: Union[str, bool] = "P",
+    return_df: bool = False,
     metadata: dict = None,
 ) -> ResokitDataFrame:
     """Convert ExoplanetEU or NASA data to :py:class:`ResokitDataFrame`.
+
+    This function converts a DataFrame from ExoplanetEU or NASA to a
+    :py:class:`ResokitDataFrame`. The columns are renamed according to the
+    default mapping, and the DataFrame is sorted by the specified column.
 
     Parameters
     ----------
@@ -387,9 +393,18 @@ def df_to_resokit(
     drop : bool, optional. Default: True.
         Whether to drop columns not in the mapping.
     copy : bool, optional. Default: False.
-        Whether to return a copy of the DataFrame.
+        Whether to edit a copy of the DataFrame, instead of the original.
+        Despite this, the output will always be a
+        :py:class:`ResokitDataFrame`.
+    sort_by : str, bool, optional. Default: "P".
+        Column to sort the data by.
+        If `False` or `None`, do not sort the data.
+        If `True`, sort by period ("P").
+    return_df : bool, optional. Default: False.
+        Whether to return the a pandas Data frame instead of the
+        :py:class:`ResokitDataFrame`.
     metadata : dict, optional. Default: None.
-        Metadata of the dataset.
+        Metadata to be added to the :py:class:`ResokitDataFrame`.
 
     Returns
     -------
@@ -424,8 +439,16 @@ def df_to_resokit(
             df["n_err_min"] = 2.0 * pi / df["P_err_max"]
             df["n_err_max"] = 2.0 * pi / df["P_err_min"]
         df["n"] = 2.0 * pi / df["P"]
-        # Sort by period
-        df = df.sort_values(by="P", ascending=True)
+
+    # Sort by
+    if sort_by and sort_by is not None:
+        if sort_by is True:
+            sort_by = "P"
+        df = df.sort_values(by=sort_by, ascending=True)
+
+    # Return DataFrame if needed
+    if return_df:
+        return df
 
     # Add metadata
     if metadata is None:
@@ -472,7 +495,10 @@ class StaticPlanet(ResokitDataFrame):
     @suffix_.default
     def _suffix__default(self):
         """Set the default value for suffix_."""
-        return self.data_df["name"].split(" ")[-1]
+        aux = self.data_df["name"].split(" ")[-1]
+        if len(aux) == 1:
+            return aux
+        return aux[-1]
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -587,7 +613,7 @@ class StaticPlanet(ResokitDataFrame):
         self,
         **kwargs,
     ) -> float:
-        """Calculate the mass of the planet using a power-law approximation.
+        r"""Calculate the mass of the planet using a power-law approximation.
 
         Equation:
             :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
@@ -596,7 +622,8 @@ class StaticPlanet(ResokitDataFrame):
         ----------
         kwargs : dict
             Keyword arguments for the
-            :py:func:`resokit.utils.mass_radius.estimate_mass` function.
+            :py:func:`resokit.utils.mass_radius.estimate_mass_single`
+            function.
 
         Returns
         -------
@@ -639,7 +666,7 @@ class StaticPlanet(ResokitDataFrame):
         self,
         **kwargs,
     ) -> Tuple[float, float, float]:
-        """Calculate the radius of a planet using a power-law approximation.
+        r"""Calculate the radius of a planet using a power-law approximation.
 
         Equation:
             :math:`radius = C \\times mass^S`
@@ -648,7 +675,8 @@ class StaticPlanet(ResokitDataFrame):
         ----------
         kwargs : dict
             Keyword arguments for the
-            :py:func:`resokit.utils.mass_radius.estimate_radius` function.
+            :py:func:`resokit.utils.mass_radius.estimate_radius_single`
+            function.
 
         Returns
         -------
@@ -1201,7 +1229,7 @@ class StaticSystem:
     def estimate_mass(
         self, which: Union[str, int, List[int]] = "all", **kwargs
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
-        """Estimate the mass of selected planets in the system.
+        r"""Estimate the mass of selected planets in the system.
 
         Parameters
         ----------
@@ -1257,7 +1285,7 @@ class StaticSystem:
     def estimate_radius(
         self, which: Union[str, int, List[int]] = "all", **kwargs
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
-        """Estimate the radius of selected planets in the system.
+        r"""Estimate the radius of selected planets in the system.
 
         Parameters
         ----------
@@ -1320,8 +1348,9 @@ class StaticSystem:
         label: Union[bool, str, Iterable[str]] = True,
         plot_kwargs: dict = None,
     ) -> plt.Axes:
-        """Plot the x vs y data of the system. Uses :py:func:`plt.errorbar`
-        internally.
+        """Plot the x vs y data of the system.
+
+        Uses :py:func:`plt.errorbar` internally.
 
         Parameters
         ----------
@@ -1377,13 +1406,13 @@ class StaticSystem:
             # Plot planets
             for i, planet in enumerate(self.planets):
                 ax = planet.plot(
-                    x,
-                    y,
-                    error_x,
-                    error_y,
-                    ax,
-                    label[i],
-                    plot_kwargs,
+                    x=x,
+                    y=y,
+                    error_x=error_x,
+                    error_y=error_y,
+                    ax=ax,
+                    label=label[i],
+                    **plot_kwargs,
                 )
 
             return ax
@@ -2019,8 +2048,7 @@ def _create_static_planet(
 def resokit_to_system(
     resokit_data: ResokitDataFrame,
 ) -> StaticSystem:
-    """Convert a :py:class:`ResokitDataFrame` to a :py:class:`StaticSystem`
-    instance.
+    """Convert a :py:class:`ResokitDataFrame` to a :py:class:`StaticSystem`.
 
     Parameters
     ----------
