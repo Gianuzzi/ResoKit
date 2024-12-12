@@ -22,9 +22,9 @@ This module provides tools for estimating the mass (or radius) from the radius
 # ============================================================================
 
 import warnings
-from typing import Tuple
+from typing import Tuple, Union
 
-from numpy import log, pi, random, sqrt
+import numpy as np
 
 from resokit.utils.utils import M_EAR, M_JUP, M_SUN, R_EAR
 
@@ -34,7 +34,7 @@ from resokit.utils.utils import M_EAR, M_JUP, M_SUN, R_EAR
 
 
 def power_law(x: float, c: float, s: float, x0: float = 1.0) -> float:
-    """Calculate a power-law.
+    r"""Calculate a power-law.
 
     Equation: :math:`y = c \\times \\left(\\frac{x}{x}\\right)^s`
 
@@ -107,22 +107,22 @@ def power_law_error(
     if y == 0:
         y = power_law(x, c, s, x0)
 
-    return sqrt(
+    return np.sqrt(
         (y / c * c_err) ** 2  # dy/dc
-        + (y * log(x / x0) * s_err) ** 2  # dy/ds
+        + (y * np.log(x / x0) * s_err) ** 2  # dy/ds
         + (y * s / x * x_err) ** 2  # dy/dx
         + (y * s / x0 * x0_err) ** 2  # dy/dx0
     )
 
 
 def chen_kipp_2017_radius(mass: float) -> Tuple[float, float, float]:
-    """Calculate the radius of a planet using the Chen & Kipping (2017).
+    r"""Calculate the radius of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
         :math:`radius = C \\times mass^S`
     Citation:
         Chen, J., & Kipping, D. 2017, ApJ, 834, 17
-    The original code is available at:
+    For a complete implementation of the method, see:
         https://github.com/chenjj2/forecaster
 
     Parameters
@@ -166,13 +166,13 @@ def chen_kipp_2017_radius(mass: float) -> Tuple[float, float, float]:
 def chen_kipp_2017_mass(
     radius: float, trivariate: tuple = (0.15, 0.8), silent: bool = False
 ) -> Tuple[float, float]:
-    """Calculate the mass of a planet using the Chen & Kipping (2017).
+    r"""Calculate the mass of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
         :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
     Citation:
         Chen, J., & Kipping, D. 2017, ApJ, 834, 17
-    The original code is available at:
+    For a complete implementation of the method, see:
         https://github.com/chenjj2/forecaster
 
     Parameters
@@ -253,7 +253,7 @@ def chen_kipp_2017_mass(
     if sumb < 0 or sumb > 1:
         raise ValueError("Sum of trivariate must be a number between 0 and 1.")
 
-    prob = random.rand()  # Get a random probability
+    prob = np.random.rand()  # Get a random probability
 
     if prob < trivariate[0]:  # Use second branch
         return (
@@ -284,7 +284,7 @@ def otegi_2020_radius(
     bivariate: float = 0.5,
     silent: bool = False,
 ) -> Tuple[float, float, float]:
-    """Calculate the radius of a planet using Otegi et al. (2020).
+    r"""Calculate the radius of a planet using Otegi et al. (2020).
 
     Power law approximation:
         :math:`radius = C \\times mass^S`
@@ -354,8 +354,8 @@ def otegi_2020_radius(
     radius2 = power_law(mass, c2[0], s2[0], x0[0])
 
     # Calculate the density
-    density1 = mass / (4 / 3 * pi * radius1**3)
-    density2 = mass / (4 / 3 * pi * radius2**3)
+    density1 = mass / (4 / 3 * np.pi * radius1**3)
+    density2 = mass / (4 / 3 * np.pi * radius2**3)
 
     # Check if lower or upper branch
 
@@ -378,7 +378,7 @@ def otegi_2020_radius(
         if bivariate < 0 or bivariate > 1:
             raise ValueError("Bivariate must be a number between 0 and 1.")
 
-        if random.rand() < bivariate:  # Use first branch
+        if np.random.rand() < bivariate:  # Use first branch
             return radius1, c1, s1, x0
         return radius2, c2, s2, x0  # Use second branch
 
@@ -397,7 +397,7 @@ def otegi_2020_mass(
     bivariate: float = 0.5,
     silent: bool = False,
 ) -> Tuple[float, float, float]:
-    """Calculate the mass of a planet using Otegi et al. (2020).
+    r"""Calculate the mass of a planet using Otegi et al. (2020).
 
     Power law approximation:
         :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
@@ -466,8 +466,8 @@ def otegi_2020_mass(
     mass2 = power_law(radius, c2[0], s2[0], x0[0])
 
     # Calculate the density
-    density1 = mass1 / (4 / 3 * pi * radius**3)
-    density2 = mass2 / (4 / 3 * pi * radius**3)
+    density1 = mass1 / (4 / 3 * np.pi * radius**3)
+    density2 = mass2 / (4 / 3 * np.pi * radius**3)
 
     # Check if lower or upper branch
 
@@ -490,7 +490,7 @@ def otegi_2020_mass(
         if bivariate < 0 or bivariate > 1:
             raise ValueError("Bivariate must be a number between 0 and 1.")
 
-        if random.rand() < bivariate:  # Use first branch
+        if np.random.rand() < bivariate:  # Use first branch
             return mass1, c1, s1, x0
         return mass2, c2, s2, x0  # Use second branch
 
@@ -504,7 +504,7 @@ def otegi_2020_mass(
 
 
 def edmonson_2023_radius(mass: float) -> Tuple[float, float, float]:
-    """Calculate the radius of a planet using the Edmondson et al. (2023).
+    r"""Calculate the radius of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
         :math:`radius = C \\times mass^S`
@@ -546,7 +546,7 @@ def edmonson_2023_radius(mass: float) -> Tuple[float, float, float]:
 
 
 def edmonson_2023_mass(radius: float) -> Tuple[float, float, float]:
-    """Calculate the mass of a planet using the Edmondson et al. (2023).
+    r"""Calculate the mass of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
         :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
@@ -613,7 +613,7 @@ def edmonson_2023_mass(radius: float) -> Tuple[float, float, float]:
 
 
 def muller_2024_radius(mass: float) -> Tuple[float, float, float]:
-    """Calculate the radius of a planet using the Müller et al. (2024).
+    r"""Calculate the radius of a planet using the Müller et al. (2024).
 
     Power law approximation:
         :math:`radius = C \\times mass^S`
@@ -656,7 +656,7 @@ def muller_2024_radius(mass: float) -> Tuple[float, float, float]:
 def muller_2024_mass(
     radius: float, bivariate: float = 0.5, silent: bool = False
 ) -> Tuple[float, float, float]:
-    """Calculate the mass of a planet using the Müller et al. (2024).
+    r"""Calculate the mass of a planet using the Müller et al. (2024).
 
     Power law approximation:
         :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
@@ -733,7 +733,7 @@ def muller_2024_mass(
     if bivariate < 0 or bivariate > 1:
         raise ValueError("Bivariate must be a number between 0 and 1.")
 
-    if random.rand() < bivariate:  # Second branch
+    if np.random.rand() < bivariate:  # Second branch
         return (
             power_law(radius, x0[0], 1.0 / s2[0], c2[0]),
             x0,
@@ -749,7 +749,7 @@ def muller_2024_mass(
     )
 
 
-def estimate_mass(
+def estimate_mass_single(
     radius: float,
     radius_err_min: float = 0.0,
     radius_err_max: float = 0.0,
@@ -759,7 +759,7 @@ def estimate_mass(
     density: float = 0.0,
     silent: bool = False,
 ) -> Tuple[float, float, float]:
-    """Calculate the mass of a planet using a power-law approximation.
+    r"""Calculate the mass of a planet using a power-law approximation.
 
     Equation:
         :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
@@ -809,6 +809,9 @@ def estimate_mass(
         Estimated mass, and its minimum and maximum errors, in Earth masses.
         If err_method=0, the tuple is (mass, 0.0, 0.0).
     """
+    # Check if radius is NaN
+    if np.isnan(radius):
+        return np.nan, np.nan, np.nan
     # Calculate the mass
     if model == "ck17":
         mass, c, s, x0 = chen_kipp_2017_mass(
@@ -856,7 +859,7 @@ def estimate_mass(
     return mass, mass_err_min, mass_err_max
 
 
-def estimate_radius(
+def estimate_radius_single(
     mass: float,
     mass_err_min: float = 0.0,
     mass_err_max: float = 0.0,
@@ -866,7 +869,7 @@ def estimate_radius(
     density: float = 0.0,
     silent: bool = False,
 ) -> Tuple[float, float, float]:
-    """Calculate the radius of a planet using the power-law approximation.
+    r"""Calculate the radius of a planet using the power-law approximation.
 
     Equation:
         :math:`radius = C \\times mass^S`
@@ -910,6 +913,9 @@ def estimate_radius(
         Estimated radius, and its minimum and maximum errors, in Earth radii.
         If err_method=0, the tuple is (radius, 0.0, 0.0).
     """
+    # Check if mass is NaN
+    if np.isnan(mass):
+        return np.nan, np.nan, np.nan
     # Calculate the radius
     if model == "ck17":
         radius, c, s, x0 = chen_kipp_2017_radius(mass)
@@ -1002,3 +1008,188 @@ def _aux_error_estimator(
         raise ValueError(f"Error method '{method}' not implemented.")
 
     return output_err_min, output_err_max
+
+
+estimate_mass_vec = np.vectorize(
+    estimate_mass_single,
+    doc="Vectorized version of :py:func:`estimate_mass_single`.",
+    excluded=["model", "multivariate", "err_method", "density", "silent"],
+)
+
+
+estimate_radius_vec = np.vectorize(
+    estimate_radius_single,
+    doc="Vectorized version of :py:func:`estimate_radius_single`.",
+    excluded=["model", "bivariate", "err_method", "density", "silent"],
+)
+
+
+def estimate_radius(
+    mass: Union[float, np.ndarray],
+    mass_err_min: Union[float, np.ndarray] = 0.0,
+    mass_err_max: Union[float, np.ndarray] = 0.0,
+    model: str = "ck17",
+    bivariate: float = 0.5,
+    err_method: int = 0,
+    density: float = 0.0,
+    silent: bool = False,
+) -> Union[Tuple[float, float, float], np.ndarray]:
+    r"""Calculate the radius of a planet using the power-law approximation.
+
+    Equation:
+        :math:`radius = C \\times mass^S`
+
+    Parameters
+    ----------
+    mass : float, np.ndarray
+        Mass of the planet, in Earth masses.
+    mass_err_min : float, np.ndarray
+        Lower error of the mass, in Earth masses.
+    mass_err_max : float, np.ndarray
+        Upper error of the mass, in Earth masses.
+    model : str, optional. Default: "ck17"
+        Model to use for the mass-radius power-law relation.
+        'ck17': Chen & Kipping (2017)
+        'o20': Otegi et al. (2020) [density|bivariate]
+        'e23': Edmondson et al. (2023)
+        'm24': Müller et al. (2024)
+    bivariate : float, optional. Default: 0.5
+        Probability of using the lower branch if the estimation falls in a
+        bivariate region. Must be a number between 0 and 1.
+        Only used if model is 'o20'.
+    err_method : int, optional. Default: 0
+        Which method implement for error calculation.
+        Method 0: Do not calculate errors. Return both as 0.0.
+        Method 1: (Naive) Error propagation with the power-law approximation,
+        using the mass error as the maximum of the two extremes.
+        Method 2: Evalaute the mass extremes and calculate each radius extreme.
+        Method 3: Returns the approximate model error as value errors.
+    density : float, optional. Default: 0.0
+        Density of the planet, in kg m^-3.
+        Only used if model is 'o20'. If equal to 0.0, the code uses
+        bivariate
+    silent : bool, optional. Default: False
+        Whether to silence the warning if the radius falls in a
+        bivariate region, or if the estimation is not accurate.
+
+    Returns
+    -------
+    result : tuple[float, float, float] or np.ndarray
+        Estimated radius, and its minimum and maximum errors, in Earth radii.
+        If mass is a scalar, the tuple is
+        (radius, radius_err_min, radius_err_max),
+        else it is a (n,3) numpy array.
+        If `err_method=0`, the tuple | array is (radius, 0.0, 0.0).
+    """
+    if isinstance(mass, (int, float)):
+        return estimate_radius_single(
+            mass=mass,
+            mass_err_min=mass_err_min,
+            mass_err_max=mass_err_max,
+            model=model,
+            bivariate=bivariate,
+            err_method=err_method,
+            density=density,
+            silent=silent,
+        )
+
+    radius, radius_err_min, radius_err_max = estimate_radius_vec(
+        mass=mass,
+        mass_err_min=mass_err_min,
+        mass_err_max=mass_err_max,
+        model=model,
+        bivariate=bivariate,
+        err_method=err_method,
+        density=density,
+        silent=silent,
+    )
+
+    return np.array([radius, radius_err_min, radius_err_max]).T
+
+
+def estimate_mass(
+    radius: Union[float, np.ndarray],
+    radius_err_min: Union[float, np.ndarray] = 0.0,
+    radius_err_max: Union[float, np.ndarray] = 0.0,
+    model: str = "ck17",
+    multivariate: Union[float, tuple, list] = (0.1, 0.85),
+    err_method: int = 0,
+    density: float = 0.0,
+    silent: bool = False,
+) -> Union[Tuple[float, float, float], np.ndarray]:
+    r"""Calculate the mass of a planet using a power-law approximation.
+
+    Equation:
+        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
+
+    Parameters
+    ----------
+    radius : float, np.ndarray
+        Radius of the planet, in Earth radii.
+    radius_err_min : float, np.ndarray
+        Lower error of the radius, in Earth radii.
+    radius_err_max : float, np.ndarray
+        Upper error of the radius, in Earth radii.
+    model : str, optional. Default: "ck17"
+        Model to use for the mass-radius power-law relation.
+        'ck17': Chen & Kipping (2017) [trivariate]
+        'o20': Otegi et al. (2020) [density|bivariate]
+        'e23': Edmondson et al. (2023)
+        'm24': Müller et al. (2024) [bivariate]
+    multivariate : float, tuple, optional. Default: 0.5
+        Probability of using the (first, second, ...) branch if the estimation
+        falls in a multivariate region.
+        For bivariate models ('o20', 'm24'), it must be a float between
+        0 and 1.
+        For trivariate model "ck17", it must be a tuple of two floats between
+        0 and 1, where the sum of them must be lower equal than 1.
+    err_method : int, optional. Default: 0
+        Which method implement for error calculation.
+        Method 0: Do not calculate errors. Return both as 0.0.
+        Method 1: (Naive) Error propagation with the power-law approximation,
+        using the radius error as the maximum of the two extremes.
+        Warning: May return excessively large errors for multivariate
+        sections.
+        Method 2: Evaluate the radius extremes and calculate each mass
+        extreme with the power-law approximation.
+        Method 3: Returns the approximate model error as value errors.
+    density : float, optional. Default: 0.0
+        Density of the planet, in kg m^-3.
+        Only used if model is 'o20'. If equal to 0.0, the code uses
+        multivariate float instead, to determine which branch to use.
+    silent : bool, optional. Default: False
+        Whether to silence the warning if the radius falls in a
+        multivariate region, or if the estimation is not accurate.
+
+    Returns
+    -------
+    result : tuple[float, float, float] or np.ndarray
+        Estimated mass, and its minimum and maximum errors, in Earth masses.
+        If radius is a scalar, the tuple is (mass, mass_err_min, mass_err_max),
+        else it is a (n,3) numpy array.
+        If `err_method=0`, the tuple | array is (mass, 0.0, 0.0).
+    """
+    if isinstance(radius, (int, float)):
+        return estimate_mass_single(
+            radius=radius,
+            radius_err_min=radius_err_min,
+            radius_err_max=radius_err_max,
+            model=model,
+            multivariate=multivariate,
+            err_method=err_method,
+            density=density,
+            silent=silent,
+        )
+
+    mass, mass_err_min, mass_err_max = estimate_mass_vec(
+        radius=radius,
+        radius_err_min=radius_err_min,
+        radius_err_max=radius_err_max,
+        model=model,
+        multivariate=multivariate,
+        err_method=err_method,
+        density=density,
+        silent=silent,
+    )
+
+    return np.array([mass, mass_err_min, mass_err_max]).T
