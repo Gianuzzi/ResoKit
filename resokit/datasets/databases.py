@@ -23,6 +23,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 
+from resokit.core import df_to_resokit
 from resokit.datasets.utils import DATASET_DTYPES
 from resokit.utils.utils import assert_module_imported, parse_to_iter
 
@@ -329,6 +330,7 @@ def _store_rows(
 
 def load_dataset(
     source: str,
+    to_resokit: bool = True,
     check_age: bool = False,
     download_if_missing: bool = False,
     extract: bool = False,
@@ -347,8 +349,13 @@ def load_dataset(
     ----------
     source : str
         Identifier for the data source ('eu' or 'nasa').
+    to_resokit : bool, optional. Default: True.
+        If `True`, returns the dataset including only the columns
+        required by ResoKit.
+        Note: This option is only available for the full dataset.
     check_age : bool, optional. Default: False.
         If `True`, displays the file's last modified date.
+        used by ResoKit.
     download_if_missing : bool, optional
         If `True`, downloads if dataset is missing.
     extract : bool, optional. Default: False.
@@ -426,6 +433,15 @@ def load_dataset(
             )
 
         if len(data_stored) == len(requested_rows):
+            if to_resokit:
+                return df_to_resokit(
+                    data_stored,
+                    source=source,
+                    drop=True,
+                    copy=False,
+                    sort_by=False,
+                    return_df=True,
+                )
             return data_stored
 
         # Add header and update only_rows
@@ -457,8 +473,18 @@ def load_dataset(
         if verbose:
             print(" Loading memory stored dataset...")
         df = _load_stored_rows(source, full=True)[0]
-        # Return the sorted dataset
-        return df.reindex(sorted(df.index), copy=False)
+        # Re-sort dataset
+        df = df.reindex(sorted(df.index), copy=False)
+        if to_resokit:
+            return df_to_resokit(
+                df,
+                source=source,
+                drop=True,
+                copy=False,
+                sort_by=False,
+                return_df=True,
+            )
+        return df
 
     # Define paths and ZIP extraction flag
     file_path = BASE_PATH / DATASET_FILENAMES[source]
@@ -586,7 +612,16 @@ def load_dataset(
         data = data.reindex(new_index, copy=False)
 
     # Check storeing
-    if not store_index and not store:
+    if not store_index and not store:  # If not storing, return the data
+        if to_resokit:
+            return df_to_resokit(
+                data,
+                source=source,
+                drop=True,
+                copy=False,
+                sort_by=False,
+                return_df=True,
+            )
         return data
 
     # Store with only_rows
@@ -609,6 +644,16 @@ def load_dataset(
         IN_MEMORY_DATASETS[source] = data.copy()
         IS_FULLY_STORED[source] = True
 
+    # Return the dataset
+    if to_resokit:
+        return df_to_resokit(
+            data,
+            source=source,
+            drop=True,
+            copy=False,
+            sort_by=False,
+            return_df=True,
+        )
     return data
 
 
