@@ -202,7 +202,12 @@ def _load_system_from_db(
     if load_dataset_kwargs is None:
         load_dataset_kwargs = {}
     load_dataset_kwargs.update(
-        {"store": store, "verbose": verbose, "store_index": store_index}
+        {
+            "store": store,
+            "verbose": verbose,
+            "store_index": store_index,
+            "to_resokit": False,
+        }
     )
 
     # Load the dataset

@@ -178,8 +178,14 @@ def query_online_data(
         Planet name.
     default_flag : int, optional. Default: 1.
         Restrict to default values in NASA dataset.
+        If equal to 0, only returns non default parameter set for each planet.
+        If equal to 1, only returns default parameter set for each planet.
+        If None, all planet sets (default and not) are returned.
     controversial_flag : int, optional. Default: 0.
         Restrict to controversial planets in NASA dataset.
+        If equal to 0, only returns confirmed planets.
+        If equal to 1, only returns controversial planets.
+        If None, all planets (confirmed and not) are returned.
     verbose : bool, optional. Default: True.
         Print query information.
     as_resokit : bool, optional. Default: False.

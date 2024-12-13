@@ -15,12 +15,12 @@
 # =============================================================================
 
 import datetime
-import io
 import os
 import warnings
+from io import BytesIO
 from pathlib import Path
 from typing import Tuple, Union
-from zipfile import ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
 
@@ -91,7 +91,6 @@ def update_dataset(
         `Path` to the downloaded dataset (if `in_zip=False`),
         or `None` if `in_zip=True`.
     """
-
     source = source.lower()  # Ensure lowercase
 
     # Check if source is valid
@@ -107,9 +106,7 @@ def update_dataset(
     data = request_data(url, verbose=verbose)
 
     # Create a dataframe from the data
-    df = pd.read_csv(
-        io.BytesIO(data), dtype=DATASET_DTYPES[source], low_memory=False
-    )
+    df = pd.read_csv(BytesIO(data), dtype=DATASET_DTYPES[source])
 
     # Make a simple check to see if the data is valid
     if df.empty:
@@ -142,7 +139,7 @@ def update_dataset(
             )
 
         # Write (and create if necessary) the file to the ZIP archive
-        with ZipFile(zip_path, "a") as zipf:
+        with ZipFile(zip_path, "a", compression=ZIP_DEFLATED) as zipf:
             zipf.writestr(DATASET_FILENAMES[source], data)
 
         if verbose:
@@ -350,9 +347,7 @@ def load_dataset(
     if store and only_index:
         store_index = True
 
-    # Define base for header and skip_rows
-    base = 291 if source == "nasa" else 0  # Base row for NASA data
-
+    # Check if only rows and only index
     if (
         only_rows and only_index
     ):  # Check if only one of the options is provided
@@ -408,12 +403,9 @@ def load_dataset(
             return data_stored
 
         # Add header and update only_rows
-        only_rows = [base] + [
-            x + base + 1 for x in requested_rows if x in not_stored_rows
+        only_rows = [0] + [
+            x + 1 for x in requested_rows if x in not_stored_rows
         ]
-
-        # Redefine base for header
-        base = 0
 
         def skip_rows(x: int) -> bool:  # Skip rows not in the list
             return x not in only_rows
@@ -480,7 +472,7 @@ def load_dataset(
                     with zipf.open(DATASET_FILENAMES[source]) as file:
                         data = pd.read_csv(
                             file,
-                            header=base,
+                            header=0,
                             skiprows=skip_rows,
                             usecols=usecols,
                             dtype=DATASET_DTYPES[source],
@@ -502,7 +494,7 @@ def load_dataset(
             # Fallback: Load the dataset from the extracted file if present
             data = pd.read_csv(
                 file_path,
-                header=base,
+                header=0,
                 skiprows=skip_rows,
                 usecols=usecols,
                 dtype=DATASET_DTYPES[source],
@@ -526,7 +518,7 @@ def load_dataset(
             update_dataset(source=source, verbose=verbose, in_zip=False)
             data = pd.read_csv(
                 file_path,
-                header=base,
+                header=0,
                 skiprows=skip_rows,
                 usecols=usecols,
                 dtype=DATASET_DTYPES[source],
