@@ -556,7 +556,7 @@ def remove_from_zip(zipfname: str, *filenames: str, verbose: bool = False):
         shutil.rmtree(tempdir)
 
 
-def request_data(
+def request_dataset(
     url: str,
     verbose: bool = True,
 ) -> bytes:

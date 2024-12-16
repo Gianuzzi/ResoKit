@@ -28,7 +28,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.datasets import load_dataset
+from resokit.datasets import load
 from resokit.utils.utils import DEFAULT_METADATA
 
 # =============================================================================
@@ -101,7 +101,7 @@ def _search_system_index(
     raw_series = (
         raw_df
         if raw_df is not None
-        else load_dataset(
+        else load(
             source=source,
             only_index=True,
             verbose=verbose,
@@ -153,7 +153,7 @@ def _load_system_from_db(
     source: str = None,
     store: bool = False,
     store_index: bool = True,
-    load_dataset_kwargs: dict = None,
+    load_kwargs: dict = None,
     verbose: bool = True,
     low_memory: bool = False,
 ) -> pd.DataFrame:
@@ -172,8 +172,8 @@ def _load_system_from_db(
     store_index : bool, optional. Default: True.
         Whether to store the whole dataset index in memory.
         Automatically set to True if store is True.
-    load_dataset_kwargs : dict, optional. Default: {}.
-        Extra keyword arguments for the load_dataset function.
+    load_kwargs : dict, optional. Default: {}.
+        Extra keyword arguments for the load function.
     verbose : bool, optional. Default: True.
         Whether to print information.
     low_memory : bool, optional. Default: False.
@@ -199,9 +199,9 @@ def _load_system_from_db(
         low_memory = False  # Load the whole dataset if it will be stored
 
     # Update the keyword arguments
-    if load_dataset_kwargs is None:
-        load_dataset_kwargs = {}
-    load_dataset_kwargs.update(
+    if load_kwargs is None:
+        load_kwargs = {}
+    load_kwargs.update(
         {
             "store": store,
             "verbose": verbose,
@@ -212,7 +212,7 @@ def _load_system_from_db(
 
     # Load the dataset
     if not low_memory:  # Load the whole dataset
-        raw_df = load_dataset(source=source, **load_dataset_kwargs)
+        raw_df = load(source=source, **load_kwargs)
     else:  # Will load only the index if possible
         raw_df = None
 
@@ -250,7 +250,7 @@ def _load_system_from_db(
 
     # Load the system
     if raw_df is None:  # Load only the system data
-        return load_dataset(source=source, only_rows=idx, verbose=verbose)
+        return load(source=source, only_rows=idx, verbose=verbose)
 
     return raw_df.loc[idx]  # Load the system data from the raw dataset
 
@@ -258,7 +258,7 @@ def _load_system_from_db(
 def load_system_from_eu(
     name: str,
     is_planet: bool = False,
-    load_dataset_kwargs: dict = None,
+    load_kwargs: dict = None,
     drop: bool = True,
     store: bool = False,
     store_index: bool = True,
@@ -275,8 +275,8 @@ def load_system_from_eu(
         (Remember case sensitivity)
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
-    load_dataset_kwargs : dict, optional. Default: {}.
-        Keyword arguments for the load_dataset function.
+    load_kwargs : dict, optional. Default: {}.
+        Keyword arguments for the load function.
     drop : bool, optional. Default: True.
         Whether to drop extra columns.
     store : bool, optional. Default: False.
@@ -297,15 +297,15 @@ def load_system_from_eu(
         Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
         or :py:class:`StaticSystem`.
     """
-    if load_dataset_kwargs is None:
-        load_dataset_kwargs = {}
+    if load_kwargs is None:
+        load_kwargs = {}
 
     # Load the system from the database
     df = _load_system_from_db(
         name=name,
         is_planet=is_planet,
         source="eu",
-        load_dataset_kwargs=load_dataset_kwargs,
+        load_kwargs=load_kwargs,
         store=store,
         store_index=store_index,
         verbose=verbose,
@@ -339,7 +339,7 @@ def load_system_from_eu(
 def load_system_from_nasa(
     name: str,
     is_planet: bool = False,
-    load_dataset_kwargs: dict = None,
+    load_kwargs: dict = None,
     drop: bool = True,
     store: bool = False,
     store_index: bool = True,
@@ -358,8 +358,8 @@ def load_system_from_nasa(
         (Remember case sensitivity)
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
-    load_dataset_kwargs : dict, optional. Default: {}.
-        Keyword arguments for the load_dataset function.
+    load_kwargs : dict, optional. Default: {}.
+        Keyword arguments for the load function.
     drop : bool, optional. Default: True.
         Whether to drop extra columns.
     store : bool, optional. Default: False.
@@ -386,15 +386,15 @@ def load_system_from_nasa(
         Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
         or :py:class:`StaticSystem`.
     """
-    if load_dataset_kwargs is None:
-        load_dataset_kwargs = {}
+    if load_kwargs is None:
+        load_kwargs = {}
 
     # Load the system from the database
     df = _load_system_from_db(
         name=name,
         is_planet=is_planet,
         source="nasa",
-        load_dataset_kwargs=load_dataset_kwargs,
+        load_kwargs=load_kwargs,
         store=store,
         store_index=store_index,
         verbose=verbose,

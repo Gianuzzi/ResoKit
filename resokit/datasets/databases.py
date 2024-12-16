@@ -28,7 +28,7 @@ from resokit.core import df_to_resokit
 from resokit.datasets.utils import (
     DATASET_DTYPES,
     remove_from_zip,
-    request_data,
+    request_dataset,
 )
 from resokit.utils.utils import parse_to_iter
 
@@ -41,28 +41,28 @@ from resokit.utils.utils import parse_to_iter
 BASE_PATH = Path(os.path.abspath(os.path.dirname(__file__)))
 
 # Filenames and URLs for the datasets
-DATASET_FILENAMES = {"eu": "exoplanet_eu.csv", "nasa": "nasa.csv"}
-DATASET_URLS = {
+_DATASET_FILENAMES = {"eu": "exoplanet_eu.csv", "nasa": "nasa.csv"}
+_DATASET_URLS = {
     "eu": "https://exoplanet.eu/catalog/csv/",
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?"
     + "query=select+*+from+ps&format=csv",
 }
-ZIP_FILENAME = "datasets.zip"  # Name for the ZIP archive
+_ZIP_FILENAME = "datasets.zip"  # Name for the ZIP archive
 
 # In-memory storage for datasets and indexes
-IN_MEMORY_DATASETS = {"eu": pd.DataFrame(), "nasa": pd.DataFrame()}
-IN_MEMORY_INDEXES = {"eu": None, "nasa": None}
-IS_FULLY_STORED = {"eu": False, "nasa": False}
+_IN_MEMORY_DATASETS = {"eu": pd.DataFrame(), "nasa": pd.DataFrame()}
+_IN_MEMORY_INDEXES = {"eu": None, "nasa": None}
+_IS_FULLY_STORED = {"eu": False, "nasa": False}
 
 # Index columns for each dataset
-INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
+_INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
 
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
 
 
-def update_dataset(
+def update(
     source: str, verbose: bool = True, in_zip: bool = True, store: bool = False
 ) -> Union[Path, None]:
     """Update the dataset from a specified source and saves it locally.
@@ -94,16 +94,16 @@ def update_dataset(
     source = source.lower()  # Ensure lowercase
 
     # Check if source is valid
-    if source not in DATASET_FILENAMES:
+    if source not in _DATASET_FILENAMES:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
     # Define paths and URLs
-    file_path = BASE_PATH / DATASET_FILENAMES[source]
-    url = DATASET_URLS[source]
-    zip_path = BASE_PATH / ZIP_FILENAME
+    file_path = BASE_PATH / _DATASET_FILENAMES[source]
+    url = _DATASET_URLS[source]
+    zip_path = BASE_PATH / _ZIP_FILENAME
 
     # Download the dataset
-    data = request_data(url, verbose=verbose)
+    data = request_dataset(url, verbose=verbose)
 
     # Create a dataframe from the data
     df = pd.read_csv(BytesIO(data), dtype=DATASET_DTYPES[source])
@@ -117,9 +117,9 @@ def update_dataset(
 
     # Store the data in memory
     if store:
-        IN_MEMORY_INDEXES[source] = df[INDEX_COLUMNS[source]].copy()
-        IN_MEMORY_DATASETS[source] = df.copy()
-        IS_FULLY_STORED[source] = True
+        _IN_MEMORY_INDEXES[source] = df[_INDEX_COLUMNS[source]].copy()
+        _IN_MEMORY_DATASETS[source] = df.copy()
+        _IS_FULLY_STORED[source] = True
 
     # Save the file...
 
@@ -128,22 +128,22 @@ def update_dataset(
         # Check if the ZIP archive exists
         if not zip_path.exists():
             warnings.warn(
-                f"ZIP archive {ZIP_FILENAME} not found.", stacklevel=2
+                f"ZIP archive {_ZIP_FILENAME} not found.", stacklevel=2
             )
             if verbose:
-                print(f" Creating the ZIP archive {ZIP_FILENAME}...")
+                print(f" Creating the ZIP archive {_ZIP_FILENAME}...")
         else:
             # Remove the file from the ZIP archive
             remove_from_zip(
-                zip_path, DATASET_FILENAMES[source], verbose=verbose
+                zip_path, _DATASET_FILENAMES[source], verbose=verbose
             )
 
         # Write (and create if necessary) the file to the ZIP archive
         with ZipFile(zip_path, "a", compression=ZIP_DEFLATED) as zipf:
-            zipf.writestr(DATASET_FILENAMES[source], data)
+            zipf.writestr(_DATASET_FILENAMES[source], data)
 
         if verbose:
-            print(f" Updated {DATASET_FILENAMES[source]} in {ZIP_FILENAME}")
+            print(f" Updated {_DATASET_FILENAMES[source]} in {_ZIP_FILENAME}")
 
         return
 
@@ -181,7 +181,7 @@ def check_file_age(source: str, from_zip: bool = True) -> int:
     source = source.lower()  # Ensure lowercase
 
     file_path = (
-        BASE_PATH / DATASET_FILENAMES[source]
+        BASE_PATH / _DATASET_FILENAMES[source]
     )  # Path to the dataset file
 
     if not from_zip:
@@ -198,10 +198,10 @@ def check_file_age(source: str, from_zip: bool = True) -> int:
 
     if from_zip:  # Get the creation date from inside the ZIP archive
 
-        zip_path = BASE_PATH / ZIP_FILENAME  # Path to the ZIP archive
+        zip_path = BASE_PATH / _ZIP_FILENAME  # Path to the ZIP archive
 
         with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
-            date_info = zipf.getinfo(DATASET_FILENAMES[source]).date_time
+            date_info = zipf.getinfo(_DATASET_FILENAMES[source]).date_time
             creation = datetime.datetime(*date_info)
 
     # Calculate age in days
@@ -237,14 +237,14 @@ def _load_stored_rows(
         The loaded dataset as a DataFrame and a list of not stored rows.
     """
     if full:
-        if not IS_FULLY_STORED[source]:
+        if not _IS_FULLY_STORED[source]:
             raise ValueError(f"Source {source} is not fully stored.")
-        aux = IN_MEMORY_DATASETS[source]
+        aux = _IN_MEMORY_DATASETS[source]
         not_stored = []
 
     elif rows is not None:
-        stored = [x for x in rows if x in IN_MEMORY_DATASETS[source].index]
-        aux = IN_MEMORY_DATASETS[source].loc[stored]
+        stored = [x for x in rows if x in _IN_MEMORY_DATASETS[source].index]
+        aux = _IN_MEMORY_DATASETS[source].loc[stored]
         not_stored = [x for x in rows if x not in stored]
 
     else:
@@ -271,15 +271,15 @@ def _store_rows(
     verbose : bool, optional
         Whether to print informational messages.
     """
-    if IS_FULLY_STORED[source] or rows_df.empty:
+    if _IS_FULLY_STORED[source] or rows_df.empty:
         return  # No need to store if already fully stored, or empty
 
     not_stored = [
-        x for x in rows_df.index if x not in IN_MEMORY_DATASETS[source].index
+        x for x in rows_df.index if x not in _IN_MEMORY_DATASETS[source].index
     ]
 
-    IN_MEMORY_DATASETS[source] = pd.concat(
-        [IN_MEMORY_DATASETS[source], rows_df.loc[not_stored]]
+    _IN_MEMORY_DATASETS[source] = pd.concat(
+        [_IN_MEMORY_DATASETS[source], rows_df.loc[not_stored]]
     )
 
     if verbose and not_stored:
@@ -288,7 +288,7 @@ def _store_rows(
     return
 
 
-def load_dataset(
+def load(
     source: str,
     to_resokit: bool = True,
     check_age: bool = False,
@@ -340,7 +340,7 @@ def load_dataset(
     """
     source = source.lower()  # Ensure lowercase
 
-    if source not in DATASET_FILENAMES:  # Check if source is valid
+    if source not in _DATASET_FILENAMES:  # Check if source is valid
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
     # Check store_index
@@ -418,13 +418,13 @@ def load_dataset(
         only_rows = False
 
     # Check if the index columns are already stored in memory
-    if only_index and IN_MEMORY_INDEXES[source] is not None:
+    if only_index and _IN_MEMORY_INDEXES[source] is not None:
         if verbose:
             print(" Loading memory stored index columns...")
-        return IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
+        return _IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
 
     # Check if the dataset is already stored in memory
-    if not (only_index or only_rows) and IS_FULLY_STORED[source]:
+    if not (only_index or only_rows) and _IS_FULLY_STORED[source]:
         if verbose:
             print(" Loading memory stored dataset...")
         df = _load_stored_rows(source, full=True)[0]
@@ -442,11 +442,11 @@ def load_dataset(
         return df
 
     # Define paths and ZIP extraction flag
-    file_path = BASE_PATH / DATASET_FILENAMES[source]
-    zip_path = BASE_PATH / ZIP_FILENAME
+    file_path = BASE_PATH / _DATASET_FILENAMES[source]
+    zip_path = BASE_PATH / _ZIP_FILENAME
 
     # Define columns to load
-    usecols = INDEX_COLUMNS[source] if only_index else None
+    usecols = _INDEX_COLUMNS[source] if only_index else None
 
     # Aux message
     if verbose:  # Print message if verbose
@@ -462,14 +462,14 @@ def load_dataset(
 
             with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
 
-                if DATASET_FILENAMES[source] in zipf.namelist():
+                if _DATASET_FILENAMES[source] in zipf.namelist():
                     if verbose:  # Print message if verbose
                         print(
-                            f" Loading {aux}{DATASET_FILENAMES[source]} "
-                            + f"directly from {ZIP_FILENAME}..."
+                            f" Loading {aux}{_DATASET_FILENAMES[source]} "
+                            + f"directly from {_ZIP_FILENAME}..."
                         )
                     # Load directly from the .zip
-                    with zipf.open(DATASET_FILENAMES[source]) as file:
+                    with zipf.open(_DATASET_FILENAMES[source]) as file:
                         data = pd.read_csv(
                             file,
                             header=0,
@@ -485,8 +485,8 @@ def load_dataset(
                                 f.write(file.read())
                             if verbose:
                                 print(
-                                    f" Extracted {DATASET_FILENAMES[source]} "
-                                    + f"from {ZIP_FILENAME} into {file_path}"
+                                    f" Extracted {_DATASET_FILENAMES[source]} "
+                                    + f"from {_ZIP_FILENAME} into {file_path}"
                                 )
 
         else:
@@ -515,7 +515,7 @@ def load_dataset(
         if download_if_missing:
 
             print(f" {file_path} not found, attempting download...")
-            update_dataset(source=source, verbose=verbose, in_zip=False)
+            update(source=source, verbose=verbose, in_zip=False)
             data = pd.read_csv(
                 file_path,
                 header=0,
@@ -583,21 +583,21 @@ def load_dataset(
     if only_rows and store:
         _store_rows(source, rows_df=data, verbose=verbose)
 
-    elif store_index and not only_rows and IN_MEMORY_INDEXES[source] is None:
+    elif store_index and not only_rows and _IN_MEMORY_INDEXES[source] is None:
         if verbose:
             print(" Storing the index columns into memory...")
-        IN_MEMORY_INDEXES[source] = data[INDEX_COLUMNS[source]].copy()
+        _IN_MEMORY_INDEXES[source] = data[_INDEX_COLUMNS[source]].copy()
 
     if (
         store
         and not only_index
         and not only_rows
-        and not IS_FULLY_STORED[source]
+        and not _IS_FULLY_STORED[source]
     ):
         if verbose:
             print(" Storing the entire dataset into memory...")
-        IN_MEMORY_DATASETS[source] = data.copy()
-        IS_FULLY_STORED[source] = True
+        _IN_MEMORY_DATASETS[source] = data.copy()
+        _IS_FULLY_STORED[source] = True
 
     # Return the dataset
     if to_resokit:
@@ -625,18 +625,18 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     source = source.lower()  # Ensure lowercase
 
     if source == "both":
-        for key in IN_MEMORY_DATASETS:
-            IN_MEMORY_DATASETS[key] = None  # Clear the memory address
-            IS_FULLY_STORED[key] = False
+        for key in _IN_MEMORY_DATASETS:
+            _IN_MEMORY_DATASETS[key] = None  # Clear the memory address
+            _IS_FULLY_STORED[key] = False
             if verbose:
                 print(f" Cleared memory for source: {key}")
         return
 
-    if source not in IN_MEMORY_DATASETS:
+    if source not in _IN_MEMORY_DATASETS:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
-    IN_MEMORY_DATASETS[source] = pd.DataFrame()  # Clear the memory address
-    IS_FULLY_STORED[source] = False  # Reset the fully stored flag
+    _IN_MEMORY_DATASETS[source] = pd.DataFrame()  # Clear the memory address
+    _IS_FULLY_STORED[source] = False  # Reset the fully stored flag
 
     if verbose:
         print(f" Cleared memory for source: {source}")
