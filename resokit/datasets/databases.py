@@ -191,7 +191,7 @@ class ResoKitDataset:
         """Convert data to pandas data frame.
 
         This method constructs a data frame with the data inside the
-        data_df attribute.
+        dataset attribute.
 
         Parameters
         ----------
@@ -259,10 +259,10 @@ class ResoKitDataset:
         )
 
     def to_resokit(self, sort: bool = False) -> "ResoKitDataset":
-        """Convert the dataset to a pure ResoKit dataset.
+        """Convert the dataset to a pure ResoKitDataset.
 
-        This method converts the dataset to a ResoKit dataset, which
-        includes only the columns required by ResoKit.
+        This method converts the dataset to a ResoKitDataset containing
+          only the columns required by ResoKit.
 
         Parameters
         ----------
@@ -272,10 +272,11 @@ class ResoKitDataset:
         Returns
         -------
         dataset : ResoKitDataset
-            ResoKit dataset.
+            ResoKitDataset.
         """
+        dataset = self.to_dataframe(copy=False, sort=sort)
         df = df_to_resokit(
-            self.dataset,
+            dataset,
             source=self.source,
             drop=True,
             copy=True,
@@ -348,7 +349,7 @@ def df_to_dataset(
     copy: bool = True,
     as_resokit: bool = True,
 ) -> ResoKitDataset:
-    """Convert a DataFrame to a ResoKit dataset.
+    """Convert a pandas DataFrame to a ResoKitDataset.
 
     Parameters
     ----------
@@ -374,7 +375,7 @@ def df_to_dataset(
     Returns
     -------
     dataset : ResoKitDataset
-        ResoKit dataset.
+        ResoKitDataset.
     """
     # Check if df is a DataFrame
     if not isinstance(df, pd.DataFrame):
@@ -414,7 +415,7 @@ def _mk_empty_dataset(source: str) -> ResoKitDataset:
     Returns
     -------
     dataset : ResoKitDataset
-        Empty ResoKit dataset.
+        Empty ResoKitDataset.
     """
     return ResoKitDataset(
         dataset=pd.DataFrame(),
@@ -443,7 +444,7 @@ def _update_stored_dataset(
     Parameters
     ----------
     new_df : pd.DataFrame
-        New dataset to store. It must be a raw dataset.
+        New dataset to store.
     source : str
         Dataset source ('eu' or 'nasa').
     age : int
@@ -598,11 +599,8 @@ def _update_stored_dataset(
         updated_df.sort_index(inplace=True)
 
     # Check if metadata is provided
-    print(" Metadata: ", metadata)
-    print(" Metadata old: ", meta_old)
     if metadata is not None:
         meta_old.update(metadata)
-        print(" Updated metadata: ", meta_old)
 
     # Update the dataset
     _IN_MEMORY_DATASETS[source] = df_to_dataset(
@@ -634,10 +632,13 @@ def download(
 ) -> Union[Path, pd.DataFrame, ResoKitDataset]:
     """Download a dataset from a specified source and save it locally.
 
-    The dataset is downloaded from the provided URL and saved as a CSV file.
-    This csv file can be stored in a ZIP archive if requested.
+    The dataset is downloaded from the internet, from the online NASA
+    or exoplanet.eu databases, and can be stored in a file, a ZIP archive,
+    in memory, and/or simply returned.
 
-    Note: Requires the requests library to download the dataset.
+    Note
+    ----
+    Requires the requests library.
 
     Parameters
     ----------
@@ -645,14 +646,14 @@ def download(
         Identifier for the data source ('eu' or 'nasa').
     dir_path : str or Path
         Directory path to save the dataset, or path to the ZIP archive.
-        If `None`, the default directory is used.
+        If `None`, the default directory is used (resokit.datasets).
     to_file : str or Path or bool, optional. Default: False.
         Path or str to the file to store the dataset.
         If `True`, default filename is used.
         If `False`, the file is not saved nor created.
     to_zip : str or Path or bool, optional. Default: False.
         Path or str to the ZIP archive to store the dataset.
-        If `True`, default ZIP filename is used.
+        If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not saved nor created in the ZIP archive.
     to_memory : bool, optional. Default: False.
         If `True`, stores the dataset in memory.
@@ -662,7 +663,7 @@ def download(
     verbose : bool, optional. Default: True.
         If `True`, displays messages about the download process.
     to_resokit : bool, dict, optional. Default: None.
-        If `True`, returns the dataset as a ResoKit dataset.
+        If `True`, returns the dataset as a ResoKitDataset.
         If `False`, returns the dataset as a pandas DataFrame.
         If `None`, returns the path to the downloaded file.
 
@@ -670,7 +671,7 @@ def download(
     -------
     downloaded : Path or pd.DataFrame or None
         `Path` to the downloaded dataset (and or zip archive),
-        or the dataset if `dataset_to_resokit` is not `None`.
+        or the dataset if `to_resokit` is not `None`.
     """
     source = source.lower()  # Ensure lowercase
 
@@ -826,7 +827,7 @@ def _check_file_age(
     zip_path: Union[str, Path, None],
     verbose: bool = True,
 ) -> int:
-    """Check the dataset file's age and prints a warning if it's outdated.
+    """Check the dataset file's age in days.
 
     Parameters
     ----------
@@ -869,6 +870,8 @@ def _load_from_zip(
     verbose: bool = True,
 ) -> pd.DataFrame:
     """Load the dataset from a ZIP archive.
+
+    Reads the dataset from a ZIP archive and returns it as a pandas DataFrame.
 
     Parameters
     ----------
@@ -923,7 +926,7 @@ def _load_from_zip(
 
 def _load_stored_full(
     source: str,
-    raw_df: bool = False,
+    to_df: bool = False,
     to_resokit: bool = True,
     sort: bool = True,
 ) -> Union[pd.DataFrame, ResoKitDataset]:
@@ -933,23 +936,23 @@ def _load_stored_full(
     ----------
     source : str
         Dataset source ('eu' or 'nasa').
-    raw_df : bool, optional
-        Whether to return the raw DataFrame.
+    to_df : bool, optional
+        Whether to return as a pandas DataFrame.
     to_resokit : bool, optional
-        Whether to return the dataset as a ResoKit dataset
+        Whether to return the dataset as a ResoKitDataset
     sort : bool, optional
         Whether to sort the dataset by the index columns
 
     Returns
     -------
     data : Union[pd.DataFrame, ResoKitDataset]
-        The loaded dataset as a DataFrame or a ResoKit dataset.
+        The loaded dataset as a DataFrame or a ResoKitDataset.
     """
     # Check if the dataset is fully stored
     if not _IS_FULLY_STORED[source]:
         raise ValueError(f"Source {source} is not fully stored.")
     # Return the dataset
-    if not raw_df:
+    if not to_df:
         if sort:
             sortd = _IN_MEMORY_DATASETS[source].dataset.sort_index()
             return df_to_dataset(
@@ -984,14 +987,14 @@ def _load_stored_rows(
     full : bool, optional
         Whether to load the full dataset.
         If `True`, the `rows` parameter is ignored,
-        and the full dataset is loaded as a ResoKit dataset.
+        and the full dataset is loaded as a ResoKitDataset.
 
     Returns
     -------
     Tuple[pd.DataFrame, list, int, str] or ResoKitDataset
         The loaded dataset as a DataFrame, a list of the rows not stored,
         the stored dataset age, and stored dataset origin.
-        If `full` is `True`, returns the dataset as a ResoKit dataset.
+        If `full` is `True`, returns the dataset as a ResoKitDataset.
     """
     # If all rows are requested, check if the dataset is fully stored
     if full:
@@ -1013,7 +1016,7 @@ def _load_stored_rows(
 
 
 def _load_stored_index(
-    source: str, raw_df: bool = False, to_resokit: bool = True
+    source: str, to_df: bool = False, to_resokit: bool = True
 ) -> Union[pd.DataFrame, ResoKitDataset]:
     """Load the stored index from memory.
 
@@ -1021,17 +1024,17 @@ def _load_stored_index(
     ----------
     source : str
         Dataset source ('eu' or 'nasa').
-    raw_df : bool, optional
-        Whether to return the raw DataFrame.
+    to_df : bool, optional
+        Whether to return the dataset as a pandas DataFrame.
     to_resokit : bool, optional
-        Whether to return the dataset as a ResoKit dataset
+        Whether to return the dataset as a ResoKitDataset
 
     Returns
     -------
     dataset : pd.DataFrame or ResoKitDataset
-        The loaded dataset as a DataFrame or a ResoKit dataset.
+        The loaded dataset as a DataFrame or a ResoKitDataset.
     """
-    if not raw_df:
+    if not to_df:
         if to_resokit:
             return _IN_MEMORY_INDEXES[source].to_resokit()
         return _IN_MEMORY_INDEXES[source]
@@ -1042,7 +1045,7 @@ def load_eu(
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
     from_file: Union[str, bool] = True,
-    dir_path: Union[str, Path, None] = None,
+    dir_path: Union[str, Path, bool] = True,
     to_resokit: bool = True,
     check_age: bool = False,
     only_rows: Union[list, int] = False,
@@ -1053,7 +1056,19 @@ def load_eu(
     """Load the exoplanet.eu dataset.
 
     The dataset is loaded from a ZIP archive or a CSV file, or from memory
-    if already stored.
+    if already stored. The priority is given to the memory saved dataset,
+    then to the zip archive, and finally to the file.
+
+    Note
+    ----
+    Storing the dataset in memory is useful for faster access and to avoid
+    reading the file multiple times.
+
+    Note
+    ----
+    If both `from_file` and `from_zip` are provided, it is assumed that the
+    file inside the ZIP archive is the same as the one provided in `from_file`.
+    Finally, the path constructed is: `dir_path / zip_name / file_name`.
 
     Parameters
     ----------
@@ -1061,15 +1076,15 @@ def load_eu(
         If `True`, loads the dataset from memory if available.
     from_zip : str or Path or bool, optional. Default: True.
         Path to the ZIP archive to load the dataset.
-        If `True`, default ZIP filename is used.
+        If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not loaded from the ZIP archive.
     from_file : str or Path or bool, optional. Default: True.
         Path to the file to load the dataset.
-        If `True`, default filename is used.
+        If `True`, default filename is used. (exoplanet_eu.csv)
         If `False`, the file is not loaded.
-    dir_path : str or Path, optional. Default: None.
+    dir_path : str, Path or bool, optional. Default: True.
         Directory path to load the dataset from.
-        If `None`, the default directory is used.
+        If `True` or `None` the default directory is used. (resokit.datasets)
     to_resokit : bool, optional. Default: True.
         If `True`, returns the dataset with only the columns
         required by ResoKit.
@@ -1083,16 +1098,18 @@ def load_eu(
         If `True`, prints messages about the process.
     store : bool, str, optional. Default: False.
         If `True`, stores the dataset in memory.
-        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+        If `str` and starts with "f" or "y" or "s" or "o", then
+        overwrites the stored dataset.
     store_index : bool, str, optional. Default: True.
         If `True`, stores the dataset index in memory.
         If `only_rows` is provided, the index is not stored.
-        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+        If `str` and starts with "f" or "y" or "s" or "o", then
+        overwrites the stored dataset index.
 
     Returns
     -------
     dataset : ResoKitDataset
-        The loaded dataset as a ResoKit dataset.
+        The loaded dataset as a ResoKitDataset.
     """
     return load_full(
         source="eu",
@@ -1101,7 +1118,7 @@ def load_eu(
         from_file=from_file,
         dir_path=dir_path,
         to_resokit=to_resokit,
-        raw_df=False,
+        to_df=False,
         check_age=check_age,
         only_rows=only_rows,
         verbose=verbose,
@@ -1125,7 +1142,19 @@ def load_nasa(
     """Load the nasa dataset.
 
     The dataset is loaded from a ZIP archive or a CSV file, or from memory
-    if already stored.
+    if already stored. The priority is given to the memory saved dataset,
+    then to the zip archive, and finally to the file.
+
+    Note
+    ----
+    Storing the dataset in memory is useful for faster access and to avoid
+    reading the file multiple times.
+
+    Note
+    ----
+    If both `from_file` and `from_zip` are provided, it is assumed that the
+    file inside the ZIP archive is the same as the one provided in `from_file`.
+    Finally, the path constructed is: `dir_path / zip_name / file_name`.
 
     Parameters
     ----------
@@ -1133,15 +1162,15 @@ def load_nasa(
         If `True`, loads the dataset from memory if available.
     from_zip : str or Path or bool, optional. Default: True.
         Path to the ZIP archive to load the dataset.
-        If `True`, default ZIP filename is used.
+        If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not loaded from the ZIP archive.
     from_file : str or Path or bool, optional. Default: True.
         Path to the file to load the dataset.
-        If `True`, default filename is used.
+        If `True`, default filename is used. (nasa.csv)
         If `False`, the file is not loaded.
-    dir_path : str or Path, optional. Default: None.
+    dir_path : str, Path or bool, optional. Default: True.
         Directory path to load the dataset from.
-        If `None`, the default directory is used.
+        If `True` or `None` the default directory is used. (resokit.datasets)
     to_resokit : bool, optional. Default: True.
         If `True`, returns the dataset with only the columns
         required by ResoKit.
@@ -1155,16 +1184,18 @@ def load_nasa(
         If `True`, prints messages about the process.
     store : bool, str, optional. Default: False.
         If `True`, stores the dataset in memory.
-        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+        If `str` and starts with "f" or "y" or "s" or "o", then
+        overwrites the stored dataset.
     store_index : bool, str, optional. Default: True.
         If `True`, stores the dataset index in memory.
         If `only_rows` is provided, the index is not stored.
-        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+        If `str` and starts with "f" or "y" or "s" or "o", then
+        overwrites the stored dataset index.
 
     Returns
     -------
     dataset : ResoKitDataset
-        The loaded dataset as a ResoKit dataset.
+        The loaded dataset as a ResoKitDataset.
     """
     return load_full(
         source="nasa",
@@ -1189,7 +1220,7 @@ def __aux_load_full(
     origin: str,
     is_full: bool,
     to_resokit: bool,
-    raw_df: bool,
+    to_df: bool,
     metadata: dict = None,
 ) -> Union[pd.DataFrame, ResoKitDataset]:
     """Auxiliary function to load the dataset from a DataFrame.
@@ -1207,8 +1238,8 @@ def __aux_load_full(
     is_full : bool
         Whether the dataset is complete.
     to_resokit : bool
-        Whether to return the dataset as a ResoKit dataset.
-    raw_df : bool
+        Whether to return the dataset as a ResoKitDataset.
+    to_df : bool
         Whether to return the raw DataFrame.
     metadata : dict, optional
         Metadata for the dataset, if any.
@@ -1216,9 +1247,9 @@ def __aux_load_full(
     Returns
     -------
     dataset : pd.DataFrame or ResoKitDataset
-        The loaded dataset as a DataFrame or a ResoKit dataset
+        The loaded dataset as a DataFrame or a ResoKitDataset
     """
-    if not raw_df:  # Return as ResoKitDataset
+    if not to_df:  # Return as ResoKitDataset
         return df_to_dataset(
             df,
             source=source,
@@ -1247,9 +1278,9 @@ def load_full(
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
     from_file: Union[str, bool] = True,
-    dir_path: Union[str, Path, None] = None,
+    dir_path: Union[str, Path, bool] = True,
     to_resokit: bool = True,
-    raw_df: bool = True,
+    to_df: bool = True,
     check_age: bool = False,
     only_index: bool = False,
     only_rows: Union[list, int] = False,
@@ -1260,7 +1291,13 @@ def load_full(
     """Load the dataset from a specified source.
 
     The dataset is loaded from a ZIP archive or a CSV file, or from memory
-    if already stored.
+    if already stored. The priority is given to the memory saved dataset,
+    then to the zip archive, and finally to the file.
+
+    Note
+    ----
+    Storing the dataset in memory is useful for faster access and to avoid
+    reading the file multiple times.
 
     Note
     ----
@@ -1276,21 +1313,21 @@ def load_full(
         If `True`, loads the dataset from memory if available.
     from_zip : str or Path or bool, optional. Default: True.
         Path to the ZIP archive to load the dataset.
-        If `True`, default ZIP filename is used.
+        If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not loaded from the ZIP archive.
     from_file : str or Path or bool, optional. Default: True.
         Path to the file to load the dataset.
         If `True`, default filename is used.
         If `False`, the file is not loaded.
-    dir_path : str or Path, optional. Default: None.
+    dir_path : str, Path or bool, optional. Default: True.
         Directory path to load the dataset from.
-        If `None`, the default directory is used.
+        If `True` or `None` the default directory is used. (resokit.datasets)
     to_resokit : bool, optional. Default: True.
         If `True`, returns the dataset including only the columns
         required by ResoKit.
-    raw_df : bool, optional. Default: True.
+    to_df : bool, optional. Default: True.
         If `True`, returns the raw dataset as a pandas DataFrame.
-        If `False`, returns the dataset as a ResoKit dataset.
+        If `False`, returns the dataset as a ResoKitDataset.
     check_age : bool, optional. Default: False.
         If `True`, displays the file's last modified date.
         used by ResoKit.
@@ -1308,12 +1345,12 @@ def load_full(
     store_index : bool, str, optional. Default: True.
         If `True`, stores the dataset index in memory.
         If `only_rows` is provided, the index is not stored.
-        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored index.
 
     Returns
     -------
     dataset : DataFrame or ResoKitDataset
-        The loaded dataset as a pandas DataFrame or a ResoKit dataset.
+        The loaded dataset as a pandas DataFrame or a ResoKitDataset.
     """
     source = source.lower()  # Ensure lowercase
 
@@ -1328,9 +1365,16 @@ def load_full(
         )
 
     # Redefine dir path
-    if dir_path is None:
+    if dir_path is None or dir_path is True:
         dir_path = BASE_PATH
+        # Default directory
+        dir_path = BASE_PATH
+    elif not dir_path:
+        # Assuming no file or ZIP required
+        from_zip = False
+        from_file = False
     else:
+        # Convert to Path
         dir_path = Path(dir_path)
 
     # Define paths and ZIP extraction flag
@@ -1431,7 +1475,7 @@ def load_full(
                 origin=origin[0],
                 is_full=is_full,
                 to_resokit=to_resokit,
-                raw_df=raw_df,
+                to_df=to_df,
                 metadata=dict(_IN_MEMORY_DATASETS[source].metadata),
             )
 
@@ -1457,7 +1501,7 @@ def load_full(
 
     # Check if the index columns are already stored in memory
     if only_index and from_memory:
-        data = _load_stored_index(source, raw_df=raw_df, to_resokit=to_resokit)
+        data = _load_stored_index(source, to_df=to_df, to_resokit=to_resokit)
         if not data.empty:
             if verbose:
                 print(" Loaded index columns from memory stored dataset.")
@@ -1470,7 +1514,7 @@ def load_full(
         and from_memory
     ):
         data = _load_stored_full(
-            source, raw_df=raw_df, to_resokit=to_resokit, sort=True
+            source, to_df=to_df, to_resokit=to_resokit, sort=True
         )
         if verbose:
             print(" Loaded full dataset from memory stored dataset.")
@@ -1592,11 +1636,12 @@ def load_full(
         origin=origin,
         is_full=is_full,
         to_resokit=to_resokit,
-        raw_df=raw_df,
+        to_df=to_df,
     )
 
 
 def clear_memory(source: str, verbose: bool = True) -> None:
+
     """Clear the memory address of stored datasets.
 
     Parameters
