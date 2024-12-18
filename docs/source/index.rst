@@ -6,6 +6,12 @@
 Welcome to ResoKit's documentation!
 ===================================
 
+.. image:: _static/resokit_logo_std.png
+   :scale: 60
+   :alt: ResoKit logo
+
+.. Small space
+
 .. Here we render the README.md of the repository as a main page
 .. include:: _dynamic/README
 

@@ -1,5 +1,7 @@
 # Welcome to **ResoKit**
 
+![logo](https://github.com/gianuzzi/resokit/raw/ema/docs/source/_static/resokit_logo.png)
+
 <!-- BODY -->
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://badge.fury.io/py/uttrs)
