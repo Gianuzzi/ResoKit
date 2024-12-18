@@ -20,15 +20,15 @@
 # =============================================================================
 
 from .databases import clear_memory  # noqa
-from .databases import update  # noqa
-from .databases import load  # noqa
-from .query import query_online_data  # noqa
+from .databases import download  # noqa
+from .databases import load_eu  # noqa
+from .databases import load_nasa  # noqa
 
 # Make the functions available at the package level
 
 __all__ = [
     "clear_memory",
-    "update",
-    "load",
-    "query_online_data",
+    "download",
+    "load_eu",
+    "load_nasa",
 ]

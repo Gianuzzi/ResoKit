@@ -22,15 +22,17 @@ from pathlib import Path
 from typing import Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
+import attrs
+
 import pandas as pd
 
-from resokit.core import df_to_resokit
+from resokit.core import MetaData, df_to_resokit
 from resokit.datasets.utils import (
     DATASET_DTYPES,
     remove_from_zip,
     request_dataset,
 )
-from resokit.utils.utils import parse_to_iter
+from resokit.utils.utils import DEFAULT_METADATA, parse_to_iter
 
 
 # =============================================================================
@@ -49,26 +51,591 @@ _DATASET_URLS = {
 }
 _ZIP_FILENAME = "datasets.zip"  # Name for the ZIP archive
 
-# In-memory storage for datasets and indexes
-_IN_MEMORY_DATASETS = {"eu": pd.DataFrame(), "nasa": pd.DataFrame()}
-_IN_MEMORY_INDEXES = {"eu": None, "nasa": None}
-_IS_FULLY_STORED = {"eu": False, "nasa": False}
-
 # Index columns for each dataset
 _INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
+
+
+# =============================================================================
+# CLASSES
+# =============================================================================
+
+
+@attrs.define(frozen=True, slots=True, repr=False)
+class ResoKitDataset:
+    """Class to store a ResoKit dataset.
+
+    Parameters
+    ----------
+    dataset : pd.DataFrame
+        The dataset as a pandas DataFrame.
+    source : str
+        The source of the dataset ('eu' or 'nasa').
+    age : int
+        The age of the dataset in days.
+    origin : str
+        The origin of the dataset (file in zip, file, or mixed).
+    is_full : bool
+        Whether the dataset is complete.
+    metadata : dict
+        Metadata for the dataset.
+    """
+
+    dataset: pd.DataFrame = attrs.field(
+        validator=attrs.validators.instance_of(pd.DataFrame),
+    )
+    source: str = attrs.field(
+        validator=attrs.validators.in_({"eu", "nasa"}),
+        converter=str.lower,
+    )
+    age: int = attrs.field(validator=attrs.validators.instance_of(int))
+    origin: str = attrs.field(
+        validator=attrs.validators.in_(
+            {"file", "zip", "mixed", "internet", "null"}
+        ),
+        converter=str.lower,
+    )
+    is_full: bool = attrs.field(validator=attrs.validators.instance_of(bool))
+    metadata: dict = attrs.field(converter=MetaData, factory=MetaData)
+
+    def __attrs_post_init__(self):
+        """Post-init method to set the metadata."""
+        # Check wrong configurations
+        if self.origin == "null":
+            if self.age != -1:
+                raise ValueError("Age must be -1 if origin is 'null'.")
+            if self.is_full:
+                raise ValueError("is_full must be False if origin is 'null'.")
+            if not self.dataset.empty:
+                raise ValueError("Dataset must be empty if origin is 'null'.")
+        if self.age < 0:
+            if self.age != -1:
+                raise ValueError("Age must be -1 or positive.")
+            if self.is_full:
+                raise ValueError("is_full must be False if age is -1.")
+            if not self.dataset.empty:
+                raise ValueError("Dataset must be empty if age is -1.")
+        if self.is_full:
+            if self.dataset.empty:
+                raise ValueError("Dataset cannot be empty if is_full is True.")
+
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return len(self.dataset)
+
+    def __getitem__(self, key):
+        """x[y] <==> x.__getitem__(y)."""
+        sliced = self.dataset.__getitem__(key)
+        if isinstance(sliced, pd.Series):
+            sliced = sliced.to_frame().T
+        is_full = self.is_full and len(sliced) == len(self.dataset)
+        return ResoKitDataset(
+            dataset=sliced,
+            source=self.source,
+            age=self.age,
+            origin=self.origin,
+            is_full=is_full,
+            metadata=dict(self.metadata),
+        )
+
+    def __dir__(self):
+        """dir(pdf) <==> pdf.__dir__()."""
+        return super().__dir__() + dir(self.dataset)
+
+    def __getattr__(self, a):
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        return getattr(self.dataset, a)
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        with pd.option_context("display.show_dimensions", False):
+            df_body = repr(self.dataset).splitlines()
+        # Construct the repr
+        aux = "Full" if self.is_full else "Partial"
+        parts = [
+            f"{aux} ResokitDataset - {self.dataset.shape[0]} rows x "
+            + f"{self.dataset.shape[1]} columns",
+            f"Source: {self.source}",
+            f"Age: {self.age} days",
+            f"Origin: {self.origin}",
+            *df_body,
+        ]
+
+        return "\n".join(parts)
+
+    def _repr_html_(self):
+        """Return a HTML representation of the DataFrame."""
+        ad_id = id(self)  # Unique ID for the div container
+        # Header and footer
+        aux = "Full" if self.is_full else "Partial"
+        rows = f"{self.dataset.shape[0]} rows"
+        columns = f"{self.dataset.shape[1]} columns"
+        footer = f" {aux} ResokitDataSet - {rows} x {columns}"
+        # HTML representation of the DataFrame
+        with pd.option_context("display.show_dimensions", False):
+            df_html = self.dataset._repr_html_()
+        # Construct the HTML
+        parts = [
+            f'<div class="resokit-data-container" id={ad_id}>',
+            df_html,
+            footer,
+            "</div>",
+        ]
+        # Join the parts
+        html = "".join(parts)
+
+        return html
+
+    def to_dataframe(
+        self, columns: list = None, copy: bool = True, sort: bool = False
+    ) -> pd.DataFrame:
+        """Convert data to pandas data frame.
+
+        This method constructs a data frame with the data inside the
+        data_df attribute.
+
+        Parameters
+        ----------
+        columns : list, optional. Default: None.
+            Specific columns to return.
+            If `None`, return all columns.
+        copy : bool, optional. Default: True.
+            Whether to return a copy of the `DataFrame`, or the original.
+        sort : bool, optional. Default: False.
+            Whether to sort the dataset by the index columns.
+
+        Returns
+        -------
+        df: DataFrame
+            Data frame with the requested columns.
+        """
+        if columns is not None:
+            used_cols = [
+                col for col in list(columns) if col in self.dataset.columns
+            ]
+            df = self.dataset[used_cols]
+        else:
+            df = self.dataset
+
+        if copy and sort:
+            return df.sort_index(inplace=False).copy()
+        elif copy:
+            return df.copy()
+        elif sort:
+            return df.sort_index(inplace=False)
+        return df
+
+    def to_dict(self) -> dict:
+        """Convert metadata to a dictionary.
+
+        This method constructs a dictionary with the data inside the
+        metadata attribute. It also adds the age, source, and origin.
+
+        Returns
+        -------
+        full_metadata : dict
+            Dictionary with the metadata.
+        """
+        extra = {"age": self.age, "source": self.source, "origin": self.origin}
+        return {
+            **extra,
+            **self.metadata,
+        }
+
+    def copy(self) -> "ResoKitDataset":
+        """Create and return copy of the :py:class:`ResoKitDataset`.
+
+        Returns
+        -------
+        ResoKitDataset
+            Copy of the ResoKitDataset.
+        """
+        return ResoKitDataset(
+            dataset=self.dataset.copy(),
+            source=self.source,
+            age=self.age,
+            origin=self.origin,
+            is_full=self.is_full,
+            metadata=dict(self.metadata),
+        )
+
+    def to_resokit(self, sort: bool = False) -> "ResoKitDataset":
+        """Convert the dataset to a pure ResoKit dataset.
+
+        This method converts the dataset to a ResoKit dataset, which
+        includes only the columns required by ResoKit.
+
+        Parameters
+        ----------
+        sort : bool, optional. Default: False.
+            Whether to sort the dataset by the index columns.
+
+        Returns
+        -------
+        dataset : ResoKitDataset
+            ResoKit dataset.
+        """
+        df = df_to_resokit(
+            self.dataset,
+            source=self.source,
+            drop=True,
+            copy=True,
+            sort_by=False,
+            return_df=True,
+        )
+        return ResoKitDataset(
+            dataset=df,
+            source=self.source,
+            age=self.age,
+            origin=self.origin,
+            is_full=self.is_full,
+            metadata=dict(self.metadata),
+        )
+
+
+# =============================================================================
+# VARIABLES
+# =============================================================================
+
+
+# Store the datasets in memory
+_IN_MEMORY_INDEXES = {
+    "eu": ResoKitDataset(
+        dataset=pd.DataFrame(),
+        source="eu",
+        age=-1,
+        origin="null",
+        is_full=False,
+    ),
+    "nasa": ResoKitDataset(
+        dataset=pd.DataFrame(),
+        source="nasa",
+        age=-1,
+        origin="null",
+        is_full=False,
+    ),
+}
+_IN_MEMORY_DATASETS = {
+    "eu": ResoKitDataset(
+        dataset=pd.DataFrame(),
+        source="eu",
+        age=-1,
+        origin="null",
+        is_full=False,
+    ),
+    "nasa": ResoKitDataset(
+        dataset=pd.DataFrame(),
+        source="nasa",
+        age=-1,
+        origin="null",
+        is_full=False,
+    ),
+}
+_IS_FULLY_STORED = {"eu": False, "nasa": False}
+
 
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
 
 
-def update(
-    source: str, verbose: bool = True, in_zip: bool = True, store: bool = False
-) -> Union[Path, None]:
-    """Update the dataset from a specified source and saves it locally.
+def df_to_dataset(
+    df: pd.DataFrame,
+    source: str,
+    age: int = -1,
+    origin: str = "null",
+    is_full: bool = False,
+    metadata: dict = None,
+    copy: bool = True,
+    as_resokit: bool = True,
+) -> ResoKitDataset:
+    """Convert a DataFrame to a ResoKit dataset.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to convert.
+    source : str
+        Source of the dataset ('eu' or 'nasa').
+    age : int, optional. Default: -1.
+        Age of the dataset in days.
+    origin : str, optional. Default: 'unknown'.
+        Origin of the dataset. Can be one of:
+        ('file', 'zip', 'mixed', 'internet', or 'unknown').
+    is_full : bool, optional. Default: False.
+        Whether the dataset is complete.
+    metadata : dict, optional. Default: None.
+        Metadata for the dataset.
+    copy : bool, optional. Default: True.
+        Whether to return a copy of the DataFrame.
+        Despite this, the output will be a `ResoKitDataset`.
+    as_resokit : bool, optional. Default: True.
+        Whether to perform the column conversion to ResoKit columns.
+
+    Returns
+    -------
+    dataset : ResoKitDataset
+        ResoKit dataset.
+    """
+    # Check if df is a DataFrame
+    if not isinstance(df, pd.DataFrame):
+        raise TypeError(f"df must be a DataFrame. Got: {type(df)} instead.")
+
+    if as_resokit:
+        df = df_to_resokit(
+            df,
+            source=source,
+            drop=True,
+            copy=copy,
+            sort_by=False,
+            return_df=True,
+        )
+
+    if metadata is None:
+        metadata = dict(DEFAULT_METADATA)
+
+    return ResoKitDataset(
+        dataset=df,
+        source=source,
+        age=age,
+        origin=origin,
+        is_full=is_full,
+        metadata=metadata,
+    )
+
+
+def _mk_empty_dataset(source: str) -> ResoKitDataset:
+    """Create an empty dataset.
+
+    Parameters
+    ----------
+    source : str
+        Source of the dataset ('eu' or 'nasa').
+
+    Returns
+    -------
+    dataset : ResoKitDataset
+        Empty ResoKit dataset.
+    """
+    return ResoKitDataset(
+        dataset=pd.DataFrame(),
+        source=source,
+        age=-1,
+        origin="null",
+        is_full=False,
+        metadata=dict(DEFAULT_METADATA),
+    )
+
+
+def _update_stored_dataset(
+    new_df: pd.DataFrame,
+    source: str,
+    age: int,
+    origin: str,
+    is_full: bool,
+    verbose: bool = True,
+    index_only: bool = False,
+    sort: bool = True,
+    metadata: dict = None,
+    overwrite: bool = False,
+) -> None:
+    """Update the stored dataset in memory.
+
+    Parameters
+    ----------
+    new_df : pd.DataFrame
+        New dataset to store. It must be a raw dataset.
+    source : str
+        Dataset source ('eu' or 'nasa').
+    age : int
+        Age of the dataset in days.
+    origin : str
+        Origin of the dataset.
+    is_full : bool
+        Whether the dataset is complete.
+    verbose : bool, optional
+        Whether to print informational messages.
+    index_only : bool, optional
+        Whether to store only the index.
+    sort : bool, optional
+        Whether to sort the dataset in memory.
+        Index is always sorted (by default).
+    metadata : dict, optional
+        Metadata to update the dataset.
+    overwrite : bool, optional
+        Whether to overwrite the stored dataset.
+    """
+    if _IS_FULLY_STORED[source] and not overwrite:
+        return  # No need to update if already fully stored
+
+    if new_df.empty:
+        if verbose:
+            print(" No rows to store in memory.")
+        return
+
+    # Store the rows in the index
+    if is_full:
+
+        # Check if the index is already stored
+        if not _IN_MEMORY_INDEXES[source].dataset.empty and not overwrite:
+            return
+
+        # Get the index columns
+        new_index = new_df[_INDEX_COLUMNS[source]].copy()
+
+        # Update the index
+        _IN_MEMORY_INDEXES[source] = df_to_dataset(
+            new_index,
+            source=source,
+            age=age,
+            origin=origin,
+            is_full=is_full,
+            metadata=metadata,
+            copy=True,
+            as_resokit=False,
+        )
+
+        if verbose:
+            print(" Updated stored index in memory.")
+
+    if index_only:
+        return
+
+    if is_full or _IN_MEMORY_DATASETS[source].dataset.empty:
+        # Update the stored dataset
+        _IN_MEMORY_DATASETS[source] = df_to_dataset(
+            new_df,
+            source=source,
+            age=age,
+            origin=origin,
+            is_full=is_full,
+            metadata=metadata,
+            copy=True,
+            as_resokit=False,
+        )
+
+        if is_full:
+            _IS_FULLY_STORED[source] = True
+            if verbose:
+                print(" Stored dataset in memory.")
+        else:
+            # Get the rows new to be stored
+            new_to_store = new_df.index.to_list()
+            if verbose:
+                print(f" Stored rows {new_to_store} in memory...")
+        return
+
+    # Get the rows new to be stored
+    new_to_store = [
+        x
+        for x in new_df.index
+        if x not in _IN_MEMORY_DATASETS[source].dataset.index
+    ]
+
+    # Check if all rows are stored
+    if not new_to_store and not overwrite:
+        return
+
+    elif new_to_store and not overwrite:
+        # Remove the rows already stored
+        new_df = new_df.loc[new_to_store]
+
+        # Create updated dataset
+        updated_df = pd.concat([_IN_MEMORY_DATASETS[source].dataset, new_df])
+
+        # Get age and origin
+        age_old = _IN_MEMORY_DATASETS[source].age
+        origin_old = _IN_MEMORY_DATASETS[source].origin
+
+        # Get metadata
+        meta_old = dict(_IN_MEMORY_DATASETS[source].metadata)
+
+    elif overwrite:
+        repeated = [
+            x
+            for x in new_df.index
+            if x in _IN_MEMORY_DATASETS[source].dataset.index
+        ]
+        # Something to store?
+        if not repeated:
+            return
+        # Check if all stored is in the new dataset
+        elif len(repeated) == len(_IN_MEMORY_DATASETS[source].dataset):
+            # Create updated dataset
+            updated_df = new_df
+
+            # Get age and origin (from new)
+            age_old = age
+            origin_old = origin
+
+            # Get metadata (from new)
+            meta_old = metadata
+
+        else:  # Partial overwrite
+            to_keep = [
+                x
+                for x in _IN_MEMORY_DATASETS[source].dataset.index
+                if x not in new_df.index
+            ]
+
+            # Extract the rows to keep
+            keep_df = _IN_MEMORY_DATASETS[source].dataset.loc[to_keep]
+
+            # Create updated dataset
+            updated_df = pd.concat([keep_df, new_df])
+
+            # Get age and origin
+            age_old = _IN_MEMORY_DATASETS[source].age
+            origin_old = _IN_MEMORY_DATASETS[source].origin
+
+            # Get metadata
+            meta_old = dict(_IN_MEMORY_DATASETS[source].metadata)
+
+        # Update new_to_store
+        new_to_store = new_df.index.to_list()
+
+    # Sort the dataset
+    if sort:
+        updated_df.sort_index(inplace=True)
+
+    # Check if metadata is provided
+    print(" Metadata: ", metadata)
+    print(" Metadata old: ", meta_old)
+    if metadata is not None:
+        meta_old.update(metadata)
+        print(" Updated metadata: ", meta_old)
+
+    # Update the dataset
+    _IN_MEMORY_DATASETS[source] = df_to_dataset(
+        updated_df,
+        source=source,
+        age=max(age_old, age),
+        origin="mixed" if origin_old != origin else origin_old,
+        is_full=False,
+        metadata=meta_old,
+        copy=True,
+        as_resokit=False,
+    )
+
+    if verbose:
+        print(f" Stored rows {new_to_store} in memory.")
+
+    return
+
+
+def download(
+    source: str,
+    dir_path: Union[str, Path, None] = None,
+    to_file: Union[str, Path, bool, None] = False,
+    to_zip: Union[str, Path, bool, None] = False,
+    to_memory: bool = True,
+    overwrite: bool = False,
+    verbose: bool = True,
+    to_resokit: Union[bool, None] = None,
+) -> Union[Path, pd.DataFrame, ResoKitDataset]:
+    """Download a dataset from a specified source and save it locally.
 
     The dataset is downloaded from the provided URL and saved as a CSV file.
-    This csv file can be stored in a ZIP archive if requested, updating it.
+    This csv file can be stored in a ZIP archive if requested.
 
     Note: Requires the requests library to download the dataset.
 
@@ -76,20 +643,34 @@ def update(
     ----------
     source : str
         Identifier for the data source ('eu' or 'nasa').
-    verbose : bool, optional. Default: True.
-        If `True`, displays messages about the download and update
-        process.
-    in_zip : bool, optional. Default: True.
-        If `True`, updates the dataset in the ZIP archive,
-        otherwise updates the file directly.
-    store : bool, optional. Default: False.
+    dir_path : str or Path
+        Directory path to save the dataset, or path to the ZIP archive.
+        If `None`, the default directory is used.
+    to_file : str or Path or bool, optional. Default: False.
+        Path or str to the file to store the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not saved nor created.
+    to_zip : str or Path or bool, optional. Default: False.
+        Path or str to the ZIP archive to store the dataset.
+        If `True`, default ZIP filename is used.
+        If `False`, the file is not saved nor created in the ZIP archive.
+    to_memory : bool, optional. Default: False.
         If `True`, stores the dataset in memory.
+    overwrite : bool, optional. Default: False.
+        If `True`, overwrites the file if it already exists.
+        It also overwrites the stored dataset in memory.
+    verbose : bool, optional. Default: True.
+        If `True`, displays messages about the download process.
+    to_resokit : bool, dict, optional. Default: None.
+        If `True`, returns the dataset as a ResoKit dataset.
+        If `False`, returns the dataset as a pandas DataFrame.
+        If `None`, returns the path to the downloaded file.
 
     Returns
     -------
-    updated : Path or None
-        `Path` to the downloaded dataset (if `in_zip=False`),
-        or `None` if `in_zip=True`.
+    downloaded : Path or pd.DataFrame or None
+        `Path` to the downloaded dataset (and or zip archive),
+        or the dataset if `dataset_to_resokit` is not `None`.
     """
     source = source.lower()  # Ensure lowercase
 
@@ -97,127 +678,301 @@ def update(
     if source not in _DATASET_FILENAMES:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
-    # Define paths and URLs
-    file_path = BASE_PATH / _DATASET_FILENAMES[source]
+    # Check if something to do
+    if not to_file and not to_zip and not to_memory and to_resokit is None:
+        raise ValueError(
+            "Nothing to do. Set at least one of "
+            + "to_file, to_zip, to_memory, or to_resokit."
+        )
+    if (
+        not to_file
+        and not to_zip
+        and to_memory
+        and to_resokit is None
+        and _IS_FULLY_STORED[source]
+        and not overwrite
+    ):
+        raise ValueError(
+            "Nothing to do. Dataset is already fully stored in memory and "
+            + "overwrite is False."
+        )
+
+    # Define URS
     url = _DATASET_URLS[source]
-    zip_path = BASE_PATH / _ZIP_FILENAME
+
+    # Define path
+    if dir_path is None:
+        dir_path = BASE_PATH
+    else:
+        dir_path = Path(dir_path)
+
+    # Check if directory exists
+    if not dir_path.exists():
+        raise FileNotFoundError(f"Directory {dir_path} not found.")
+
+    # Check if file exists
+    if to_file:
+        if to_file is True:
+            file_name = _DATASET_FILENAMES[source]
+        else:
+            file_name = to_file
+        file_path = dir_path / file_name
+        if file_path.exists() and not overwrite:
+            raise FileExistsError(f"File {file_path} already exists.")
+    else:
+        file_path = None
+
+    # Check if zip exists
+    if to_zip:
+        if to_zip is True:
+            zip_name = _ZIP_FILENAME
+        else:
+            zip_name = to_zip
+        zip_path = dir_path / zip_name
+        if zip_path.exists() and not overwrite:
+            raise FileExistsError(f"ZIP archive {zip_path} already exists.")
+    else:
+        zip_path = None
 
     # Download the dataset
     data = request_dataset(url, verbose=verbose)
 
-    # Create a dataframe from the data
-    df = pd.read_csv(BytesIO(data), dtype=DATASET_DTYPES[source])
-
-    # Make a simple check to see if the data is valid
-    if df.empty:
+    # Check if the data is valid. If not, raise an error. Check length > 0 too
+    if not data or len(data) == 0:
         raise ValueError(f"Empty dataset downloaded from {url}.")
-
-    if verbose:
+    elif verbose:
         print(" Data downloaded successfully.")
 
-    # Store the data in memory
-    if store:
-        _IN_MEMORY_INDEXES[source] = df[_INDEX_COLUMNS[source]].copy()
-        _IN_MEMORY_DATASETS[source] = df.copy()
-        _IS_FULLY_STORED[source] = True
-
-    # Save the file...
-
-    # Check if we are updating the ZIP archive
-    if in_zip:
-        # Check if the ZIP archive exists
+    # Store the data in ZIP
+    if zip_path is not None:
         if not zip_path.exists():
-            warnings.warn(
-                f"ZIP archive {_ZIP_FILENAME} not found.", stacklevel=2
-            )
             if verbose:
-                print(f" Creating the ZIP archive {_ZIP_FILENAME}...")
+                print(f" Creating the ZIP archive {zip_path}...")
         else:
             # Remove the file from the ZIP archive
-            remove_from_zip(
-                zip_path, _DATASET_FILENAMES[source], verbose=verbose
-            )
-
+            remove_from_zip(zip_path, file_name, verbose=verbose)
         # Write (and create if necessary) the file to the ZIP archive
         with ZipFile(zip_path, "a", compression=ZIP_DEFLATED) as zipf:
-            zipf.writestr(_DATASET_FILENAMES[source], data)
-
+            zipf.writestr(file_name, data)
+        # Print message
         if verbose:
-            print(f" Updated {_DATASET_FILENAMES[source]} in {_ZIP_FILENAME}")
+            print(f" Written {file_name} to {zip_path}.")
 
-        return
-
-    # Check if the file exists
-    if not file_path.exists():
-        warnings.warn(f"File {file_path} not found.", stacklevel=2)
-        if verbose:
+    # Store the data in file
+    if file_path is not None:
+        if not file_path.exists() and verbose:
             print(f" Creating the file {file_path}...")
+        # Write the file
+        with open(file_path, "wb") as f:
+            f.write(data)
+        # Print message
+        if verbose:
+            print(f" Written {file_path}.")
 
-    # Write the file
-    with open(file_path, "wb") as f:
-        f.write(data)
+    # Store the data in memory? Only if not to_memory nor to_resokit
+    if to_memory or to_resokit is not None:
+        # Create a dataframe from the data
+        df = pd.read_csv(BytesIO(data), dtype=DATASET_DTYPES[source])
 
-    if verbose:
-        print(f" Updated {file_path}")
+    # Create metadata
+    metadata = dict(
+        {
+            "downloaded": datetime.datetime.now().isoformat(),
+            "url": url,
+        }
+    )
+    metadata = dict(DEFAULT_METADATA, **metadata)
 
-    return file_path
+    # Store the data in memory
+    if to_memory:
+        _update_stored_dataset(
+            df,
+            source,
+            age=0,
+            origin="internet",
+            is_full=True,
+            verbose=verbose,
+            index_only=False,
+            sort=True,
+            metadata=metadata,
+            overwrite=overwrite,
+        )
+
+    # Return the data
+    if to_resokit is not None:
+        return df_to_dataset(
+            df,
+            source=source,
+            age=0,
+            origin="internet",
+            is_full=True,
+            copy=True,
+            as_resokit=to_resokit,
+        )
+
+    # Return the path
+    if file_path and zip_path:
+        return file_path, zip_path
+    if file_path:
+        return file_path
+    if zip_path:
+        return zip_path
+
+    return
 
 
-def check_file_age(source: str, from_zip: bool = True) -> int:
+def _check_file_age(
+    file_path: Union[str, Path],
+    zip_path: Union[str, Path, None],
+    verbose: bool = True,
+) -> int:
     """Check the dataset file's age and prints a warning if it's outdated.
 
     Parameters
     ----------
-    source : str
-        Identifier for the data source ('eu' or 'nasa').
-    from_zip : bool, optional. Default: False.
-        If `True`, check the file inside the ZIP archive.
+    file_path : str or Path, optional. Default: False.
+        Path to the file.
+    zip_path : str or Path or None, optional. Default: False.
+        Path to the ZIP archive.
+    verbose : bool, optional. Default: True.
+        If `True`, prints messages about the process.
 
     Returns
     -------
     age : int
         Age of the file in days.
     """
-    source = source.lower()  # Ensure lowercase
-
-    file_path = (
-        BASE_PATH / _DATASET_FILENAMES[source]
-    )  # Path to the dataset file
-
-    if not from_zip:
-        try:
-            creation = datetime.datetime.fromtimestamp(
-                file_path.stat().st_mtime
-            )
-        except FileNotFoundError:
-            warnings.warn(
-                f"File {file_path} not found. Checking age from ZIP.",
-                stacklevel=2,
-            )
-            from_zip = True
-
-    if from_zip:  # Get the creation date from inside the ZIP archive
-
-        zip_path = BASE_PATH / _ZIP_FILENAME  # Path to the ZIP archive
-
+    # Get the file's last modified date
+    if zip_path:
+        file_name = Path(file_path).name
         with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
-            date_info = zipf.getinfo(_DATASET_FILENAMES[source]).date_time
+            date_info = zipf.getinfo(file_name).date_time
             creation = datetime.datetime(*date_info)
+    else:
+        creation = datetime.datetime.fromtimestamp(file_path.stat().st_mtime)
 
     # Calculate age in days
     age = (datetime.datetime.now() - creation).days
 
-    print(f"Last modified: {creation} ({age} days ago)")
+    if verbose:
+        print(f"Last modified: {creation} ({age} days ago)")
 
     return age
+
+
+def _load_from_zip(
+    zip_path: Path,
+    file_name: str,
+    source: str,
+    skip_rows: Union[int, callable, None] = None,
+    usecols: Union[list, callable, None] = None,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """Load the dataset from a ZIP archive.
+
+    Parameters
+    ----------
+    zip_path : Path
+        Full path to the ZIP archive.
+    file_name : str
+        Name of the file to load from the ZIP archive.
+    source : str
+        Identifier for the data source ('eu' or 'nasa').
+    skip_rows : int, optional
+        Number of rows to skip.
+    usecols : list, optional
+        Columns to load.
+    verbose : bool, optional
+        If `True`, prints messages about the process.
+
+    Returns
+    -------
+    data : pd.DataFrame
+        Loaded dataset as a pandas DataFrame.
+    """
+    # Check if the zip exists
+    if not zip_path.exists():
+        raise FileNotFoundError(f"ZIP archive {zip_path} not found.")
+
+    # Define the zip name
+    zip_name = zip_path.name  # Name of the ZIP archive
+
+    # Load the dataset from the ZIP archive
+    with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
+        if file_name in zipf.namelist():
+            if verbose:  # Print message if verbose
+                print(
+                    f" Loading {file_name} " + f"directly from {zip_name}..."
+                )
+            # Load directly from the .zip
+            with zipf.open(file_name) as file:
+                data = pd.read_csv(
+                    file,
+                    header=0,
+                    skiprows=skip_rows,
+                    usecols=usecols,
+                    dtype=DATASET_DTYPES[source],
+                )
+        else:
+            raise FileNotFoundError(
+                f"File {file_name} not found in {zip_name}."
+            )
+
+    return data
+
+
+def _load_stored_full(
+    source: str,
+    raw_df: bool = False,
+    to_resokit: bool = True,
+    sort: bool = True,
+) -> Union[pd.DataFrame, ResoKitDataset]:
+    """Load the fully stored dataset from memory.
+
+    Parameters
+    ----------
+    source : str
+        Dataset source ('eu' or 'nasa').
+    raw_df : bool, optional
+        Whether to return the raw DataFrame.
+    to_resokit : bool, optional
+        Whether to return the dataset as a ResoKit dataset
+    sort : bool, optional
+        Whether to sort the dataset by the index columns
+
+    Returns
+    -------
+    data : Union[pd.DataFrame, ResoKitDataset]
+        The loaded dataset as a DataFrame or a ResoKit dataset.
+    """
+    # Check if the dataset is fully stored
+    if not _IS_FULLY_STORED[source]:
+        raise ValueError(f"Source {source} is not fully stored.")
+    # Return the dataset
+    if not raw_df:
+        if sort:
+            sortd = _IN_MEMORY_DATASETS[source].dataset.sort_index()
+            return df_to_dataset(
+                sortd,
+                source=source,
+                age=_IN_MEMORY_DATASETS[source].age,
+                origin=_IN_MEMORY_DATASETS[source].origin,
+                is_full=_IN_MEMORY_DATASETS[source].is_full,
+                metadata=dict(_IN_MEMORY_DATASETS[source].metadata),
+                copy=False,
+                as_resokit=to_resokit,
+            )
+        elif to_resokit:
+            return _IN_MEMORY_DATASETS[source].to_resokit()
+        return _IN_MEMORY_DATASETS[source]
+    return _IN_MEMORY_DATASETS[source].to_dataframe(sort=sort)
 
 
 def _load_stored_rows(
     source: str,
     rows: Union[list, None] = None,
     full: bool = False,
-    copy: bool = True,
-) -> Tuple[pd.DataFrame, list]:
+) -> Union[Tuple[pd.DataFrame, list, int, str], ResoKitDataset]:
     """Load specific rows by index from memory.
 
     Parameters
@@ -228,98 +983,317 @@ def _load_stored_rows(
         Row indexes to load (0-indexed).
     full : bool, optional
         Whether to load the full dataset.
-    copy : bool, optional
-        Whether to return a copy of the DataFrame.
+        If `True`, the `rows` parameter is ignored,
+        and the full dataset is loaded as a ResoKit dataset.
 
     Returns
     -------
-    Tuple[pd.DataFrame, list]
-        The loaded dataset as a DataFrame and a list of not stored rows.
+    Tuple[pd.DataFrame, list, int, str] or ResoKitDataset
+        The loaded dataset as a DataFrame, a list of the rows not stored,
+        the stored dataset age, and stored dataset origin.
+        If `full` is `True`, returns the dataset as a ResoKit dataset.
     """
+    # If all rows are requested, check if the dataset is fully stored
     if full:
-        if not _IS_FULLY_STORED[source]:
-            raise ValueError(f"Source {source} is not fully stored.")
-        aux = _IN_MEMORY_DATASETS[source]
-        not_stored = []
+        return _load_stored_full(source)
 
-    elif rows is not None:
-        stored = [x for x in rows if x in _IN_MEMORY_DATASETS[source].index]
-        aux = _IN_MEMORY_DATASETS[source].loc[stored]
-        not_stored = [x for x in rows if x not in stored]
+    # If specific rows are requested
+    if rows is not None:
+        stored = [
+            x for x in rows if x in _IN_MEMORY_DATASETS[source].dataset.index
+        ]
+        data = _IN_MEMORY_DATASETS[source].dataset.loc[stored].copy()
+        not_stored = [x for x in rows if x not in stored]  # Get age and origin
+        age = _IN_MEMORY_DATASETS[source].age
+        origin = _IN_MEMORY_DATASETS[source].origin
 
-    else:
-        raise ValueError("No rows provided.")
+        return data, not_stored, age, origin
 
-    if copy:
-        return aux.copy(), not_stored
-    return aux, not_stored
+    raise ValueError("No rows provided.")
 
 
-def _store_rows(
-    source: str,
-    rows_df: pd.DataFrame,
-    verbose: bool = True,
-) -> None:
-    """Store specific rows by index in memory.
+def _load_stored_index(
+    source: str, raw_df: bool = False, to_resokit: bool = True
+) -> Union[pd.DataFrame, ResoKitDataset]:
+    """Load the stored index from memory.
 
     Parameters
     ----------
     source : str
         Dataset source ('eu' or 'nasa').
-    rows_df : pd.DataFrame
-        DataFrame with rows to store.
-    verbose : bool, optional
-        Whether to print informational messages.
+    raw_df : bool, optional
+        Whether to return the raw DataFrame.
+    to_resokit : bool, optional
+        Whether to return the dataset as a ResoKit dataset
+
+    Returns
+    -------
+    dataset : pd.DataFrame or ResoKitDataset
+        The loaded dataset as a DataFrame or a ResoKit dataset.
     """
-    if _IS_FULLY_STORED[source] or rows_df.empty:
-        return  # No need to store if already fully stored, or empty
-
-    not_stored = [
-        x for x in rows_df.index if x not in _IN_MEMORY_DATASETS[source].index
-    ]
-
-    _IN_MEMORY_DATASETS[source] = pd.concat(
-        [_IN_MEMORY_DATASETS[source], rows_df.loc[not_stored]]
-    )
-
-    if verbose and not_stored:
-        print(f" Stored rows {not_stored} in memory for source {source}.")
-
-    return
+    if not raw_df:
+        if to_resokit:
+            return _IN_MEMORY_INDEXES[source].to_resokit()
+        return _IN_MEMORY_INDEXES[source]
+    return _IN_MEMORY_INDEXES[source].to_dataframe()
 
 
-def load(
-    source: str,
+def load_eu(
+    from_memory: bool = True,
+    from_zip: Union[str, bool] = True,
+    from_file: Union[str, bool] = True,
+    dir_path: Union[str, Path, None] = None,
     to_resokit: bool = True,
     check_age: bool = False,
-    download_if_missing: bool = False,
-    extract: bool = False,
+    only_rows: Union[list, int] = False,
+    verbose: bool = True,
+    store: Union[bool, str] = False,
+    store_index: Union[bool, str] = False,
+) -> ResoKitDataset:
+    """Load the exoplanet.eu dataset.
+
+    The dataset is loaded from a ZIP archive or a CSV file, or from memory
+    if already stored.
+
+    Parameters
+    ----------
+    from_memory : bool, optional. Default: True.
+        If `True`, loads the dataset from memory if available.
+    from_zip : str or Path or bool, optional. Default: True.
+        Path to the ZIP archive to load the dataset.
+        If `True`, default ZIP filename is used.
+        If `False`, the file is not loaded from the ZIP archive.
+    from_file : str or Path or bool, optional. Default: True.
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
+    dir_path : str or Path, optional. Default: None.
+        Directory path to load the dataset from.
+        If `None`, the default directory is used.
+    to_resokit : bool, optional. Default: True.
+        If `True`, returns the dataset with only the columns
+        required by ResoKit.
+    check_age : bool, optional. Default: False.
+        If `True`, displays the file's last modified date.
+    only_rows : list|int, optional. Default: [].
+        If provided, loads only the specified rows.
+        Remember that python is 0-indexed, so
+        the first row (system) is 0.
+    verbose : bool, optional. Default: True.
+        If `True`, prints messages about the process.
+    store : bool, str, optional. Default: False.
+        If `True`, stores the dataset in memory.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+    store_index : bool, str, optional. Default: True.
+        If `True`, stores the dataset index in memory.
+        If `only_rows` is provided, the index is not stored.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+
+    Returns
+    -------
+    dataset : ResoKitDataset
+        The loaded dataset as a ResoKit dataset.
+    """
+    return load_full(
+        source="eu",
+        from_memory=from_memory,
+        from_zip=from_zip,
+        from_file=from_file,
+        dir_path=dir_path,
+        to_resokit=to_resokit,
+        raw_df=False,
+        check_age=check_age,
+        only_rows=only_rows,
+        verbose=verbose,
+        store=store,
+        store_index=store_index,
+    )
+
+
+def load_nasa(
+    from_memory: bool = True,
+    from_zip: Union[str, bool] = True,
+    from_file: Union[str, bool] = True,
+    dir_path: Union[str, Path, None] = None,
+    to_resokit: bool = True,
+    check_age: bool = False,
+    only_rows: Union[list, int] = False,
+    verbose: bool = True,
+    store: Union[bool, str] = False,
+    store_index: Union[bool, str] = False,
+) -> ResoKitDataset:
+    """Load the nasa dataset.
+
+    The dataset is loaded from a ZIP archive or a CSV file, or from memory
+    if already stored.
+
+    Parameters
+    ----------
+    from_memory : bool, optional. Default: True.
+        If `True`, loads the dataset from memory if available.
+    from_zip : str or Path or bool, optional. Default: True.
+        Path to the ZIP archive to load the dataset.
+        If `True`, default ZIP filename is used.
+        If `False`, the file is not loaded from the ZIP archive.
+    from_file : str or Path or bool, optional. Default: True.
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
+    dir_path : str or Path, optional. Default: None.
+        Directory path to load the dataset from.
+        If `None`, the default directory is used.
+    to_resokit : bool, optional. Default: True.
+        If `True`, returns the dataset with only the columns
+        required by ResoKit.
+    check_age : bool, optional. Default: False.
+        If `True`, displays the file's last modified date.
+    only_rows : list|int, optional. Default: [].
+        If provided, loads only the specified rows.
+        Remember that python is 0-indexed, so
+        the first row (system) is 0.
+    verbose : bool, optional. Default: True.
+        If `True`, prints messages about the process.
+    store : bool, str, optional. Default: False.
+        If `True`, stores the dataset in memory.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+    store_index : bool, str, optional. Default: True.
+        If `True`, stores the dataset index in memory.
+        If `only_rows` is provided, the index is not stored.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
+
+    Returns
+    -------
+    dataset : ResoKitDataset
+        The loaded dataset as a ResoKit dataset.
+    """
+    return load_full(
+        source="nasa",
+        from_memory=from_memory,
+        from_zip=from_zip,
+        from_file=from_file,
+        dir_path=dir_path,
+        to_resokit=to_resokit,
+        raw_df=False,
+        check_age=check_age,
+        only_rows=only_rows,
+        verbose=verbose,
+        store=store,
+        store_index=store_index,
+    )
+
+
+def __aux_load_full(
+    df: pd.DataFrame,
+    source: str,
+    age: int,
+    origin: str,
+    is_full: bool,
+    to_resokit: bool,
+    raw_df: bool,
+    metadata: dict = None,
+) -> Union[pd.DataFrame, ResoKitDataset]:
+    """Auxiliary function to load the dataset from a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to load.
+    source : str
+        Identifier for the data source ('eu' or 'nasa').
+    age : int
+        Age of the dataset in days.
+    origin : str
+        Origin of the dataset.
+    is_full : bool
+        Whether the dataset is complete.
+    to_resokit : bool
+        Whether to return the dataset as a ResoKit dataset.
+    raw_df : bool
+        Whether to return the raw DataFrame.
+    metadata : dict, optional
+        Metadata for the dataset, if any.
+
+    Returns
+    -------
+    dataset : pd.DataFrame or ResoKitDataset
+        The loaded dataset as a DataFrame or a ResoKit dataset
+    """
+    if not raw_df:  # Return as ResoKitDataset
+        return df_to_dataset(
+            df,
+            source=source,
+            age=age,  # age from stored dataset
+            origin=origin,  # origin from stored dataset
+            is_full=is_full,
+            metadata=metadata,
+            copy=False,
+            as_resokit=to_resokit,
+        )
+    if to_resokit:  # Return as resokit dataframe
+        return df_to_resokit(
+            df,
+            source=source,
+            drop=True,
+            copy=False,
+            sort_by=False,
+            metadata=metadata,
+            return_df=True,
+        )
+    return df  # Return as raw dataframe
+
+
+def load_full(
+    source: str,
+    from_memory: bool = True,
+    from_zip: Union[str, bool] = True,
+    from_file: Union[str, bool] = True,
+    dir_path: Union[str, Path, None] = None,
+    to_resokit: bool = True,
+    raw_df: bool = True,
+    check_age: bool = False,
     only_index: bool = False,
     only_rows: Union[list, int] = False,
     verbose: bool = True,
-    store: bool = False,
-    store_index: bool = True,
-) -> pd.DataFrame:
-    """Load the dataset from a specified source and optionally extract it.
+    store: Union[bool, str] = False,
+    store_index: Union[bool, str] = True,
+) -> Union[pd.DataFrame, ResoKitDataset]:
+    """Load the dataset from a specified source.
 
-    The dataset is loaded from the provided CSV file and stored in memory.
-    If the dataset is already stored in memory, it is returned directly.
+    The dataset is loaded from a ZIP archive or a CSV file, or from memory
+    if already stored.
+
+    Note
+    ----
+    If both `from_file` and `from_zip` are provided, it is assumed that the
+    file inside the ZIP archive is the same as the one provided in `from_file`.
+    Finally, the path constructed is: `dir_path / zip_name / file_name`.
 
     Parameters
     ----------
     source : str
         Identifier for the data source ('eu' or 'nasa').
+    from_memory : bool, optional. Default: True.
+        If `True`, loads the dataset from memory if available.
+    from_zip : str or Path or bool, optional. Default: True.
+        Path to the ZIP archive to load the dataset.
+        If `True`, default ZIP filename is used.
+        If `False`, the file is not loaded from the ZIP archive.
+    from_file : str or Path or bool, optional. Default: True.
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
+    dir_path : str or Path, optional. Default: None.
+        Directory path to load the dataset from.
+        If `None`, the default directory is used.
     to_resokit : bool, optional. Default: True.
         If `True`, returns the dataset including only the columns
         required by ResoKit.
-        Note: This option is only available for the full dataset.
+    raw_df : bool, optional. Default: True.
+        If `True`, returns the raw dataset as a pandas DataFrame.
+        If `False`, returns the dataset as a ResoKit dataset.
     check_age : bool, optional. Default: False.
         If `True`, displays the file's last modified date.
         used by ResoKit.
-    download_if_missing : bool, optional
-        If `True`, downloads if dataset is missing.
-    extract : bool, optional. Default: False.
-        If `True`, extracts from ZIP archive if available.
     only_index : bool, optional. Default: False.
         If `True`, loads only the index columns.
     only_rows : list|int, optional. Default: [].
@@ -328,24 +1302,64 @@ def load(
         the first row (system) is 0.
     verbose : bool, optional. Default: True.
         If `True`, prints messages about the process.
-    store : bool, optional. Default: False.
+    store : bool, str, optional. Default: False.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
         If `True`, stores the dataset in memory.
-    store_index : bool, optional. Default: True.
+    store_index : bool, str, optional. Default: True.
         If `True`, stores the dataset index in memory.
+        If `only_rows` is provided, the index is not stored.
+        If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
 
     Returns
     -------
-    dataset : DataFrame
-        The loaded dataset as a pandas Data frame.
+    dataset : DataFrame or ResoKitDataset
+        The loaded dataset as a pandas DataFrame or a ResoKit dataset.
     """
     source = source.lower()  # Ensure lowercase
 
     if source not in _DATASET_FILENAMES:  # Check if source is valid
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
+    # Check if something to do
+    if not from_memory and not from_zip and not from_file:
+        raise ValueError(
+            "Nothing to do. Set at least one of "
+            + "from_memory, from_zip, or from_file."
+        )
+
+    # Redefine dir path
+    if dir_path is None:
+        dir_path = BASE_PATH
+    else:
+        dir_path = Path(dir_path)
+
+    # Define paths and ZIP extraction flag
+    if from_zip:
+        if from_zip is True:
+            from_zip = _ZIP_FILENAME
+
+    # Define file path
+    if from_file:
+        if from_file is True:
+            from_file = _DATASET_FILENAMES[source]
+
     # Check store_index
     if store and only_index:
         store_index = True
+
+    # Define origin and age
+    origin = []
+    age = -1
+
+    # Define overwrite
+    overwrite = False
+    if (
+        isinstance(store, str) and store.lower()[0] in ["o", "f", "y", "s"]
+    ) or (
+        isinstance(store_index, str)
+        and store_index.lower()[0] in ["o", "f", "y", "s"]
+    ):
+        overwrite = True
 
     # Check if only rows and only index
     if (
@@ -374,11 +1388,21 @@ def load(
             raise ValueError("only_rows must be positive integers.")
 
         # Load stored rows if available
-        data_stored, not_stored_rows = _load_stored_rows(
-            source,
-            rows=requested_rows,
-            full=False,
-        )
+        if from_memory:
+            data_stored, not_stored_rows, xage, xorigin = _load_stored_rows(
+                source,
+                rows=requested_rows,
+                full=False,
+            )
+            # Update origin
+            if not data_stored.empty:
+                age = max(age, xage)
+                origin.append(xorigin)
+
+        else:
+            # If not from memory, set data_stored to empty
+            data_stored = pd.DataFrame()
+            not_stored_rows = requested_rows
 
         # Define stored_rows and not_stored
         stored_rows = list(data_stored.index)
@@ -386,21 +1410,35 @@ def load(
         # Message
         if verbose and not data_stored.empty:
             print(
-                f" Loading memory stored rows {stored_rows} "
-                + f"from {source}..."
+                f" Loaded rows {stored_rows} "
+                + f"from {source} memory stored dataset..."
             )
 
+        # Check if all rows are stored
         if len(data_stored) == len(requested_rows):
-            if to_resokit:
-                return df_to_resokit(
-                    data_stored,
-                    source=source,
-                    drop=True,
-                    copy=False,
-                    sort_by=False,
-                    return_df=True,
-                )
-            return data_stored
+            # Check if the dataset is fully stored (and loaded)
+            is_full = (
+                len(data_stored) == len(_IN_MEMORY_DATASETS[source])
+            ) and _IS_FULLY_STORED[source]
+
+            # No need to load the dataset or store the rows
+            # (because they are already stored)
+
+            return __aux_load_full(
+                df=data_stored,
+                source=source,
+                age=age,
+                origin=origin[0],
+                is_full=is_full,
+                to_resokit=to_resokit,
+                raw_df=raw_df,
+                metadata=dict(_IN_MEMORY_DATASETS[source].metadata),
+            )
+
+        elif (not from_zip) and (not from_file):  # If no file or ZIP provided
+            raise ValueError(
+                "Some rows are not stored and no file or ZIP provided."
+            )
 
         # Add header and update only_rows
         only_rows = [0] + [
@@ -410,7 +1448,7 @@ def load(
         def skip_rows(x: int) -> bool:  # Skip rows not in the list
             return x not in only_rows
 
-    elif only_rows:
+    elif only_rows:  # If only_rows is True...
         raise ValueError("only_rows must be a list or an integer.")
 
     else:  # If not only_rows...
@@ -418,118 +1456,76 @@ def load(
         only_rows = False
 
     # Check if the index columns are already stored in memory
-    if only_index and _IN_MEMORY_INDEXES[source] is not None:
-        if verbose:
-            print(" Loading memory stored index columns...")
-        return _IN_MEMORY_INDEXES[source].copy()  # dataframes are mutable
+    if only_index and from_memory:
+        data = _load_stored_index(source, raw_df=raw_df, to_resokit=to_resokit)
+        if not data.empty:
+            if verbose:
+                print(" Loaded index columns from memory stored dataset.")
+            return data
 
     # Check if the dataset is already stored in memory
-    if not (only_index or only_rows) and _IS_FULLY_STORED[source]:
+    if (
+        not (only_index or only_rows)
+        and _IS_FULLY_STORED[source]
+        and from_memory
+    ):
+        data = _load_stored_full(
+            source, raw_df=raw_df, to_resokit=to_resokit, sort=True
+        )
         if verbose:
-            print(" Loading memory stored dataset...")
-        df = _load_stored_rows(source, full=True)[0]
-        # Re-sort dataset
-        df = df.reindex(sorted(df.index), copy=False)
-        if to_resokit:
-            return df_to_resokit(
-                df,
-                source=source,
-                drop=True,
-                copy=False,
-                sort_by=False,
-                return_df=True,
-            )
-        return df
-
-    # Define paths and ZIP extraction flag
-    file_path = BASE_PATH / _DATASET_FILENAMES[source]
-    zip_path = BASE_PATH / _ZIP_FILENAME
+            print(" Loaded full dataset from memory stored dataset.")
+        return data
 
     # Define columns to load
     usecols = _INDEX_COLUMNS[source] if only_index else None
 
     # Aux message
     if verbose:  # Print message if verbose
-        aux = (
-            "only the index columns from "
-            if only_index
-            else (f"rows {not_stored_rows} from " if only_rows else "")
+        if only_index:
+            print(" Loading only index columns...")
+        elif only_rows:
+            print(f" Loading rows {not_stored_rows}...")
+        else:
+            print(" Loading the entire dataset...")
+
+    # Load the dataset from the ZIP archive
+    if from_zip:
+        zip_path = dir_path / from_zip
+        file_name = from_file if from_file else _DATASET_FILENAMES[source]
+        data = _load_from_zip(
+            zip_path=zip_path,
+            file_name=file_name,
+            source=source,
+            skip_rows=skip_rows,
+            usecols=usecols,
+            verbose=verbose,
         )
-
-    try:
-        # Check if the .csv is in the .zip without extracting
-        if not file_path.exists() and zip_path.exists():
-
-            with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
-
-                if _DATASET_FILENAMES[source] in zipf.namelist():
-                    if verbose:  # Print message if verbose
-                        print(
-                            f" Loading {aux}{_DATASET_FILENAMES[source]} "
-                            + f"directly from {_ZIP_FILENAME}..."
-                        )
-                    # Load directly from the .zip
-                    with zipf.open(_DATASET_FILENAMES[source]) as file:
-                        data = pd.read_csv(
-                            file,
-                            header=0,
-                            skiprows=skip_rows,
-                            usecols=usecols,
-                            dtype=DATASET_DTYPES[source],
-                        )
-                        from_zip = True
-
-                        if extract:  # Extract the file if requested
-                            file.seek(0)
-                            with open(file_path, "wb") as f:
-                                f.write(file.read())
-                            if verbose:
-                                print(
-                                    f" Extracted {_DATASET_FILENAMES[source]} "
-                                    + f"from {_ZIP_FILENAME} into {file_path}"
-                                )
-
-        else:
-
-            # Fallback: Load the dataset from the extracted file if present
-            data = pd.read_csv(
-                file_path,
-                header=0,
-                skiprows=skip_rows,
-                usecols=usecols,
-                dtype=DATASET_DTYPES[source],
-            )
-
-            if verbose:  # Print message if verbose
-                print(f" Loading {aux}{file_path} ")
-
-            from_zip = False
-
-        if check_age:  # Check the file's age if requested
-            check_file_age(
-                source=source,
-                from_zip=from_zip,
-            )
-
-    except FileNotFoundError as error:
-        if download_if_missing:
-
-            print(f" {file_path} not found, attempting download...")
-            update(source=source, verbose=verbose, in_zip=False)
-            data = pd.read_csv(
-                file_path,
-                header=0,
-                skiprows=skip_rows,
-                usecols=usecols,
-                dtype=DATASET_DTYPES[source],
-            )
-        else:
-
-            print(
-                f" {file_path} not found.\n"
-                + "Use download_if_missing=True to download."
-            )
-            raise error
+        age = _check_file_age(
+            file_path=from_file,
+            zip_path=zip_path,
+            verbose=check_age,
+        )
+        origin.append("zip")
+    # Load the dataset from the file
+    elif from_file:
+        file_path = dir_path / from_file
+        data = pd.read_csv(
+            file_path,
+            header=0,
+            skiprows=skip_rows,
+            usecols=usecols,
+            dtype=DATASET_DTYPES[source],
+        )
+        age = _check_file_age(
+            file_path=from_file,
+            zip_path=None,
+            verbose=check_age,
+        )
+        origin.append("file")
+    else:
+        raise ValueError(
+            "Data not found in memory, and no file or ZIP provided."
+        )
 
     # Check empty dataset
     if data.empty and not only_rows:
@@ -566,50 +1562,38 @@ def load(
 
         data = data.reindex(new_index, copy=False)
 
-    # Check storeing
-    if not store_index and not store:  # If not storing, return the data
-        if to_resokit:
-            return df_to_resokit(
-                data,
-                source=source,
-                drop=True,
-                copy=False,
-                sort_by=False,
-                return_df=True,
-            )
-        return data
+    # Define origin
+    origin = "mixed" if len(set(origin)) > 1 else origin[0]
 
-    # Store with only_rows
-    if only_rows and store:
-        _store_rows(source, rows_df=data, verbose=verbose)
+    # Define is_full
+    is_full = not only_rows
 
-    elif store_index and not only_rows and _IN_MEMORY_INDEXES[source] is None:
-        if verbose:
-            print(" Storing the index columns into memory...")
-        _IN_MEMORY_INDEXES[source] = data[_INDEX_COLUMNS[source]].copy()
+    # Define index_only
+    index_only = not store
 
-    if (
-        store
-        and not only_index
-        and not only_rows
-        and not _IS_FULLY_STORED[source]
-    ):
-        if verbose:
-            print(" Storing the entire dataset into memory...")
-        _IN_MEMORY_DATASETS[source] = data.copy()
-        _IS_FULLY_STORED[source] = True
-
-    # Return the dataset
-    if to_resokit:
-        return df_to_resokit(
+    # Check storing
+    if store_index or store:  # If not storing, return the data
+        _update_stored_dataset(
             data,
-            source=source,
-            drop=True,
-            copy=False,
-            sort_by=False,
-            return_df=True,
+            source,
+            age=age,
+            origin=origin,
+            is_full=is_full,
+            verbose=verbose,
+            index_only=index_only,
+            sort=True,
+            overwrite=overwrite,
         )
-    return data
+
+    return __aux_load_full(
+        df=data,
+        source=source,
+        age=age,
+        origin=origin,
+        is_full=is_full,
+        to_resokit=to_resokit,
+        raw_df=raw_df,
+    )
 
 
 def clear_memory(source: str, verbose: bool = True) -> None:
@@ -626,7 +1610,9 @@ def clear_memory(source: str, verbose: bool = True) -> None:
 
     if source == "both":
         for key in _IN_MEMORY_DATASETS:
-            _IN_MEMORY_DATASETS[key] = None  # Clear the memory address
+            # Clear the memory addresses
+            _IN_MEMORY_INDEXES[key] = _mk_empty_dataset(key)
+            _IN_MEMORY_DATASETS[key] = _mk_empty_dataset(key)
             _IS_FULLY_STORED[key] = False
             if verbose:
                 print(f" Cleared memory for source: {key}")
@@ -635,7 +1621,9 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     if source not in _IN_MEMORY_DATASETS:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
-    _IN_MEMORY_DATASETS[source] = pd.DataFrame()  # Clear the memory address
+    # Clear the memory addresses
+    _IN_MEMORY_INDEXES[source] = _mk_empty_dataset(source)
+    _IN_MEMORY_DATASETS[source] = _mk_empty_dataset(source)
     _IS_FULLY_STORED[source] = False  # Reset the fully stored flag
 
     if verbose:
