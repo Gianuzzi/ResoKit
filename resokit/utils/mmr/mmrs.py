@@ -151,11 +151,6 @@ def mmrs_in_area(
             ):
                 continue
 
-            # if i < 0:  # Use (|i|,...,...)
-            #     i *= -1
-            #     j *= -1
-            #     k *= -1
-
             # Normalize coefficients
             gcd = np.gcd.reduce([i, j, k])
             i_r, j_r, k_r = i // gcd, j // gcd, k // gcd
