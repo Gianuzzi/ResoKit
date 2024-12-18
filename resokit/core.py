@@ -31,6 +31,7 @@ import pandas as pd
 
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.utils import (
+    DEFAULT_METADATA,
     MAPPINGS,
     M_EAR,
     M_JUP,
@@ -68,23 +69,23 @@ class MetaData(Mapping):
     _data = attrs.field(converter=dict, factory=dict)
 
     def __repr__(self):
-        """Repr(x) <=> x.__repr__()."""
+        """repr(x) <=> x.__repr__()."""
         return f"Metadata({repr(self._data)})"
 
     def __getitem__(self, k):
-        """X[k] <=> x.__getitem__(k)."""
+        """x[k] <=> x.__getitem__(k)."""
         return self._data[k]
 
     def __iter__(self):
-        """Iter(x) <=> x.__iter__()."""
+        """iter(x) <=> x.__iter__()."""
         return iter(self._data)
 
     def __len__(self):
-        """Len(x) <=> x.__len__()."""
+        """len(x) <=> x.__len__()."""
         return len(self._data)
 
     def __getattr__(self, a):
-        """Getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
         return self[a]
 
 
@@ -394,8 +395,8 @@ def df_to_resokit(
         Whether to drop columns not in the mapping.
     copy : bool, optional. Default: False.
         Whether to edit a copy of the DataFrame, instead of the original.
-        Despite this, the output will always be a
-        :py:class:`ResokitDataFrame`.
+        Despite this, the output will be a :py:class:`ResokitDataFrame`,
+        unless `return_df=True`.
     sort_by : str, bool, optional. Default: "P".
         Column to sort the data by.
         If `False` or `None`, do not sort the data.
@@ -452,7 +453,7 @@ def df_to_resokit(
 
     # Add metadata
     if metadata is None:
-        metadata = {}
+        metadata = dict(DEFAULT_METADATA)
 
     return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
 
