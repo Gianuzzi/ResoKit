@@ -157,7 +157,7 @@ def _execute_query(query: str, source: str):
         return pd.DataFrame()  # Return empty DataFrame on error
 
 
-def query_online_data(
+def query_online(
     source: str,
     star_name: str = "",
     planet_name: str = "",
@@ -261,7 +261,7 @@ def query_online_data(
     return reso  # Return ResoKit DataFrame
 
 
-def get_dataset_length(source: str) -> int:
+def query_dataset_length(source: str) -> int:
     """Query the length (count) of the dataset from the specified source.
 
     Parameters

@@ -21,10 +21,12 @@
 
 from .io import load_system_from_eu  # noqa
 from .io import load_system_from_nasa  # noqa
+from .query import query_online  # noqa
 
 # Make the functions available at the package level
 
 __all__ = [
     "load_system_from_eu",
     "load_system_from_nasa",
+    "query_online",
 ]
