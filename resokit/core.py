@@ -19,7 +19,7 @@
 
 import warnings
 from collections.abc import Mapping
-from typing import Iterable, Union
+from typing import Iterable, List, Tuple, Union
 
 import attrs
 
@@ -29,26 +29,21 @@ from numpy import isnan, pi, sqrt
 
 import pandas as pd
 
-
+from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.utils import (
+    DEFAULT_METADATA,
     MAPPINGS,
+    M_EAR,
+    M_JUP,
     RESO_DTYPES,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
+    R_EAR,
+    R_JUP,
     float_to_fraction,
     parse_to_iter,
 )
-
-# =============================================================================
-# CONSTANTS
-# =============================================================================
-
-# Default attributes for float fields
-DEFAULT_FLOAT_ATTRS = {
-    "validator": attrs.validators.instance_of((int, float, type(None))),
-    "default": None,
-}
 
 # =============================================================================
 # CLASSES
@@ -74,23 +69,23 @@ class MetaData(Mapping):
     _data = attrs.field(converter=dict, factory=dict)
 
     def __repr__(self):
-        """Repr(x) <=> x.__repr__()."""
+        """repr(x) <=> x.__repr__()."""
         return f"Metadata({repr(self._data)})"
 
     def __getitem__(self, k):
-        """X[k] <=> x.__getitem__(k)."""
+        """x[k] <=> x.__getitem__(k)."""
         return self._data[k]
 
     def __iter__(self):
-        """Iter(x) <=> x.__iter__()."""
+        """iter(x) <=> x.__iter__()."""
         return iter(self._data)
 
     def __len__(self):
-        """Len(x) <=> x.__len__()."""
+        """len(x) <=> x.__len__()."""
         return len(self._data)
 
     def __getattr__(self, a):
-        """Getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
         return self[a]
 
 
@@ -210,16 +205,16 @@ class ResokitDataFrame:
         """Return a HTML representation of the DataFrame."""
         ad_id = id(self)
 
-        with pd.option_context("display.show_dimensions", False):
-            df_html = self.data_df._repr_html_()
+        rows = f"{self.n_objects_} row{'s' if self.n_objects_ > 1 else ''}"
+        columns = f"{self.n_columns_} columns"
+        footer = "ResokitDataFrame" if self.n_objects_ > 1 else "ResokitSeries"
+        footer = footer + f" - {rows} x {columns}"
 
-        if self.n_objects_ > 1:
-            rows = f"{self.n_objects_} rows"
-            columns = f"{self.n_columns_} columns"
-            footer = f"ResokitDataFrame - {rows} x {columns}"
-        else:
-            rows = "1 row"
-            columns = f"{self.n_columns_} columns"
+        with pd.option_context("display.show_dimensions", False):
+            if self.n_objects_ > 1:  # It is a DataFrame
+                df_html = self.data_df._repr_html_()
+            else:  # It is a Series
+                df_html = self.data_df.to_frame()._repr_html_()
 
         parts = [
             f'<div class="resokit-data-container" id={ad_id}>',
@@ -232,15 +227,24 @@ class ResokitDataFrame:
 
         return html
 
-    def to_dataframe(self, columns=None, copy=False):
-        """Return the data_df as a new DataFrame.
+    def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:
+        """Convert data to pandas data frame.
+
+        This method constructs a data frame with the data inside the
+        data_df attribute.
 
         Parameters
         ----------
         columns : list, optional. Default: None.
-            Columns to return.
+            Specific columns to return.
+            If `None`, return all columns.
         copy : bool, optional. Default: False.
-            Whether to return a copy of the DataFrame.
+            Whether to return a copy of the `DataFrame`, or the original.
+
+        Returns
+        -------
+        df: DataFrame
+            Data frame with the requested columns.
         """
         if columns is not None:
             used_cols = [col for col in list(columns) if col in self.columns_]
@@ -250,8 +254,17 @@ class ResokitDataFrame:
 
         return df.copy() if copy else df
 
-    def to_dict(self):
-        """Return a copy of the metadata as a dictionary."""
+    def to_dict(self) -> dict:
+        """Convert metadata to a dictionary.
+
+        This method constructs a dictionary with the data inside the
+        metadata attribute.
+
+        Returns
+        -------
+        metadata : dict
+            Dictionary with the metadata.
+        """
         return dict(self.metadata)
 
     def plot(
@@ -262,9 +275,9 @@ class ResokitDataFrame:
         error_y: bool = False,
         ax: plt.Axes = None,
         label: str = "",
-        plot_kwargs: dict = None,
-    ):
-        """Plot the x vs y data of the ResokitDataFrame.
+        **plot_kwargs,
+    ) -> plt.Axes:
+        """Plot the x vs y data of the :py:class:`ResokitDataFrame`.
 
         Parameters
         ----------
@@ -277,16 +290,18 @@ class ResokitDataFrame:
         error_y : bool, optional. Default: False.
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
-            Matplotlib Axes to plot on.
+            `Matplotlib Axes` to plot on.
+            If `None`, get and use the current `Axes`.
         label : str, optional. Default: "".
             Label for the data plotted.
         plot_kwargs : dict
-            Additional keyword arguments for the plot function.
+            Additional keyword arguments for the :py:func:`plt.errorbar`
+            function.
 
         Returns
         -------
-        plt.Axes
-            Matplotlib Axes with the plot.
+        ax : Matplotlib Axes
+            Matplotlib axes object with the plot.
         """
         if ax is None:
             ax = plt.gca()
@@ -324,10 +339,6 @@ class ResokitDataFrame:
         else:
             label = None
 
-        # Check plot_kwargs
-        if plot_kwargs is None:
-            plot_kwargs = {}
-
         # Check fmt
         fmt = plot_kwargs.pop("fmt", "o")
 
@@ -344,8 +355,14 @@ class ResokitDataFrame:
 
         return ax
 
-    def copy(self):
-        """Return a copy of the ResokitDataFrame."""
+    def copy(self) -> "ResokitDataFrame":
+        """Create and return copy of the :py:class:`ResokitDataFrame`.
+
+        Returns
+        -------
+        ResokitDataFrame
+            Copy of the ResokitDataFrame.
+        """
         return ResokitDataFrame(
             data_df=self.data_df.copy(),
             source=self.source,
@@ -358,9 +375,15 @@ def df_to_resokit(
     source: str,
     drop: bool = True,
     copy: bool = False,
+    sort_by: Union[str, bool] = "P",
+    return_df: bool = False,
     metadata: dict = None,
 ) -> ResokitDataFrame:
-    """Convert ExoplanetEU or NASA dataset to ResoKit format.
+    """Convert ExoplanetEU or NASA data to :py:class:`ResokitDataFrame`.
+
+    This function converts a DataFrame from ExoplanetEU or NASA to a
+    :py:class:`ResokitDataFrame`. The columns are renamed according to the
+    default mapping, and the DataFrame is sorted by the specified column.
 
     Parameters
     ----------
@@ -371,14 +394,23 @@ def df_to_resokit(
     drop : bool, optional. Default: True.
         Whether to drop columns not in the mapping.
     copy : bool, optional. Default: False.
-        Whether to return a copy of the DataFrame.
-    metadata : dict, optional. Default: {}.
-        Metadata of the dataset.
+        Whether to edit a copy of the DataFrame, instead of the original.
+        Despite this, the output will be a :py:class:`ResokitDataFrame`,
+        unless `return_df=True`.
+    sort_by : str, bool, optional. Default: "P".
+        Column to sort the data by.
+        If `False` or `None`, do not sort the data.
+        If `True`, sort by period ("P").
+    return_df : bool, optional. Default: False.
+        Whether to return the a pandas Data frame instead of the
+        :py:class:`ResokitDataFrame`.
+    metadata : dict, optional. Default: None.
+        Metadata to be added to the :py:class:`ResokitDataFrame`.
 
     Returns
     -------
     ResokitDataFrame
-        DataFrame in ResoKit format.
+        DataFrame in :py:class:`ResokitDataFrame` format.
     """
     # Check if df is a DataFrame
     if not isinstance(df, pd.DataFrame):
@@ -408,12 +440,20 @@ def df_to_resokit(
             df["n_err_min"] = 2.0 * pi / df["P_err_max"]
             df["n_err_max"] = 2.0 * pi / df["P_err_min"]
         df["n"] = 2.0 * pi / df["P"]
-        # Sort by period
-        df = df.sort_values(by="P", ascending=True)
+
+    # Sort by
+    if sort_by and sort_by is not None:
+        if sort_by is True:
+            sort_by = "P"
+        df = df.sort_values(by=sort_by, ascending=True)
+
+    # Return DataFrame if needed
+    if return_df:
+        return df
 
     # Add metadata
     if metadata is None:
-        metadata = {}
+        metadata = dict(DEFAULT_METADATA)
 
     return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
 
@@ -425,9 +465,10 @@ class StaticPlanet(ResokitDataFrame):
     Attributes
     ----------
     data_df : pd.Series
-        Series containing the data.
+        Pandas Series containing the data.
     source : str
-        Source of the dataset. Either 'eu' or 'nasa' or 'user'.
+        Source of the dataset.
+        Either 'eu' or 'nasa' or 'user'.
     metadata : dict
         Metadata of the dataset.
     name : str
@@ -455,7 +496,10 @@ class StaticPlanet(ResokitDataFrame):
     @suffix_.default
     def _suffix__default(self):
         """Set the default value for suffix_."""
-        return self.data_df["name"].split(" ")[-1]
+        aux = self.data_df["name"].split(" ")[-1]
+        if len(aux) == 1:
+            return aux
+        return aux[-1]
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -508,12 +552,29 @@ class StaticPlanet(ResokitDataFrame):
             else "user defined."
         )
 
+    def _repr_html_(self):
+        """Return a HTML representation of the StaticPlanet."""
+        ad_id = id(self)
+
+        # footer = f"ResokitSeries - 1 row x {self.n_columns_} columns"
+        repre = self.__repr__()
+
+        parts = [
+            f'<div class="resokit-data-container" id={ad_id}>',
+            repre,
+            "</div>",
+        ]
+
+        html = "".join(parts)
+
+        return html
+
     def get_item(
         self,
-        items: Union[list[str], str],
+        items: Union[List[str], str],
         error: bool = False,
         silent: bool = False,
-    ):
+    ) -> pd.Series:
         """Return the specified items of the planet.
 
         Parameters
@@ -527,7 +588,7 @@ class StaticPlanet(ResokitDataFrame):
 
         Returns
         -------
-        pd.Series
+        Series : pandas Series
             Series with the requested items.
         """
         items = parse_to_iter(items)
@@ -549,6 +610,111 @@ class StaticPlanet(ResokitDataFrame):
 
         return pd.Series(vals)
 
+    def estimate_mass(
+        self,
+        **kwargs,
+    ) -> float:
+        r"""Calculate the mass of the planet using a power-law approximation.
+
+        Equation:
+            :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments for the
+            :py:func:`resokit.utils.mass_radius.estimate_mass_single`
+            function.
+
+        Returns
+        -------
+        mass, mass_err_min, mass_err_max : tuple[float, float, float]
+            Estimated mass, and its minimum and maximum errors,
+            in Jupiter masses.
+            If `err_method=0`, the errors are 0.0.
+        """
+        # Get planet radius and convert to Earth radii
+        radius = self["radius"] / R_JUP * R_EAR
+
+        radius_err_min = 0.0
+        radius_err_max = 0.0
+        # Get the errors and convert to Earth radii, if needed (and available)
+        if kwargs.get("err_method", 0) in [1, 2]:
+            radius_err_min = self["radius_err_min"] / R_JUP * R_EAR
+            radius_err_max = self["radius_err_max"] / R_JUP * R_EAR
+
+        # Remove radius and its errors from kwargs (just in case)
+        kwargs.pop("radius", None)
+        kwargs.pop("radius_err_min", None)
+        kwargs.pop("radius_err_max", None)
+
+        # Estimate the mass
+        mass, mass_err_min, mass_err_max = estimate_mass(
+            radius=radius,
+            radius_err_min=radius_err_min,
+            radius_err_max=radius_err_max,
+            **kwargs,
+        )
+
+        # Convert mass to Jupiter masses
+        mass = mass / M_EAR * M_JUP
+        mass_err_min = mass_err_min / M_EAR * M_JUP
+        mass_err_max = mass_err_max / M_EAR * M_JUP
+
+        return mass, mass_err_min, mass_err_max
+
+    def estimate_radius(
+        self,
+        **kwargs,
+    ) -> Tuple[float, float, float]:
+        r"""Calculate the radius of a planet using a power-law approximation.
+
+        Equation:
+            :math:`radius = C \\times mass^S`
+
+        Parameters
+        ----------
+        kwargs : dict
+            Keyword arguments for the
+            :py:func:`resokit.utils.mass_radius.estimate_radius_single`
+            function.
+
+        Returns
+        -------
+        radius, radius_err_min, radius_err_max : tuple[float, float, float]
+            Estimated radius, and its minimum and maximum errors, in Jupiter
+            radii. If `err_method=0`, the tuple is (radius, 0.0, 0.0).
+        """
+        # Get planet mass and convert to Earth masses
+        mass = self["mass"] / M_JUP * M_EAR
+
+        # Get the errors and convert to Earth masses, if needed (and available)
+        mass_err_min = 0.0
+        mass_err_max = 0.0
+        if kwargs.get("err_method", 0) in [1, 2]:
+            mass_err_min = self["mass_err_min"] / M_JUP * M_EAR
+            mass_err_max = self["mass_err_max"] / M_JUP * M_EAR
+
+        # Remove mass and its errors from kwargs (just in case)
+        kwargs.pop("mass", None)
+        kwargs.pop("mass_err_min", None)
+        kwargs.pop("mass_err_max", None)
+
+        # Estimate the radius
+        radius, radius_err_min, radius_err_max = estimate_radius(
+            mass=mass,
+            mass_err_min=mass_err_min,
+            mass_err_max=mass_err_max,
+            **kwargs,
+        )
+
+        # Convert radius to Jupiter radii
+        radius = radius / R_EAR * R_JUP
+        radius_err_min = radius_err_min / R_EAR * R_JUP
+        radius_err_max = radius_err_max / R_EAR * R_JUP
+
+        return radius, radius_err_min, radius_err_max
+
     def plot(
         self,
         x: str,
@@ -556,9 +722,9 @@ class StaticPlanet(ResokitDataFrame):
         error_x: bool = False,
         error_y: bool = False,
         ax: plt.Axes = None,
-        planet_label: bool = True,
-        plot_kwargs: dict = None,
-    ):
+        label: Union[bool, str] = True,
+        **plot_kwargs: dict,
+    ) -> plt.Axes:
         """Plot the x vs y data of the planet.
 
         Parameters
@@ -573,27 +739,32 @@ class StaticPlanet(ResokitDataFrame):
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        planet_label : bool, optional. Default: True.
-            Whether to add a label with the planet name.
+            If None, get and use the current Axes.
+        label : bool, str, optional. Default: True.
+            String to use as the label.
+            If True, use the planet name.
         plot_kwargs : dict
-            Additional keyword arguments for the plot function.
+            Additional keyword arguments for the :py:func:`plt.errorbar`
+            function.
 
         Returns
         -------
-        plt.Axes
-            Matplotlib Axes with the plot.
+        ax : Matplotlib Axes
+            `Matplotlib Axes` with the plot.
         """
+        if label is True:
+            label = self.name
         return super().plot(
             x=x,
             y=y,
             error_x=error_x,
             error_y=error_y,
             ax=ax,
-            label=planet_label,
-            plot_kwargs=plot_kwargs,
+            label=label,
+            **plot_kwargs,
         )
 
-    def copy(self):
+    def copy(self) -> "StaticPlanet":
         """Return a copy of the StaticPlanet."""
         return StaticPlanet(
             data_df=self.data_df.copy(),
@@ -688,9 +859,9 @@ class StaticStar(ResokitDataFrame):
         error_x: bool = False,
         error_y: bool = False,
         ax: plt.Axes = None,
-        star_label: bool = True,
-        plot_kwargs: dict = None,
-    ):
+        label: Union[bool, str] = True,
+        **plot_kwargs: dict,
+    ) -> plt.Axes:
         """Plot the x vs y data of the star.
 
         Parameters
@@ -705,27 +876,32 @@ class StaticStar(ResokitDataFrame):
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        star_label : bool, optional. Default: True.
-            Whether to add a label with the star name.
+            If None, get and use the current Axes.
+        label : bool, str, optional. Default: True.
+            String to use as the label.
+            If True, use the star name.
         plot_kwargs : dict
-            Additional keyword arguments for the plot function.
+            Additional keyword arguments for the :py:func:`plt.errorbar`
+            function.
 
         Returns
         -------
-        plt.Axes
-            Matplotlib Axes with the plot.
+        ax : Matplotlib Axes
+            `Matplotlib Axes` with the plot.
         """
+        if label is True:
+            label = self.name
         return super().plot(
             x=x,
             y=y,
             error_x=error_x,
             error_y=error_y,
             ax=ax,
-            label=star_label,
-            plot_kwargs=plot_kwargs,
+            label=label,
+            **plot_kwargs,
         )
 
-    def copy(self):
+    def copy(self) -> "StaticStar":
         """Return a copy of the StaticStar."""
         return StaticStar(
             data_df=self.data_df.copy(),
@@ -744,8 +920,8 @@ class StaticSystem:
     ----------
     star : StaticStar
         StaticStar instance.
-    planets : list, tuple, StaticPlanet
-        List of StaticPlanet instances.
+    planets : list[StaticPlanet], tuple[StaticPlanet], StaticPlanet
+        List or tuple of StaticPlanet instances, or a single StaticPlanet.
     name : str
         Name of the system.
     metadata : dict
@@ -756,17 +932,14 @@ class StaticSystem:
         Source of the data.
     user_defined_ : bool
         Flag indicating if the system is user-defined.
-    planet_names_ : list
+    planet_names_ : list[str]
         List of planet names.
-    period_ratios : float, pd.DataFrame
-        Period ratios of the planets.
-        Created after calling the period_ratios method.
     """
 
     star: StaticStar = attrs.field(
         validator=attrs.validators.instance_of(StaticStar),
     )
-    planets: Union[list[StaticPlanet], tuple[StaticPlanet], StaticPlanet] = (
+    planets: Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet] = (
         attrs.field(
             validator=attrs.validators.instance_of(
                 (list, tuple, StaticPlanet)
@@ -920,12 +1093,14 @@ class StaticSystem:
 
         Parameters
         ----------
-        indices : int or Iterable[int]
+        indices : int, Iterable[int]
             Indices for slicing planets.
 
         Returns
         -------
-        A copy of an existing StaticPlanet or list of StaticPlanet objects.
+        planet : StaticPlanet or list[StaticPlanet]
+            A copy of a system's planet :py:class:`StaticPlanet`
+            or list of :py:class:`StaticPlanet` objects.
         """
         indices = parse_to_iter(indices, to=list)
 
@@ -938,8 +1113,8 @@ class StaticSystem:
         return [self.planets[i].copy() for i in indices]
 
     def _get_planets_items(
-        self, items: Union[str, list[str]], return_values: bool = True
-    ):
+        self, items: Union[str, List[str]], return_values: bool = True
+    ) -> Union[str, List[str]]:
         """Retrieve specific attributes of planets.
 
         Parameters
@@ -951,7 +1126,7 @@ class StaticSystem:
 
         Returns
         -------
-        list
+        items : list
             Values or full objects of the specified planet attributes.
         """
         data = [planet[items] for planet in self.planets]
@@ -964,12 +1139,14 @@ class StaticSystem:
 
         return [item for item in data]
 
-    def get_item(self, items: Union[str, list[str]], error: bool = False):
-        """Retrieve specific attributes of the system (star/planets).
+    def get_item(
+        self, items: Union[str, List[str]], error: bool = False
+    ) -> Union[pd.Series, pd.DataFrame]:
+        """Retrieve specific attributes of the system (star and/or planets).
 
         Parameters
         ----------
-        items : str or list[str]
+        items : str, list[str]
             Names of the desired attributes.
         error : bool, optional. Default: False.
             Whether to return the error columns.
@@ -977,8 +1154,8 @@ class StaticSystem:
 
         Returns
         -------
-        pd.Series or pd.DataFrame
-            Series or DataFrame with the requested items.
+        data : pandas series or pandas dataframe
+            Pandas Series or DataFrame with the requested items.
         """
         items = parse_to_iter(items)
 
@@ -1014,7 +1191,7 @@ class StaticSystem:
 
         return self.planets[0][item]
 
-    def _get_single_planet_items(self, items: list[str]):
+    def _get_single_planet_items(self, items: List[str]):
         """Retrieve attributes when there's only one planet."""
         return pd.Series(
             {
@@ -1028,7 +1205,7 @@ class StaticSystem:
             name=self.name,
         )
 
-    def _get_multiple_planet_items(self, items: list[str]):
+    def _get_multiple_planet_items(self, items: List[str]):
         """Retrieve attributes when there are multiple planets."""
         # Create a DataFrame with the requested items
         df = pd.DataFrame(
@@ -1050,6 +1227,118 @@ class StaticSystem:
 
         return df
 
+    def estimate_mass(
+        self, which: Union[str, int, List[int]] = "all", **kwargs
+    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+        r"""Estimate the mass of selected planets in the system.
+
+        Parameters
+        ----------
+        which : str, int, list[int], optional. Default: 'all'.
+            Which planets to estimate the mass.
+            If 'all', estimate all planets mass.
+            If an :py:class:`int`, estimate the planet with the given index.
+            For example:
+            *0* will estimate the mass of the first planet;
+            *1* will estimate the mass of the second planet.
+            If a list of integers, estimate the mass of the planets with the
+            given indices.
+        **kwargs : dict
+            Additional keyword arguments for the
+            :py:func:`resokit.utils.mass_radius.estimate_mass` function.
+
+        Note
+        ----
+        If `err_method=0`, only the mass is returned.
+
+        Returns
+        -------
+        mass, mass_err_min, mass_err_max : tuple or DataFrame
+            Estimated mass, and its minimum and maximum errors,
+            in Jupiter masses.
+        """
+        if which == "all":  # Estimate all planets
+            which = list(range(self.n_planets_))
+        else:
+            which = parse_to_iter(which)  # Ensure it's an iterable
+
+        if all(isinstance(i, int) for i in which):
+            df = pd.DataFrame()  # Create an empty DataFrame
+
+            for i in which:  # Iterate over the planets
+                mass, mass_err_min, mass_err_max = self.planets[
+                    i
+                ].estimate_mass(**kwargs)
+                df[f"{self.planets[i].name}"] = [
+                    mass,
+                    mass_err_min,
+                    mass_err_max,
+                ]
+            df.index = ["mass", "mass_err_min", "mass_err_max"]
+
+            if kwargs.get("err_method", 0) == 0:  # No error
+                return df.loc["mass"]  # Return only the mass
+
+            return df.T  # Return the DataFrame
+
+        raise ValueError("Invalid value for 'which'.")
+
+    def estimate_radius(
+        self, which: Union[str, int, List[int]] = "all", **kwargs
+    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+        r"""Estimate the radius of selected planets in the system.
+
+        Parameters
+        ----------
+        which : str, int, list[int], optional. Default: 'all'.
+            Which planets to estimate the radius.
+            If 'all', estimate all planets radius.
+            If an :py:class:`int`, estimate the planet with the given index.
+            For example:
+            *0* will estimate the radius of the first planet;
+            *1* will estimate the radius of the second planet.
+            If a list of integers, estimate the radius of the planets with the
+            given indices.
+        **kwargs : dict
+            Additional keyword arguments for the
+            :py:func:`resokit.utils.mass_radius.estimate_radius` function.
+
+        Note
+        ----
+        If `err_method=0`, only the radius is returned.
+
+        Returns
+        -------
+        radius, radius_err_min, radius_err_max : tuple or DataFrame
+            Estimated radius, and its minimum and maximum errors,
+            in Earth radii.
+        """
+        if which == "all":  # Estimate all planets
+            which = list(range(self.n_planets_))
+        else:
+            which = parse_to_iter(which)  # Ensure it's an iterable
+
+        if all(isinstance(i, int) for i in which):
+            df = pd.DataFrame()  # Create an empty DataFrame
+
+            for i in which:
+                radius, radius_err_min, radius_err_max = self.planets[
+                    i
+                ].estimate_radius(**kwargs)
+                df[f"{self.planets[i].name}"] = [
+                    radius,
+                    radius_err_min,
+                    radius_err_max,
+                ]
+            df.index = ["radius", "radius_err_min", "radius_err_max"]
+
+            if kwargs.get("err_method", 0) == 0:  # No error
+                return df.loc["radius"]  # Return only the radius
+
+            return df.T  # Return the DataFrame
+
+        raise ValueError("Invalid value for 'which'.")
+
     def plot(
         self,
         x: str,
@@ -1059,8 +1348,10 @@ class StaticSystem:
         ax: plt.Axes = None,
         label: Union[bool, str, Iterable[str]] = True,
         plot_kwargs: dict = None,
-    ):
-        """Plot the x vs y data of the system. Uses plt.errorbar internally.
+    ) -> plt.Axes:
+        """Plot the x vs y data of the system.
+
+        Uses :py:func:`plt.errorbar` internally.
 
         Parameters
         ----------
@@ -1074,12 +1365,19 @@ class StaticSystem:
             Whether to plot the y error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
+            If None, get and use the current Axes.
         label : bool, str, Iterable, optional. Default: True.
             Whether to add a label with the planet (or star) names.
             If str, use the string as the label.
             If Iterable, use the list of strings as the label.
         plot_kwargs : dict
-            Additional keyword arguments for the plt.errorbar function.
+            Additional keyword arguments for the :py:func:`plt.errorbar`
+            function.
+
+        Returns
+        -------
+        ax : Matplotlib Axes
+            `Matplotlib Axes` with the plot.
         """
         if ax is None:
             ax = plt.gca()
@@ -1109,13 +1407,13 @@ class StaticSystem:
             # Plot planets
             for i, planet in enumerate(self.planets):
                 ax = planet.plot(
-                    x,
-                    y,
-                    error_x,
-                    error_y,
-                    ax,
-                    label[i],
-                    plot_kwargs,
+                    x=x,
+                    y=y,
+                    error_x=error_x,
+                    error_y=error_y,
+                    ax=ax,
+                    label=label[i],
+                    **plot_kwargs,
                 )
 
             return ax
@@ -1131,35 +1429,40 @@ class StaticSystem:
         which: Union[str, int] = "all",
         error: bool = False,
         ax: plt.Axes = None,
-        label: Union[str, list] = "",
+        label: Union[str, list, bool] = True,
         **kwargs,
-    ):
-        """Plot each CONSECUTIVE triplet of planets in the period ratio space.
+    ) -> plt.Axes:
+        """Plot consecutive triplets of planets in the period ratio space.
 
-        Systems triplets are shown in the plane P_{i+1}/P_i vs P_{i+2}/P_{i+1}.
+        Systems triplets are shown in the plane
+        :math:`P_{i+1}/P_i` vs. :math:`P_{i+2}/P_{i+1}`.
 
         Parameters
         ----------
         which : int, str, optional. Default: 'all'.
             Which triplets to plot.
             If 'all', plot all possible triplets.
-            If int, plot the triplet with the given index.
+            If an :py:class:`int`, plot the triplet with the given index.
             For example:
-            - 0 will plot the first triplet: (0, 1, 2).
-            - 1 will plot the second triplet: (1, 2, 3).
+            *0* will plot the first triplet: (0, 1, 2);
+            *1* will plot the second triplet: (1, 2, 3).
         error : bool, optional. Default: False.
             Whether to plot the error bars.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
-        label : str, list, optional. Default: "".
+            If None, get and use the current Axes.
+        label : str, list, bool, optional. Default: True.
             Label for the data plotted.
+            If True, will (try to) concatenate each three planets suffixes to
+            create triplets labels.
         **kwargs : dict
-            Additional keyword arguments for the plt.errorbar function.
+            Additional keyword arguments for the :py:func:`plt.errorbar`
+            function.
 
         Returns
         -------
-        plt.Axes
-            Matplotlib Axes with the plot.
+        ax : Matplotlib Axes
+            `Matplotlib Axes` with the plot.
         """
         # Check if the system has at least 3 planets
         if self.n_planets_ < 3:
@@ -1199,7 +1502,8 @@ class StaticSystem:
                 use_suffix = False
                 if len(label) != len(triplets):
                     raise ValueError(
-                        "Length of label must be equal to the number of triplets to plot."
+                        "Length of label must be equal to the number of "
+                        + "triplets to plot."
                     )
             else:
                 raise ValueError("Invalid value for 'label'.")
@@ -1239,13 +1543,22 @@ class StaticSystem:
 
         return ax
 
-    def remove_planet(self, index: Union[int, str], verbose: bool = True):
+    def remove_planet(
+        self, index: Union[int, str], verbose: bool = True
+    ) -> "StaticSystem":
         """Remove a planet from the system.
 
         Parameters
         ----------
         index : int, str
             Index or suffix (1 char) or name of the planet to remove.
+        verbose : bool, optional. Default: True.
+            Whether to print a message when removing the planet.
+
+        Returns
+        -------
+        StaticSystem
+            A new :py:class`StaticSystem` instance without the removed planet.
         """
         if isinstance(index, str):  # Remove by name or suffix
 
@@ -1298,21 +1611,27 @@ class StaticSystem:
         return ss
 
     def add_planet(
-        self, planet: StaticPlanet, sort: bool = True, verbose: bool = True
-    ):
+        self,
+        planet: StaticPlanet,
+        sort: Union[bool, str] = True,
+        verbose: bool = True,
+    ) -> "StaticSystem":
         """Add a planet to the system.
 
         Parameters
         ----------
         planet : StaticPlanet
             StaticPlanet instance to add.
-        sort : bool, optional. Default: True.
+        sort : bool, str, optional. Default: True.
             Whether to sort the planets by period.
+            If str, sort by the specified column.
+        verbose : bool, optional. Default: True.
+            Whether to print a message when adding the planet.
 
         Returns
         -------
         StaticSystem
-            A new StaticSystem instance.
+            A new :py:class`StaticSystem` instance.
         """
         if not isinstance(planet, StaticPlanet):
             raise TypeError(
@@ -1324,7 +1643,13 @@ class StaticSystem:
         new_planets = self.planets + [planet]
 
         if sort:
-            new_planets = sorted(new_planets, key=lambda x: x["P"])
+            if sort is True:
+                sort_col = "P"
+            elif isinstance(sort, str):
+                sort_col = sort
+            else:
+                raise ValueError("Invalid value for 'sort'.")
+            new_planets = sorted(new_planets, key=lambda x: x[sort_col])
 
         # Create a new metadata dictionary
         new_meta = self.to_dict()
@@ -1348,8 +1673,17 @@ class StaticSystem:
         return ss
 
     @property
-    def period_ratios(self):
-        """Return the period ratios of all the planets."""
+    def period_ratios(self) -> Union[float, pd.DataFrame]:
+        """Calculate and return the period ratios of all the planets.
+
+        Created after calling the period_ratios method.
+
+        Returns
+        -------
+        float, pd.DataFrame
+            Float with period ratio of the pair of planets, or DataFrame
+            with all the period ratios.
+        """
         if self.n_planets_ < 2:
             raise ValueError("There must be at least 2 planets to compare.")
 
@@ -1365,8 +1699,8 @@ class StaticSystem:
         self,
         *pair: Union[list, tuple, str],
         verbose: bool = True,
-        fraction_kwargs: dict = None,
         error: bool = False,
+        **fraction_kwargs: dict,
     ) -> Union[float, pd.DataFrame]:
         """Return the period ratio of the specified pair of planets.
 
@@ -1375,21 +1709,23 @@ class StaticSystem:
         pair : list, tuple, str, optional. Default: 'all'.
             Which pair of planets to consider.
             Either 'all' or a list/tuple of planet names/indexes.
-            If pair=(i,j), then the period ratio is P_j/P_i, and
+            If *pair=(i,j)*, then the period ratio is :math:`P_j/P_i`, and
             remember that the first planet is 0.
         verbose : bool, optional. Default: False.
             Whether to print the steps of the calculation if a single pair,
             and fraction_arg is not 0.
-        fraction_kwargs : dict, optional. Default: {}.
-            Keyword arguments for the float_to_fraction function.
-            See float_to_fraction for more information.
         error : bool, optional. Default: False.
-            Whether to return the error of the period ratio.
+            Whether to return the error of the period ratio, instead of the
+            period ratio itself.
+        fraction_kwargs : dict, optional
+            Keyword arguments for the float_to_fraction function.
+            If None, no fraction conversion is done.
+            See float_to_fraction for more information.
 
         Returns
         -------
-        float, pd.DataFrame
-            Float with period ratio of the pair of planets, or DataFrame
+        ratios : float, pd.DataFrame
+            Float with period ratio of the pair of planets, or pandas Data frame
             with all the period ratios.
         """
         # Check if there are at least 2 planets
@@ -1410,53 +1746,47 @@ class StaticSystem:
         if error:
             return self._pair_ratio_error(pair)
 
-        # Check fraction_kwargs
-        if fraction_kwargs is None:
-            fraction_kwargs = {}
+        # Add verbose to fraction_kwargs, if fraction_kwargs is not empty
+        if fraction_kwargs:
+            fraction_kwargs["verbose"] = verbose
 
         # This calculates all the period ratios
         if isinstance(pair, str):
 
-            if not pair == "all":
+            if not pair == "all":  # Check if it's 'all'
                 raise ValueError("Invalid pair value.")
-            if self.n_planets_ == 2:
+
+            if self.n_planets_ == 2:  # Only 2 planets
+                if fraction_kwargs:  # Convert to fraction
+                    return float_to_fraction(
+                        self.period_ratios_,
+                        **fraction_kwargs,
+                    )
                 return self.period_ratios_  # Already calculated
 
-            if not self.period_ratios_.empty:
-                if fraction_kwargs:
-                    return self.period_ratios_.map(
-                        lambda x: float_to_fraction(
-                            x,
-                            **fraction_kwargs,
-                            verbose=False,
-                        )
-                    )
-                return self.period_ratios
+            if self.period_ratios_.empty:  # Calculate all the period ratios
+                # Create a DataFrame with all the period ratios
+                periods = self.get_item("P")
+                df = pd.DataFrame(
+                    [[p2 / p1 for p2 in periods] for p1 in periods],
+                    index=periods.index,
+                    columns=periods.index,
+                )
 
-            # Create a DataFrame with all the period ratios
-            periods = self.get_item("P")
-            df = pd.DataFrame(
-                [[p2 / p1 for p2 in periods] for p1 in periods],
-                index=periods.index,
-                columns=periods.index,
-            )
-
-            # Store the DataFrame
-            self.period_ratios_[df.columns] = df
+                # Store the DataFrame
+                self.period_ratios_[df.columns] = df
 
             if fraction_kwargs:
-                return df.map(
+                return self.period_ratios_.map(
                     lambda x: float_to_fraction(
-                        x, **fraction_kwargs, verbose=False
+                        x,
+                        **fraction_kwargs,
                     )
                 )
 
-            return df
+            return self.period_ratios_
 
         # This is sigle pair
-
-        if fraction_kwargs:
-            fraction_kwargs["verbose"] = verbose
 
         idxs = []  # Indexes of the pair
         for idx in pair:
@@ -1582,12 +1912,17 @@ class StaticSystem:
         return pair_ratio * sqrt(sigma2)  # Return the error
 
     def to_dataframe(self, columns: list = None) -> pd.DataFrame:
-        """Return data_df as a new DataFrame.
+        """Return data_df as a new pandas DataFrame.
 
         Parameters
         ----------
         columns : list, optional. Default: None.
-            Columns to return.
+            Subset of columns to include in the DataFrame.
+
+        Returns
+        -------
+        df : DataFrame
+            Pandas Data frame with the data.
         """
         # Create a DataFrame with the planets data
         df = pd.DataFrame()
@@ -1607,8 +1942,8 @@ class StaticSystem:
         """Return the metadata as a new dictionary."""
         return dict(self.metadata)
 
-    def copy(self):
-        """Return a copy of the StaticSystem."""
+    def copy(self) -> "StaticSystem":
+        """Return a copy of the :py:class:`StaticSystem`."""
         return StaticSystem(
             star=self.star.copy(),
             planets=[planet.copy() for planet in self.planets],
@@ -1628,7 +1963,7 @@ def _create_static_system(
     name,
     metadata=None,
 ) -> StaticSystem:
-    """Create a StaticSystem instance.
+    """Create a :py:class:`StaticSystem` instance.
 
     Parameters
     ----------
@@ -1662,12 +1997,12 @@ def _create_static_star(
     source="user",
     metadata=None,
 ) -> StaticStar:
-    """Create a StaticStar instance.
+    """Create a :py:class:`StaticStar` instance.
 
     Parameters
     ----------
     star_data : pd.Series
-        Series with the star data.
+        Pandas Series with the star data.
     source : str, optional. Default: 'user'.
         Source of the data.
     metadata : dict, optional. Default: {}.
@@ -1689,12 +2024,12 @@ def _create_static_planet(
     source="user",
     metadata=None,
 ) -> StaticPlanet:
-    """Create a StaticPlanet instance.
+    """Create a :py:class:`StaticPlanet` instance.
 
     Parameters
     ----------
     planet_data : pd.Series
-        Series with the planet data.
+        Pandas Series with the planet data.
     source : str, optional. Default: 'user'.
         Source of the data.
     metadata : dict, optional. Default: {}.
@@ -1714,17 +2049,17 @@ def _create_static_planet(
 def resokit_to_system(
     resokit_data: ResokitDataFrame,
 ) -> StaticSystem:
-    """Convert a ResokitDataFrame to a StaticSystem instance.
+    """Convert a :py:class:`ResokitDataFrame` to a :py:class:`StaticSystem`.
 
     Parameters
     ----------
     resokit_data : ResokitDataFrame
-        ResokitDataFrame instance.
+        ResokitDataFrame instance with the data.
 
     Returns
     -------
     StaticSystem
-        StaticSystem instance.
+        :py:class:`StaticSystem` instance.
     """
     columns = resokit_data.columns_  # Columns of the data
 

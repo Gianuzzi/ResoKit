@@ -21,7 +21,9 @@ import platform
 import sys
 from fractions import Fraction
 from types import MappingProxyType
-from typing import Iterable, Union
+from typing import Iterable, Tuple, Union
+
+from numpy import pi, sqrt
 
 from resokit import __version__ as version
 
@@ -45,6 +47,35 @@ DEFAULT_METADATA = MappingProxyType(
 # =============================================================================
 # CONSTANTS
 # =============================================================================
+
+# Gravitational constant in SI units
+G = 6.67430e-11  # m^3 kg^-1 s^-2
+
+# Astronomical unit in meters
+AU = 1.496e11  # m
+# Parsec in meters
+PC = 3.086e16  # m
+# Solar radius in m
+R_SUN = 6.957e8  # m
+# Jupiter radius in m
+R_JUP = 6.9911e7  # m
+# Earth radius in m
+R_EAR = 6.371e6  # m
+
+# Solar mass in kg
+M_SUN = 1.989e30  # kg
+# Jupiter mass in kg
+M_JUP = 1.898e27  # kg
+# Earth mass in kg
+M_EAR = 5.972e24  # kg
+
+# Hour in seconds
+HOUR = 3600  # s
+# Day in seconds
+DAY = 86400  # s
+# Year in seconds
+YEAR = 3.154e7  # s
+
 
 # EU column to resokit
 _EU_MAPPING = MappingProxyType(
@@ -268,7 +299,7 @@ def float_to_fraction(
     as_fraction: bool = False,
     stop_func: callable = None,
     verbose: bool = True,
-) -> Union[Fraction, tuple[int, int]]:
+) -> Union[Fraction, Tuple[int, int]]:
     """Calculate the continued fraction approximation of a value.
 
     Parameters
@@ -292,7 +323,7 @@ def float_to_fraction(
 
     Returns
     -------
-    Union[Fraction, tuple[int, int]]
+    Union[Fraction, Tuple[int, int]]
         Tuple with the numerator and denominator of the best approximation,
         or a Fraction object if `as_fraction` is True.
     """
@@ -437,3 +468,47 @@ def parse_to_iter(value: any, to: type = list) -> Iterable:
         return to(value)
 
     return value
+
+
+def calc_period(a: float, m_star: float, m_planet) -> float:
+    """Calculate the orbital period of a planet.
+
+    Parameters
+    ----------
+    a : float
+        Semi-major axis of the planet.
+    m_star : float
+        Mass of the star.
+    m_planet : float
+        Mass of the planet.
+
+    Returns
+    -------
+    float
+        Orbital period of the planet, in days.
+    """
+    ene = sqrt(G * (m_star * M_SUN + m_planet * M_JUP) / (a * AU) ** 3)
+
+    return 2 * pi / ene / DAY
+
+
+def calc_a(period: float, m_star: float, m_planet: float) -> float:
+    """Calculate the semi-major axis of a planet.
+
+    Parameters
+    ----------
+    period : float
+        Orbital period of the planet, in days.
+    m_star : float
+        Mass of the star.
+    m_planet : float
+        Mass of the planet.
+
+    Returns
+    -------
+    float
+        Semi-major axis of the planet, in AU.
+    """
+    ene = 2 * pi / period / DAY
+
+    return (G * (m_star * M_SUN + m_planet * M_JUP) / ene**2) ** (1 / 3) / AU

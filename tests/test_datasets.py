@@ -31,7 +31,7 @@ from resokit.datasets import databases
 class TestPath:
     def test_zip_path(self):
         """Test the zip_path variable."""
-        zip_path = databases.BASE_PATH / databases.ZIP_FILENAME
+        zip_path = databases.BASE_PATH / databases._ZIP_FILENAME
         # Check if the zip file exists
         assert zipfile.is_zipfile(zip_path)
         # Check if the zip file is not empty
@@ -44,12 +44,10 @@ class TestPath:
 
 class TestLoadDataset:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_dataset_naive(
-        self, zip_path: str, skip_rows: dict, source: str
-    ):
-        """Test the load_dataset function with the naive approach."""
+    def test_load_naive(self, zip_path: str, skip_rows: dict, source: str):
+        """Test the load function with the naive approach."""
         # Load the dataset
-        data = databases.load_dataset(source=source)
+        data = databases.load(source=source)
 
         # Check if the data is a pandas DataFrame
         assert isinstance(data, pd.DataFrame)
@@ -76,8 +74,8 @@ class TestLoadDataset:
             assert data.shape == (7339, 98)
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_dataset_store(self, index_cols: dict, source: str):
-        """Test the load_dataset function with the in-memory cache features.
+    def test_load_store(self, index_cols: dict, source: str):
+        """Test the load function with the in-memory cache features.
 
         - Test if nothing is saved. (store_index=False)
         - Test if the index is saved and the dataset is not. (Default)
@@ -85,12 +83,12 @@ class TestLoadDataset:
         - Test if the datasets is loaded from the cache if saved.
         """
         # Empty the dictionary of the indexes and datasets
-        databases.IN_MEMORY_INDEXES[source] = None
-        databases.IN_MEMORY_DATASETS[source] = pd.DataFrame()
-        databases.IS_FULLY_STORED[source] = False
+        databases._IN_MEMORY_INDEXES[source] = None
+        databases._IN_MEMORY_DATASETS[source] = pd.DataFrame()
+        databases._IS_FULLY_STORED[source] = False
 
         # Ensure correct zip name
-        databases.ZIP_FILENAME = "datasets.zip"
+        databases._ZIP_FILENAME = "datasets.zip"
 
         # Index columns saved
         saved_index_cols = index_cols[source]
@@ -100,85 +98,85 @@ class TestLoadDataset:
         # -------------------------------------------------------------------
 
         # Load the dataset without saving
-        data = databases.load_dataset(source=source, store_index=False)
+        data = databases.load(source=source, store_index=False)
 
         # Check the dictionary of the indexes if empty
-        assert databases.IN_MEMORY_INDEXES[source] is None
-        assert databases.IN_MEMORY_DATASETS[source].empty
-        assert not databases.IS_FULLY_STORED[source]
+        assert databases._IN_MEMORY_INDEXES[source] is None
+        assert databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IS_FULLY_STORED[source]
 
         # -------------------------------------------------------------------
         # The index is saved and the dataset is not. (Default)
         # -------------------------------------------------------------------
 
         # Load the dataset again
-        data = databases.load_dataset(source=source)
+        data = databases.load(source=source)
 
         # Check the dictionary of the indexes if filled
-        assert databases.IN_MEMORY_INDEXES[source] is not None
+        assert databases._IN_MEMORY_INDEXES[source] is not None
         pd.testing.assert_frame_equal(
-            data[saved_index_cols], databases.IN_MEMORY_INDEXES[source]
+            data[saved_index_cols], databases._IN_MEMORY_INDEXES[source]
         )
 
         # Check the dictionary of the datasets is empty
-        assert databases.IN_MEMORY_DATASETS[source].empty
-        assert not databases.IS_FULLY_STORED[source]
+        assert databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IS_FULLY_STORED[source]
 
         # -------------------------------------------------------------------
         # The index and dataset is saved. (store=True)
         # -------------------------------------------------------------------
 
         # Load the dataset again
-        data = databases.load_dataset(source=source, store=True)
+        data = databases.load(source=source, store=True)
 
         # Check the dictionary of the indexes is not empty
-        assert databases.IN_MEMORY_INDEXES[source] is not None
+        assert databases._IN_MEMORY_INDEXES[source] is not None
 
         # Check the dictionary of the datasets if filled
         pd.testing.assert_frame_equal(
-            data, databases.IN_MEMORY_DATASETS[source]
+            data, databases._IN_MEMORY_DATASETS[source]
         )
 
-        # Check the variable IS_FULLY_STORED
-        assert databases.IS_FULLY_STORED[source]
+        # Check the variable _IS_FULLY_STORED
+        assert databases._IS_FULLY_STORED[source]
 
         # -------------------------------------------------------------------
         # The datasets is loaded from the cache if saved
         # -------------------------------------------------------------------
 
         # Temporarily change the path of the zip file
-        databases.ZIP_FILENAME = "wrong.zip"
+        databases._ZIP_FILENAME = "wrong.zip"
 
         # Load the dataset again
-        data2 = databases.load_dataset(source=source)
+        data2 = databases.load(source=source)
 
         # Check the dictionary of the indexes if filled
-        assert databases.IN_MEMORY_INDEXES[source] is not None
+        assert databases._IN_MEMORY_INDEXES[source] is not None
 
         # Check if the data is equal to loaded from the original zip file
         pd.testing.assert_frame_equal(data, data2)
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_dataset_only_index(self, index_cols: dict, source: str):
-        """Test the load_dataset function with the only_index parameter.
+    def test_load_only_index(self, index_cols: dict, source: str):
+        """Test the load function with the only_index parameter.
 
         - Test if only the indexes are loaded. (only_index=True)
         - Test if the indexes are loaded from the cache if saved.
         """
         # Empty the dictionary of the indexes and datasets
-        databases.IN_MEMORY_INDEXES[source] = None
-        databases.IN_MEMORY_DATASETS[source] = pd.DataFrame()
-        databases.IS_FULLY_STORED[source] = False
+        databases._IN_MEMORY_INDEXES[source] = None
+        databases._IN_MEMORY_DATASETS[source] = pd.DataFrame()
+        databases._IS_FULLY_STORED[source] = False
 
         # Ensure correct zip name
-        databases.ZIP_FILENAME = "datasets.zip"
+        databases._ZIP_FILENAME = "datasets.zip"
 
         # -------------------------------------------------------------------
         # Only the indexes are loaded. (only_index=True)
         # -------------------------------------------------------------------
 
         # Load the dataset
-        index1 = databases.load_dataset(source=source, only_index=True)
+        index1 = databases.load(source=source, only_index=True)
 
         # Check if the data is a pandas DataFrame
         assert isinstance(index1, pd.DataFrame)
@@ -197,21 +195,21 @@ class TestLoadDataset:
         # -------------------------------------------------------------------
 
         # Temporarily change the path of the zip file
-        databases.ZIP_FILENAME = "wrong.zip"
+        databases._ZIP_FILENAME = "wrong.zip"
 
         # Load the dataset again
-        index2 = databases.load_dataset(source=source, only_index=True)
+        index2 = databases.load(source=source, only_index=True)
 
         # Check if the index dictionary is not empty
-        assert databases.IN_MEMORY_INDEXES[source] is not None
+        assert databases._IN_MEMORY_INDEXES[source] is not None
 
         # Check if the data is equal to loaded from the original zip file
         pd.testing.assert_frame_equal(index1, index2)
 
     # @pytest.mark.parametrize("random_seed", random_int(2))
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_dataset_only_rows(self, random_int_gen: int, source: str):
-        """Test the load_dataset function with the only_rows parameter.
+    def test_load_only_rows(self, random_int_gen: int, source: str):
+        """Test the load function with the only_rows parameter.
 
         - Test ValueError if True. (only_rows=True)
         - Test ValueError if used with only_index=True.
@@ -220,17 +218,15 @@ class TestLoadDataset:
         - Test empty df if the number of rows is greater than the dataset.
         """
         # Empty the dictionary of the indexes and datasets
-        databases.IN_MEMORY_INDEXES[source] = None
-        databases.IN_MEMORY_DATASETS[source] = pd.DataFrame()
-        databases.IS_FULLY_STORED[source] = False
+        databases._IN_MEMORY_INDEXES[source] = None
+        databases._IN_MEMORY_DATASETS[source] = pd.DataFrame()
+        databases._IS_FULLY_STORED[source] = False
 
         # Ensure correct zip name
-        databases.ZIP_FILENAME = "datasets.zip"
+        databases._ZIP_FILENAME = "datasets.zip"
 
         # Get the dataset
-        data = databases.load_dataset(
-            source=source, store_index=False, store=False
-        )
+        data = databases.load(source=source, store_index=False, store=False)
 
         # Define the row numbers
         # Use rng
@@ -245,7 +241,7 @@ class TestLoadDataset:
 
         # Load the dataset
         with pytest.raises(ValueError):
-            databases.load_dataset(source=source, only_rows=True)
+            databases.load(source=source, only_rows=True)
 
         # -------------------------------------------------------------------
         # ValueError if used with only_index=True.
@@ -253,16 +249,14 @@ class TestLoadDataset:
 
         # Load the dataset
         with pytest.raises(ValueError):
-            databases.load_dataset(
-                source=source, only_index=True, only_rows=good_row
-            )
+            databases.load(source=source, only_index=True, only_rows=good_row)
 
         # -------------------------------------------------------------------
         # Only the rows are loaded. (only_rows=<int>)
         # -------------------------------------------------------------------
 
         # Load the dataset
-        data1 = databases.load_dataset(source=source, only_rows=good_row)
+        data1 = databases.load(source=source, only_rows=good_row)
 
         # Check if the data is a pandas DataFrame
         assert isinstance(data1, pd.DataFrame)
@@ -281,29 +275,27 @@ class TestLoadDataset:
         # -------------------------------------------------------------------
 
         # Check the dictionary of the indexes are empty
-        assert databases.IN_MEMORY_INDEXES[source] is None
-        assert databases.IN_MEMORY_DATASETS[source].empty
-        assert not databases.IS_FULLY_STORED[source]
+        assert databases._IN_MEMORY_INDEXES[source] is None
+        assert databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IS_FULLY_STORED[source]
 
         # Load the dataset and store a row
-        row1 = databases.load_dataset(
-            source=source, only_rows=good_row, store=True
-        )
+        row1 = databases.load(source=source, only_rows=good_row, store=True)
 
         # Check the stored dataset is not empty
-        assert not databases.IN_MEMORY_DATASETS[source].empty
-        assert not databases.IS_FULLY_STORED[source]
+        assert not databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IS_FULLY_STORED[source]
 
         # Check if properly stored
         pd.testing.assert_frame_equal(
-            row1, databases.IN_MEMORY_DATASETS[source]
+            row1, databases._IN_MEMORY_DATASETS[source]
         )
 
         # Temporarily change the path of the zip file
-        databases.ZIP_FILENAME = "wrong.zip"
+        databases._ZIP_FILENAME = "wrong.zip"
 
         # Load with only_rows
-        row2 = databases.load_dataset(source=source, only_rows=good_row)
+        row2 = databases.load(source=source, only_rows=good_row)
 
         # Check if it is the same as before
         pd.testing.assert_frame_equal(row1, row2)
@@ -313,16 +305,16 @@ class TestLoadDataset:
         # -------------------------------------------------------------------
 
         # Force empty the dictionaries of the datasets and indexes
-        databases.IN_MEMORY_DATASETS[source] = pd.DataFrame()
-        databases.IN_MEMORY_INDEXES[source] = None
-        databases.IS_FULLY_STORED[source] = False
+        databases._IN_MEMORY_DATASETS[source] = pd.DataFrame()
+        databases._IN_MEMORY_INDEXES[source] = None
+        databases._IS_FULLY_STORED[source] = False
 
         # Ensure correct zip name
-        databases.ZIP_FILENAME = "datasets.zip"
+        databases._ZIP_FILENAME = "datasets.zip"
 
         # Load the dataset
         with pytest.warns(UserWarning):
-            data3 = databases.load_dataset(
+            data3 = databases.load(
                 source=source, only_rows=bad_row, store=False
             )
 
@@ -332,8 +324,8 @@ class TestLoadDataset:
         assert data3.shape == (0, data.shape[1])
 
     # @pytest.mark.parametrize("source", ["eu", "nasa"])
-    # def test_load_dataset_extract(self, source: str):
-    #     """Test the load_dataset function with the extract parameter.
+    # def test_load_extract(self, source: str):
+    #     """Test the load function with the extract parameter.
 
     #     - Test if the data is extracted. (extract=True)
     #     - Test if the data is not extracted when the file already exists.
@@ -343,13 +335,13 @@ class TestLoadDataset:
     #     - Test if the data is read from the file when the file already exists.
     #     """
     #     # Load the dataset
-    #     data = databases.load_dataset(source=source)
+    #     data = databases.load(source=source)
 
     #     # Get the file path
-    #     path = databases.BASE_PATH / databases.DATASET_FILENAMES[source]
+    #     path = databases.BASE_PATH / databases._DATASET_FILENAMES[source]
 
     #     # Get the zip path
-    #     zip_path = databases.BASE_PATH / databases.ZIP_FILENAME
+    #     zip_path = databases.BASE_PATH / databases._ZIP_FILENAME
 
     #     # Assert the file does not exist
     #     assert not path.exists()
@@ -359,7 +351,7 @@ class TestLoadDataset:
     #     # -------------------------------------------------------------------
 
     #     # Load the dataset and extract
-    #     data1 = databases.load_dataset(source=source, extract=True)
+    #     data1 = databases.load(source=source, extract=True)
 
     #     # Assert the file exists
     #     assert path.exists()
@@ -382,7 +374,7 @@ class TestLoadDataset:
 
     #     # Assert cant extract if the file already exists
     #     with pytest.raises(FileExistsError):
-    #         databases.load_dataset(source=source, extract=True)
+    #         databases.load(source=source, extract=True)
 
     #     # -------------------------------------------------------------------
     #     # The data is extracted when the file already exists.
@@ -393,7 +385,7 @@ class TestLoadDataset:
     #     age2 = path.stat().st_mtime
 
     #     # Load the dataset and extract
-    #     data3 = databases.load_dataset(
+    #     data3 = databases.load(
     #         source=source, extract=True, overwrite=True
     #     )
 
@@ -411,10 +403,10 @@ class TestLoadDataset:
     #     # -------------------------------------------------------------------
 
     #     # Temporarily change the path of the zip file
-    #     databases.ZIP_FILENAME = "wrong.zip"
+    #     databases._ZIP_FILENAME = "wrong.zip"
 
     #     # Load the dataset
-    #     data4 = databases.load_dataset(source=source)
+    #     data4 = databases.load(source=source)
 
     #     # Check if the data is equal to the original
     #     pd.testing.assert_frame_equal(data, data4)
@@ -443,44 +435,44 @@ class TestCheckFileAge:
 
 class TestDownloadDataset:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_download_dataset(self, source: str, has_requests: bool):
-        """Test the download_dataset function."""
+    def test_download(self, source: str, has_requests: bool):
+        """Test the download function."""
         # Check if not request, then nothing
         if not has_requests:
             with pytest.raises(ImportError):
-                out = databases.download_dataset(source=source)
+                out = databases.download(source=source)
 
         else:
             # Load the dataset
-            data = databases.load_dataset(source=source, store_index=False)
+            data = databases.load(source=source, store_index=False)
 
             # Get destiny path
-            path = databases.BASE_PATH / databases.DATASET_FILENAMES[source]
+            path = databases.BASE_PATH / databases._DATASET_FILENAMES[source]
 
             # CHECK IF THE FILE DOES NOT EXISTS
             assert not path.exists()
 
             # Cant download the dataset if the file already exists in zip
             with pytest.warns(UserWarning):
-                out = databases.download_dataset(source=source)
+                out = databases.download(source=source)
 
             assert out is None
 
             # Temporary change the zip path
-            databases.ZIP_FILENAME = "wrong.zip"
+            databases._ZIP_FILENAME = "wrong.zip"
 
             # Download the dataset
-            data2 = databases.download_dataset(source=source, return_data=True)
+            data2 = databases.download(source=source, return_data=True)
 
             # Check if the file is saved
             assert path.exists()
 
             # Can't download the dataset if the file already exists
             with pytest.raises(FileExistsError):
-                out = databases.download_dataset(source=source)
+                out = databases.download(source=source)
 
             # Load the dataset (from the new file because zip is wrong)
-            data2 = databases.load_dataset(source=source, store_index=False)
+            data2 = databases.load(source=source, store_index=False)
 
             # Check if the data is equal or longer than the original
             assert data2.shape[0] >= data.shape[0]
@@ -491,10 +483,10 @@ class TestDownloadDataset:
             path.unlink()
 
             # Correct the zip path
-            databases.ZIP_FILENAME = "datasets.zip"
+            databases._ZIP_FILENAME = "datasets.zip"
 
             # Download the dataset with overwrite
-            data3 = databases.download_dataset(source=source, overwrite=True)
+            data3 = databases.download(source=source, overwrite=True)
 
             # Check if the file is saved
             assert path.exists()
