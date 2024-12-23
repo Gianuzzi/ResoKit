@@ -681,9 +681,12 @@ class StaticPlanet(ResokitDataFrame):
 
         Returns
         -------
-        radius, radius_err_min, radius_err_max : tuple[float, float, float]
-            Estimated radius, and its minimum and maximum errors, in Jupiter
-            radii. If `err_method=0`, the tuple is (radius, 0.0, 0.0).
+        radius : float
+            Estimated radius in Jupiter radii.
+        radius_err_min : float
+            Minimum error in Jupiter radii. If `err_method=0`, the error is 0.0.
+        radius_err_max : float
+            Maximum error in Jupiter radii. If `err_method=0`, the error is 0.0.
         """
         # Get planet mass and convert to Earth masses
         mass = self["mass"] / M_JUP * M_EAR

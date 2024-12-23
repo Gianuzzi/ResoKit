@@ -80,8 +80,12 @@ def _search_system_index(
 
     Returns
     -------
-    Tuple[pd.Index, pd.Series, float]
-        Index, values, and similarity ratio.
+    index : pd.Index
+        Index of the system.
+    values : pd.Series
+        Values of the system.
+    ratio : float
+        Similarity ratio.
     """
     # Define the column to search
     column = (

@@ -1641,7 +1641,6 @@ def load_full(
 
 
 def clear_memory(source: str, verbose: bool = True) -> None:
-
     """Clear the memory address of stored datasets.
 
     Parameters
