@@ -88,6 +88,7 @@ def mmrs_in_area(
     order2: int = 2,
     max_coeff2: int = 10,
     max_order2: int = 2,
+    verbose: bool = False,
 ) -> list:
     """Identify 3-body and 2-body MMRs in a specified phase-space region.
 
@@ -98,23 +99,26 @@ def mmrs_in_area(
     Parameters
     ----------
     bounds : tuple[float, float, float, float]
-        The limits of the region (x_min, x_max, y_min, y_max).
-    order3 : int
-        Exact order for 3P-MMRs (default: 0).
-    max_order3 : int
-        Calculate 3P-MMRs up to this maximum order.
-        If set to 0, only the exact order is considered (default: 10).
-    max_coeff3 : int
+        The limits of the region (x_min, x_max, y_min, y_max) in the phase
+        space. Remeber that x_min and y_min must be > 1.
+    order3 : int, optional. Default: 0
+        Exact order for 3P-MMRs.
+    max_coeff3 : int, optional. Default: 10
         Calculate 3P-MMRs up to this maximum integer coefficient.
-    mmr2b : bool
-        Whether to compute 2P-MMRs (default: True).
-    order2 : int
-        Exact order for 2P-MMRs (default: 2).
-    max_order2 : int
-        Calculate 2P-MMRs up to this maximum order.
-        If set to 0, only the exact order is considered (default: 2).
-    max_coeff2 : int
+    max_order3 : int, optional. Default: 0
+        Calculate 3P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered.
+    mmr2b : bool, optional. Default: True
+        Whether to compute 2P-MMRs.
+    order2 : int, optional. Default: 2
+        Exact order for 2P-MMRs.
+    max_coeff2 : int, optional. Default: 10
         Calculate 2P-MMRs up to this maximum integer coefficient.
+    max_order2 : int, optional. Default: 2
+        Calculate 2P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered.
+    verbose : bool, optional. Default: False
+        Whether to print the resonances found.
 
     Returns
     -------
@@ -125,7 +129,16 @@ def mmrs_in_area(
         are lists of 3P-MMRs, 2P-MMRs along the x-axis, and
         2P-MMRs along the y-axis, respectively.
     """
+    # Get the bounds
     x_min, x_max, y_min, y_max = bounds
+
+    # Check bounds
+    if x_min < 1 or y_min < 1:
+        raise ValueError("Bounds must be greater or equal than 1.")
+    if x_min >= x_max or y_min >= y_max:
+        raise ValueError("Invalid bounds. Must be ascending.")
+
+    # Initialize the list of resonances
     r3p_resonances = []
 
     # Define the range of coefficients
@@ -165,6 +178,9 @@ def mmrs_in_area(
 
             r3p_resonances.append([i_r, j_r, k_r])
 
+    if verbose:
+        print(f"Found {len(r3p_resonances)} 3-body mean-motion resonances.")
+
     # Check if 2P-MMRs are not required
     if not mmr2b:  # Return 3P-MMRs only
         return r3p_resonances
@@ -194,6 +210,16 @@ def mmrs_in_area(
 
             if y_min <= i_r / j_r <= y_max and [i_r, j_r] not in r2p_y:
                 r2p_y.append([i_r, j_r])
+
+    if verbose:
+        print(
+            f"Found {len(r2p_x)} 2-body mean-motion resonances "
+            + "along the x-axis."
+        )
+        print(
+            f"Found {len(r2p_y)} 2-body mean-motion resonances "
+            + "along the y-axis."
+        )
 
     return [r3p_resonances, r2p_x, r2p_y]
 
@@ -276,8 +302,9 @@ def mindist_mmr3b(
     b: float,
     resonance: Tuple[int, int, int],
     x0: Union[float, None] = None,
+    unphysical: bool = False,
     **minimize_kwargs,
-) -> Tuple[List[float], float]:
+) -> Tuple[float, float, float]:
     """Calculate the minimum distance to a 3-body resonance curve.
 
     Parameters
@@ -291,33 +318,50 @@ def mindist_mmr3b(
     x0 : float, optional. Default: None
         Initial guess for the optimization.
         If None, the function will use the middle point of the curve.
+    unphysical : bool, optional. Default: False
+        Whether to allow unphysical solutions. (y below 1)
     minimize_kwargs : dict, optional
         Additional arguments for :py:func:scipy.optimize.minimize
         function.
 
     Returns
     -------
-    x_min, y_min, distance_min : tuple[float, float, float]
-        The x-y coordinates of the minimum distance and the distance value.
+    x_min : float
+        The x coordinate of the minimum distance.
+    y_min : float
+        The y coordinate of the minimum distance.
+    distance_min : float
+        The minimum distance to the resonance curve.
     """
     # Singularity handling
     singularity = -resonance[1] / resonance[0]
 
     # Use the right or left side of the curve, in relation to singularity
     use_right = resonance[2] < 0
-    # if "use_rigth", then the curve behaves like "1/x", else like "- 1/x"
+    # if "use_right", then the curve behaves like "1/x", else like "- 1/x"
     x_y1 = -(resonance[1] + resonance[2]) / resonance[0]
 
-    if x_y1 < max(1, singularity):  # Avoid crossing the singularity
+    # Fast check for (1,1) solutions
+    if use_right and mmr3b(1, resonance) == 1 and not unphysical:
+        # Here, the only physical solution is (1,1)
+        return 1, 1, np.sqrt((1 - a) ** 2 + (1 - b) ** 2)
+
+    # Avoid crossing the singularity
+    if x_y1 < max(1, singularity):
         x_y1 = np.inf
 
     # Define the bounds for the optimization
-    bounds_x = [singularity, x_y1] if use_right else [1, singularity]
+    if use_right:
+        bounds_x = [singularity, x_y1]
+    elif not unphysical:
+        bounds_x = [1, singularity]
+    else:
+        bounds_x = [-np.inf, singularity]
 
     # Function to calculate the r3p curve value at x
-    def dist2_to_curve(x):
+    def dist2_to_curve(x, unphysical=unphysical):
         y = mmr3b(x, resonance)  # Calculate the curve value
-        if np.isnan(y) or y < 1:
+        if np.isnan(y) or (y < 1 and not unphysical):
             return np.inf
         return (x - a) ** 2 + (y - b) ** 2
 
@@ -350,8 +394,100 @@ def mindist_mmr3b(
         raise ValueError("Optimization failed!")
 
 
+def closest_mmr3b(
+    a: float,
+    b: float,
+    order3: int = 0,
+    max_coeff3: int = 10,
+    max_order3: int = 0,
+    bounds: Tuple[float, float, float, float] = None,
+    radius: float = 1e-3,
+    verbose: bool = True,
+    **minimize_kwargs,
+) -> Tuple[List[int], float]:
+    """Find the closest 3-body mean-motion resonance to a point.
+
+    Parameters
+    ----------
+    a : float
+        The x-coordinate of the point.
+    b : float
+        The y-coordinate of the point.
+    order3 : int, optional. Default: 0
+        Exact order for 3P-MMRs.
+    max_coeff3 : int, optional. Default: 10
+        Calculate 3P-MMRs up to this maximum integer coefficient.
+    max_order3 : int, optional. Default: 0
+        Calculate 3P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered.
+    bounds : tuple[float, float, float, float], optional. Default: None
+        The limits of the region (x_min, x_max, y_min, y_max).
+        If not provided and radius is not None, the function will
+        use the search radius around the point. If
+    radius : float, optional. Default: 1e-3
+        The radius of the search area around the point.
+        If bounds are provided, the radius will be ignored.
+    ret_point : bool, optional. Default: False
+    verbose : bool, optional. Default: True
+        Whether to print the optimization results.
+    minimize_kwargs : dict, optional
+        Additional arguments for the :py:func:scipy.optimize.minimize
+        function.
+
+    Returns
+    -------
+    resonance : list[int, int, int]
+        The coefficients of the closest 3-body resonance.
+    distance : float
+        The distance to the closest 3-body resonance.
+    """
+    if bounds is None and radius is None:
+        raise ValueError("Either bounds or radius must be provided.")
+
+    if bounds is None:
+        bounds = (
+            max(a - radius, 1),
+            a + radius,
+            max(b - radius, 1),
+            b + radius,
+        )
+
+    # Get the resonances in the specified area
+    mmrs = mmrs_in_area(
+        bounds,
+        order3,
+        max_coeff3,
+        max_order3,
+        mmr2b=False,
+        verbose=verbose,
+    )
+
+    if not mmrs:
+        raise ValueError("No 3-body mean-motion resonances found in the area.")
+
+    # Initialize the minimum distance
+    min_distance = np.inf
+    closest_resonance = None
+
+    # Find the closest 3-body resonance
+    for resonance in mmrs:
+        _, _, distance = mindist_mmr3b(a, b, resonance, **minimize_kwargs)
+        if distance < min_distance:
+            min_distance = distance
+            closest_resonance = resonance
+
+    if verbose:
+        print(f"Closest 3-body mean-motion resonance: {closest_resonance}")
+        print(f"Distance: {min_distance}")
+
+    return closest_resonance, min_distance
+
+
 def label_mmr3b(
-    resonance: tuple, ax: plt.Axes, lims: tuple = None, warn: bool = True
+    resonance: tuple,
+    ax: plt.Axes = None,
+    lims: tuple = None,
+    warn: bool = True,
 ) -> plt.Axes:
     """Annotate a plot with the label of a resonance line.
 
@@ -365,14 +501,15 @@ def label_mmr3b(
     resonance : tuple
         Coefficients of the resonance line (a, b, c) in
         the form a*x + b*y + c = 0.
-    ax : matplotlib.axes.Axes
+    ax : matplotlib.axes.Axes, optional. Default: None
         The axis object on which the label will be placed.
-    lims : tuple, optional
+        If not provided, the function will use the current axis.
+    lims : tuple, optional. Default: None
         Custom axis limits in the format (x_min, x_max, y_min, y_max).
         If not provided, the function will use the current axis limits.
-    warn : bool, optional
+    warn : bool, optional. Default: True
         Whether to print a warning if the resonance does not cross
-        the right or top axis (default: True).
+        the right or top axis.
 
     Returns
     -------
@@ -385,6 +522,10 @@ def label_mmr3b(
     def rinv(y):
         """Calculate x for a given y using the line equation."""
         return -(b * y + c) / (a * y)
+
+    # Get the current axis if not provided
+    if ax is None:
+        ax = plt.gca()
 
     # Get axis limits
     if lims:
@@ -452,32 +593,31 @@ def plot_mmrs(
 
     Parameters
     ----------
-    bounds : Tuple[float, float, float, float], optional
+    bounds : Tuple[float, float, float, float], optional. Default: None
         The limits of the region (x_min, x_max, y_min, y_max).
         If ax is provided, the bounds will be adjusted to the axis limits.
-        Default: (1, 10, 1, 10).
-    order3 : int
-        Exact order for 3P-MMRs (default: 0).
-    max_order3 : int
+    order3 : int. Default: 0
+        Exact order for 3P-MMRs.
+    max_coeff3 : int, optional. Default: 10
+        Calculate 3P-MMRs up to this maximum integer coefficient.
+    max_order3 : int, optional. Default: 0
         Calculate 3P-MMRs up to this maximum order.
         If set to 0, only the exact order is considered (default: 10).
-    max_coeff3 : int
-        Calculate 3P-MMRs up to this maximum integer coefficient.
-    mmr2b : bool
-        Whether to compute 2P-MMRs (default: True).
-    order2 : int
-        Exact order for 2P-MMRs (default: 2).
-    max_order2 : int
-        Calculate 2P-MMRs up to this maximum order.
-        If set to 0, only the exact order is considered (default: 2).
-    max_coeff2 : int
+    mmr2b : bool, optional. Default: True
+        Whether to compute 2P-MMRs.
+    order2 : int, optional. Default: 2
+        Exact order for 2P-MMRs.
+    max_coeff2 : int, optional. Default: 10
         Calculate 2P-MMRs up to this maximum integer coefficient.
-    n_points : int, optional
-        Number of points for the curve (default: 500).
-    ax : plt.Axes, optional
+    max_order2 : int, optional. Default: 2
+        Calculate 2P-MMRs up to this maximum order.
+        If set to 0, only the exact order is considered.
+    n_points : int, optional. Default: 500
+        Number of points for the curve.
+    ax : plt.Axes, optional. Default: None
         The axis object on which the plot will be drawn.
         If not provided, a new figure and axis will be created.
-    label_mmrs : bool, optional
+    label_mmrs : bool, optional. Default: False
         Whether to label the resonances on the plot.
         Recommended to set xlim and ylim before using this option,
         or the labels may be placed outside the plot. (default: False).
