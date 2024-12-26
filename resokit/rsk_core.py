@@ -210,19 +210,20 @@ class DynamicSystem:
         self.npl = len(self.planets)
 
     def Prat(self,which=False):
+        if which is False: planets = self.planets
+        elif not np.shape(which): planets = self.planets[which:which+2]
+        else: planets = [self.planets[which[0]],self.planets[which[1]]]
+        
         masses = np.asarray([pli.mass for pli in self.planets])
         if not all(masses):
             mu_l = 1
             Warning("Assuming mass=0 for planets in calculating prat")
         else:
             mu_l = self.star.mass + masses  # neglect factor G because of ratio
-            
-        if not which: planets = self.planets
-        elif not np.shape(which): planets = self.planets[which:which+2]
-        else: planets = [self.planets[which[0]],self.planets[which[1]]]
+        
         nl = np.asarray([(mu_l / pli.a**3) ** 0.5 for pli in planets])
         prat = nl[:-1] / nl[1:]
-        return prat
+        return prat[0]
     
     
     
