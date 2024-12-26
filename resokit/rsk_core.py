@@ -25,9 +25,16 @@ class Angles(np.ndarray):
     def __add__(self, other_angls):
         return(np.ndarray.__add__(self,other_angls) % 360)
     
+    def __sub__(self, other_angls):
+        return(np.ndarray.__sub__(self,other_angls) % 360)
+    
     @property
     def rad(self):
         return(self*np.pi/180)
+    
+    @property
+    def arr(self):
+        return(np.asarray(self))
     
     def __repr__(self):
         # Truncate representation if array is large
@@ -203,7 +210,6 @@ class DynamicSystem:
         self.npl = len(self.planets)
 
     def Prat(self,which=False):
-        
         masses = np.asarray([pli.mass for pli in self.planets])
         if not all(masses):
             mu_l = 1
@@ -248,8 +254,8 @@ class DynamicSystem:
                    + np.dot(vp_coefs,[pl1.varpi,pl2.varpi,pl3.varpi])
         return(_3pmmr_ang)
     
-    def _plot_or_scatter_resangs(self,ax,method,which_3p_ang,**any_kw):
-        which = np.asarray(which_3p_ang)
+    def _plot_or_scatter_resangs(self,ax,method,which_resang,**any_kw):
+        which = np.asarray(which_resang)
         which = [which] if which.ndim==0 else which
         for i in which:
             resangi = self.resangs[i]
@@ -257,18 +263,18 @@ class DynamicSystem:
             plotting_func(self.times,resangi,**any_kw)
         return ax
     
-    def plot(self,var,ax=None,which_3p_ang=None,**plot_kw):
+    def plot(self,var,ax=None,which_resang=None,**plot_kw):
       if ax is None: ax=plt.gca()
       if var=='resangs':
-          self._plot_or_scatter_resangs(ax,'plot',which_3p_ang,**plot_kw)
+          self._plot_or_scatter_resangs(ax,'plot',which_resang,**plot_kw)
           return ax
       ax.plot(self.times,getattr(self,var),**plot_kw)
       return ax
   
-    def scatter(self,var,ax=None,which_3p_ang=None,**scatter_kw):
+    def scatter(self,var,ax=None,which_resang=None,**scatter_kw):
       if ax is None: ax=plt.gca()
       if var=='resangs':
-          self._plot_or_scatter_resangs(ax,'scatter',which_3p_ang,**scatter_kw)
+          self._plot_or_scatter_resangs(ax,'scatter',which_resang,**scatter_kw)
           return ax
       ax.scatter(self.times,getattr(self,var),**scatter_kw)
       return ax

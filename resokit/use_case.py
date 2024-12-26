@@ -21,6 +21,6 @@ lam1 = pl1.lam
 times = sys1.times
 
 plt.figure()
-sys1.plot('resangs',which_3p_ang=2)
-sys1.scatter('resangs',which_3p_ang=0,zorder=100,c='k')
+sys1.plot('resangs',which_resang=2)
+sys1.scatter('resangs',which_resang=0,zorder=100,c='k')
 plt.show()
