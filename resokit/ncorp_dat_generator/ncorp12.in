@@ -19,8 +19,8 @@
 
    integrator (radau, bs, rk)             : bs
    initial time for integration           : 0.0
-   total integration time                 : 5.0e3
-   output time interval                   : 1.0e-1
+   total integration time                 : 2.0e4
+   output time interval                   : 1.0e1
    precision (digits per step)            : 12
    initial time step (-1 for auto)        : -1.0
    sign (-1 for backward integration)     : 1.0
@@ -42,13 +42,15 @@
 
  mass      a       e       I        M        w       Omega     tau_a     tau_e
 
- 10.0      0.1     0.1     1.0      0.0      0.0      20.0
- 10.0      0.5     0.2     2.0      0.0      0.0      0.0
+ 2.0      0.5      0.1     1.0      0.0      0.0      20.0
+ 5.0      0.75     0.2     2.0      0.0      0.0      0.0
  10.0      1       0.2     2.0      0.0      0.0      0.0
+ 12.0     1.3      0.2     2.0      0.0      0.0      0.0
+ 8.0      1.6      0.2     2.0      0.0      0.0      0.0
 
-   resonance indices (empty if unwanted)  : -1 3 0
+   resonance indices (empty if unwanted)  : 
 
-   include Type I migration     (yes/no)  : no
+   include Type I migration     (yes/no)  : yes
         eccentricity damping factor Qe    : 0.1
     ang. momentum conservation factor     : 0.3
 
@@ -85,7 +87,7 @@
 -------------------------------------------------------------------------------
 <> The Gas Disk (used only if Type I migration or gas drag turned on) - 
 
-   density at r=1 [gr/cm^2]               : 1000.0
+   density at r=1 [gr/cm^2]               : 2000.0
    power-law exponent (S~r^(-gama))       : 0.5
    disk flare index                       : 0.0
    disk scale height (Hr) at r=1          : 0.05

@@ -6,6 +6,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import attrs
+from tools import rmm
 
 
 # =============================================================================
@@ -209,21 +210,20 @@ class DynamicSystem:
         self.times = self.planets[0].times
         self.npl = len(self.planets)
 
-    def Prat(self,which=False):
-        if which is False: planets = self.planets
-        elif not np.shape(which): planets = self.planets[which:which+2]
-        else: planets = [self.planets[which[0]],self.planets[which[1]]]
-        
+    def Prat(self,which=None):
         masses = np.asarray([pli.mass for pli in self.planets])
         if not all(masses):
             mu_l = 1
             Warning("Assuming mass=0 for planets in calculating prat")
         else:
             mu_l = self.star.mass + masses  # neglect factor G because of ratio
-        
+            
+        if which is None: planets = self.planets
+        elif len(np.shape(which))==0: planets = self.planets[which:which+2]
+        else: planets = [self.planets[which[0]],self.planets[which[1]]]
         nl = np.asarray([(mu_l / pli.a**3) ** 0.5 for pli in planets])
         prat = nl[:-1] / nl[1:]
-        return prat[0]
+        return prat
     
     
     
@@ -279,3 +279,61 @@ class DynamicSystem:
           return ax
       ax.scatter(self.times,getattr(self,var),**scatter_kw)
       return ax
+
+    def sepspace(self,bounds=None,which=None,ax=None,r3p_labels=True,**kwargs):
+        rmm_kw_keys = ['r3p_order','r3p_maxint','r2p_order','r2p_maxint']
+        rmm_kw = {k:kwargs[k] for k in rmm_kw_keys if k in kwargs}
+        plot_kw = {k:v for k,v in kwargs.items() if k not in rmm_kw_keys}
+        
+        case = len(np.shape(which))
+        if which is None:
+            for i in range(self.npl-2):
+                nnx = self.Prat(which=range(i,self.npl-1))
+                nny = self.Prat(which=range(i+1,self.npl))
+        elif case == 0:  # only the which-th triplet
+            nnx = [self.Prat(which=which)]
+            nnx = [self.Prat(which=which+1)]
+        elif case == 1:  # many -th triplets
+            nnx = []
+            nny = []
+            for tripi in which:
+                nnx.append(self.Prat(which=tripi))
+                nny.append(self.Prat(which=tripi+1))
+        elif case == 2:
+            nnx = []
+            nny = []
+            for tripi in which:
+                nnx.append(self.Prat(which=[tripi[0],tripi[1]]))
+                nny.append(self.Prat(which=[tripi[1],tripi[2]]))
+        
+        if ax is None: ax = plt.gca()
+        if bounds is None:
+            l1x = np.min(nnx)*0.95
+            l2x = np.max(nnx)*1.05
+            l1y = np.min(nny)*0.95
+            l2y = np.max(nny)*1.05
+        else:
+            l1x,l2x,l1y,l2y = bounds
+        
+        r3p,r2x,r2y = rmm.rmm_in_area(lims=[l1x,l2x,l1y,l2y],**rmm_kw)
+        
+        ntrips = len(nnx)
+        for tripi in range(ntrips):
+            ax.scatter(nnx[tripi],nny[tripi],**plot_kw)
+            
+        for r2xi in r2x:
+            ax.axvline(r2xi[0]/r2xi[1],lw=.75,c='k',linestyle='dashed')
+            
+        for r2yi in r2y:
+            ax.axhline(r2yi[0]/r2yi[1],lw=.75,c='k',linestyle='dashed')
+        
+        dom = np.linspace(l1x,l2x,1000)
+        for r3i in r3p:
+            ax.plot(dom,rmm.r3p(dom,r3i),lw=0.75,c='k')
+            if r3p_labels:
+                rmm.r3p_label(r3i, ax, [l1x,l2x,l1y,l2y])
+        
+        plt.xlim(l1x,l2x)
+        plt.ylim(l1y,l2y)
+        
+        plt.show()

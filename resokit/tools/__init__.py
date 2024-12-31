@@ -20,4 +20,4 @@
 # IMPORTS
 # =============================================================================
 
-from . import plane, rmm  # noqa
+from . import rmm  # noqa

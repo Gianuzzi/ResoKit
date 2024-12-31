@@ -120,6 +120,10 @@ def load_integration(
     # if sep_files, there shouldnt be an ibody column
     if sep_files and ("ibody" in names):
         raise Exception("separated files don't have 'ibody' column")
+        
+    # if not sep_files, there should be an ibody column
+    if not sep_files and ("ibody" not in names):
+        raise Exception("'ibody' column missing in 'names'")
 
     # =============== READ DATA =============== #
     # select parameters with usecols
