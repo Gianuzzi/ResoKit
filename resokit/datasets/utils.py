@@ -559,6 +559,7 @@ def remove_from_zip(zipfname: str, *filenames: str, verbose: bool = False):
 def request_dataset(
     url: str,
     verbose: bool = True,
+    chunk_size: int = 1024,
 ) -> bytes:
     """Download the data from a specified URL.
 
@@ -568,6 +569,8 @@ def request_dataset(
         URL to download the data from.
     verbose : bool, optional
         If True, print messages about the download process.
+    chunk_size : int, optional
+        Size of the chunks to download the data.
 
     Returns
     -------
@@ -580,8 +583,31 @@ def request_dataset(
     if verbose:
         print(f" Downloading data from {url}...")
 
-    # Download the file
-    response = requests.get(url=url)  # Download the file
-    response.raise_for_status()  # Check for errors
+    # Send a GET request with streaming enabled
+    response = requests.get(url, stream=True)
 
-    return response.content
+    # Check for errors
+    response.raise_for_status()
+
+    # Initialize the downloaded data as a byte array
+    downloaded_data = bytearray()
+
+    # Initialize the number of downloaded bytes
+    downloaded_size = 0
+
+    # Iterate over the response content
+    for chunk in response.iter_content(chunk_size=chunk_size):
+        if chunk:  # Filter out keep-alive new chunks
+            downloaded_data.extend(chunk)  # Append the chunk to the data
+            downloaded_size += len(chunk)  # Update the downloaded size
+
+            # Print the download progress (in MB)
+            if verbose:
+                print(
+                    f" Downloaded: {downloaded_size / 1e6:.2f} MB",
+                    end="\r",
+                )
+
+    return bytes(
+        downloaded_data
+    )  # Return the downloaded data as inmutable bytes

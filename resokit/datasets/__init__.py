@@ -23,6 +23,8 @@ from .databases import clear_memory  # noqa
 from .databases import download  # noqa
 from .databases import load_eu  # noqa
 from .databases import load_nasa  # noqa
+from .databases import update_eu  # noqa
+from .databases import update_nasa  # noqa
 
 # Make the functions available at the package level
 
@@ -31,4 +33,6 @@ __all__ = [
     "download",
     "load_eu",
     "load_nasa",
+    "update_eu",
+    "update_nasa",
 ]

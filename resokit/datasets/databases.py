@@ -629,6 +629,7 @@ def download(
     overwrite: bool = False,
     verbose: bool = True,
     to_resokit: Union[bool, None] = None,
+    chunk_size: int = 1024,
 ) -> Union[Path, pd.DataFrame, ResoKitDataset]:
     """Download a dataset from a specified source and save it locally.
 
@@ -666,6 +667,9 @@ def download(
         If `True`, returns the dataset as a ResoKitDataset.
         If `False`, returns the dataset as a pandas DataFrame.
         If `None`, returns the path to the downloaded file.
+    chunk_size : int, optional. Default: 1024.
+        Size of the chunks to download the dataset, in bytes.
+        Default is 1024 bytes (1 KB).
 
     Returns
     -------
@@ -736,13 +740,13 @@ def download(
         zip_path = None
 
     # Download the dataset
-    data = request_dataset(url, verbose=verbose)
+    data = request_dataset(url, verbose=verbose, chunk_size=chunk_size)
 
     # Check if the data is valid. If not, raise an error. Check length > 0 too
     if not data or len(data) == 0:
         raise ValueError(f"Empty dataset downloaded from {url}.")
     elif verbose:
-        print(" Data downloaded successfully.")
+        print(f" Data downloaded successfully. ({len(data)/1e6:.2f} MB)")
 
     # Store the data in ZIP
     if zip_path is not None:
@@ -820,6 +824,54 @@ def download(
         return zip_path
 
     return
+
+
+def update_eu(**kwargs) -> ResoKitDataset:
+    """Update the exoplanet.eu dataset.
+
+    This function updates the exoplanet.eu dataset, downloading it from the
+    internet, and storing it in a file, a ZIP archive, in memory, and/or
+    simply returning it. It is a wrapper for the `download` function.
+
+    Note
+    ----
+    Requires the requests library.
+
+    Parameters
+    ----------
+    **kwargs
+        Keyword arguments to pass to the `download` function.
+
+    Returns
+    -------
+    dataset : ResoKitDataset
+        Updated exoplanet.eu dataset.
+    """
+    return download("eu", **kwargs)
+
+
+def update_nasa(**kwargs) -> ResoKitDataset:
+    """Update the NASA dataset.
+
+    This function updates the NASA dataset, downloading it from the internet,
+    and storing it in a file, a ZIP archive, in memory, and/or simply returning
+    it. It is a wrapper for the `download` function.
+
+    Note
+    ----
+    Requires the requests library.
+
+    Parameters
+    ----------
+    **kwargs
+        Keyword arguments to pass to the `download` function.
+
+    Returns
+    -------
+    dataset : ResoKitDataset
+        Updated NASA dataset.
+    """
+    return download("nasa", **kwargs)
 
 
 def _check_file_age(
