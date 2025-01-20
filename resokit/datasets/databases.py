@@ -1517,6 +1517,8 @@ def load_full(
         )
         if verbose:
             print(" Loaded full dataset from memory stored dataset.")
+        if check_age:
+            print(f"Last modified: {data.age} days ago")
         return data
 
     # Define columns to load
