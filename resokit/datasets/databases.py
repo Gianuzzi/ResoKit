@@ -1204,7 +1204,6 @@ def load_nasa(
         from_file=from_file,
         dir_path=dir_path,
         to_resokit=to_resokit,
-        raw_df=False,
         check_age=check_age,
         only_rows=only_rows,
         verbose=verbose,

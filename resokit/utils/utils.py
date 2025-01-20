@@ -407,7 +407,7 @@ def float_to_fraction(
         # Print the intermediate results
         if verbose:
             print(
-                f"Iter {i + 1:>2d}: {numer[i]:>3d}/{denom[i]:<3d} "
+                f" Iter {i + 1:>2d}: {numer[i]:>3d}/{denom[i]:<3d} "
                 + f"-> {approx_value:.6f} "
                 + f"(error: {error:.2e})"
                 + (f" -> STOP: {is_stop}" if has_stop else "")

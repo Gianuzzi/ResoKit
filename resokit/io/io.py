@@ -104,7 +104,6 @@ def _search_system_index(
         if raw_df is not None
         else load_full(
             source=source,
-            raw_df=True,
             **load_extra_kwargs,
         )
     )
@@ -207,7 +206,6 @@ def _load_system_from_db(
             "verbose": verbose,
             "store_index": store_index,
             "to_resokit": False,
-            "raw_df": True,
             "only_rows": None,
             "only_index": False,
         }
@@ -221,7 +219,6 @@ def _load_system_from_db(
 
     # Define the keyword arguments for the system loading
     load_extra_kwargs = {**load_kwargs, "only_index": True}
-    load_extra_kwargs.pop("raw_df", None)  # Remove the raw_df key
 
     # Search for the system
     idx, values, ratio = _search_system_index(
