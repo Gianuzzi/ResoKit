@@ -630,6 +630,7 @@ def download(
     verbose: bool = True,
     to_resokit: Union[bool, None] = None,
     chunk_size: int = 1024,
+    print_size: float = 0.15,
 ) -> Union[Path, pd.DataFrame, ResoKitDataset]:
     """Download a dataset from a specified source and save it locally.
 
@@ -670,6 +671,8 @@ def download(
     chunk_size : int, optional. Default: 1024.
         Size of the chunks to download the dataset, in bytes.
         Default is 1024 bytes (1 KB).
+    print_size: float, optional. Default: 0.15.
+        Update frequency for the download progress bar.
 
     Returns
     -------
@@ -726,6 +729,7 @@ def download(
             raise FileExistsError(f"File {file_path} already exists.")
     else:
         file_path = None
+        file_name = _DATASET_FILENAMES[source]
 
     # Check if zip exists
     if to_zip:
@@ -738,9 +742,12 @@ def download(
             raise FileExistsError(f"ZIP archive {zip_path} already exists.")
     else:
         zip_path = None
+        zip_name = _ZIP_FILENAME
 
     # Download the dataset
-    data = request_dataset(url, verbose=verbose, chunk_size=chunk_size)
+    data = request_dataset(
+        url, verbose=verbose, chunk_size=chunk_size, print_size=print_size
+    )
 
     # Check if the data is valid. If not, raise an error. Check length > 0 too
     if not data or len(data) == 0:
