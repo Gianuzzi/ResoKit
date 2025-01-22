@@ -76,6 +76,9 @@ DAY = 86400  # s
 # Year in seconds
 YEAR = 3.154e7  # s
 
+# Gravitational constant in AU^3 M_sun^-1 days^-2
+G_ASD = G * AU**3 / M_SUN / DAY**2
+
 
 # EU column to resokit
 _EU_MAPPING = MappingProxyType(
@@ -470,17 +473,22 @@ def parse_to_iter(value: any, to: type = list) -> Iterable:
     return value
 
 
+# Below are the functions used in ResokitPlanet (and ResokitSystem) class, but
+# could also be used by the user. They are not part of the public API, but they
+# are still useful for the user.
+
+
 def calc_period(a: float, m_star: float, m_planet) -> float:
     """Calculate the orbital period of a planet.
 
     Parameters
     ----------
     a : float
-        Semi-major axis of the planet.
+        Semi-major axis of the planet, in AU.
     m_star : float
-        Mass of the star.
+        Mass of the star, in solar masses.
     m_planet : float
-        Mass of the planet.
+        Mass of the planet, in Jupiter masses.
 
     Returns
     -------
@@ -492,6 +500,110 @@ def calc_period(a: float, m_star: float, m_planet) -> float:
     return 2 * pi / ene / DAY
 
 
+def calc_period_with_errors(
+    a: float,
+    a_err_min: float,
+    a_err_max: float,
+    m_star: float,
+    m_star_err_min: float,
+    m_star_err_max: float,
+    m_planet: float,
+    m_planet_err_min: float,
+    m_planet_err_max: float,
+    err_method: int = 0,
+) -> Tuple[float, float, float]:
+    """Calculate the orbital period and its error using error propagation.
+
+    Parameters
+    ----------
+    a : float
+        Semi-major axis of the planet, in AU.
+    a_err_min : float
+        Minimum error in the semi-major axis, in AU.
+    a_err_max : float
+        Maximum error in the semi-major axis, in AU.
+    m_star : float
+        Mass of the star, in solar masses.
+    m_star_err_min : float
+        Minimum error in the star's mass, in solar masses.
+    m_star_err_max : float
+        Maximum error in the star's mass, in solar masses.
+    m_planet : float
+        Mass of the planet, in Jupiter masses.
+    m_planet_err_min : float
+        Minimum error in the planet's mass, in Jupiter masses.
+    m_planet_err_max : float
+        Maximum error in the planet's mass, in Jupiter masses.
+    err_method : int, optional. Default: 0
+        Error method to use:
+            - 0: No error. Return the period and 0 error.
+            - 1: Extremes. Estimate the period at the extreme values of
+                    each parameter and retrieve the errors from the difference.
+            - 2: Max propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            - 3: Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            - 4: Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+    Returns
+    -------
+    Tuple[float, float, float]
+        Orbital period and its minimum and maximum errors, in days.
+    """
+    # Switch for the error propagation method
+    if err_method == 0:
+        return calc_period(a, m_star, m_planet), 0, 0
+    elif err_method == 1:
+        period = calc_period(a, m_star, m_planet)
+        period_min = calc_period(
+            a - a_err_min, m_star + m_star_err_max, m_planet + m_planet_err_max
+        )
+        period_max = calc_period(
+            a + a_err_max, m_star - m_star_err_min, m_planet - m_planet_err_min
+        )
+        period_err_min = abs(period - period_min)
+        period_err_max = abs(period - period_max)
+        return period, period_err_min, period_err_max
+    elif err_method == 2:
+        a_err = max(a_err_min, a_err_max) * AU
+        m_star_err = max(m_star_err_min, m_star_err_max) * M_SUN
+        m_planet_err = max(m_planet_err_min, m_planet_err_max) * M_JUP
+    elif err_method == 3 or err_method == 4:
+        a_err = (a_err_min + a_err_max) * 0.5 * AU
+        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * M_SUN
+        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * M_JUP
+        if err_method == 4:
+            a = (a - a_err_min + a + a_err_max) * 0.5
+            m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
+            m_planet = (
+                m_planet - m_planet_err_min + m_planet + m_planet_err_max
+            ) * 0.5
+    else:
+        raise ValueError("Invalid error propagation method.")
+
+    # Calculate the period (in days)
+    period = calc_period(a, m_star, m_planet)
+
+    # Partial derivatives for error propagation
+    dP_dm_star = -period * DAY / (2 * ((m_star * M_SUN) + (m_planet * M_JUP)))
+    dP_dm_planet = dP_dm_star  # Same derivative as the star
+    dP_da = -6 * pi**2 / ((period * DAY) * (a * AU))
+
+    # Errors
+    period_err = (
+        sqrt(
+            (dP_da * a_err) ** 2
+            + (dP_dm_star * m_star_err) ** 2
+            + (dP_dm_planet * m_planet_err) ** 2
+        )
+        / DAY
+    )  # In days
+
+    return period, period_err, period_err  # Same error for min and max
+
+
 def calc_a(period: float, m_star: float, m_planet: float) -> float:
     """Calculate the semi-major axis of a planet.
 
@@ -500,9 +612,9 @@ def calc_a(period: float, m_star: float, m_planet: float) -> float:
     period : float
         Orbital period of the planet, in days.
     m_star : float
-        Mass of the star.
+        Mass of the star, in solar masses.
     m_planet : float
-        Mass of the planet.
+        Mass of the planet, in Jupiter masses.
 
     Returns
     -------
@@ -512,3 +624,263 @@ def calc_a(period: float, m_star: float, m_planet: float) -> float:
     ene = 2 * pi / period / DAY
 
     return (G * (m_star * M_SUN + m_planet * M_JUP) / ene**2) ** (1 / 3) / AU
+
+
+def calc_a_with_errors(
+    period: float,
+    period_err_min: float,
+    period_err_max: float,
+    m_star: float,
+    m_star_err_min: float,
+    m_star_err_max: float,
+    m_planet: float,
+    m_planet_err_min: float,
+    m_planet_err_max: float,
+    err_method: int = 0,
+) -> Tuple[float, float, float]:
+    """Calculate the semi-major axis and its error using error propagation.
+
+    Parameters
+    ----------
+    period : float
+        Orbital period of the planet, in days.
+    period_err_min : float
+        Minimum error in the orbital period, in days.
+    period_err_max : float
+        Maximum error in the orbital period, in days.
+    m_star : float
+        Mass of the star, in solar masses.
+    m_star_err_min : float
+        Minimum error in the star's mass, in solar masses.
+    m_star : float
+        Maximum error in the star's mass, in solar masses.
+    m_planet : float
+        Mass of the planet, in Jupiter masses.
+    m_planet_err_min : float
+        Minimum error in the planet's mass, in Jupiter masses.
+    m_planet_err_max : float
+        Maximum error in the planet's mass, in Jupiter masses.
+    err_method : int, optional. Default: 0
+        Error method to use:
+            - 0: No error. Return the period and 0 error.
+            - 1: Extremes. Estimate the period at the extreme values of
+                    each parameter and retrieve the errors from the difference.
+            - 2: Max propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            - 3: Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            - 4: Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+    Returns
+    -------
+    Tuple[float, float, float]
+        Semi-major axis and its minimum and maximum errors, in AU.
+    """
+    # Switch for the error propagation method
+    if err_method == 0:
+        return calc_a(period, m_star, m_planet), 0, 0
+    elif err_method == 1:
+        a = calc_a(period, m_star, m_planet)
+        a_min = calc_a(
+            period - period_err_min,
+            m_star - m_star_err_min,
+            m_planet - m_planet_err_min,
+        )
+        a_max = calc_a(
+            period + period_err_max,
+            m_star + m_star_err_max,
+            m_planet + m_planet_err_max,
+        )
+        a_err_min = abs(a - a_min)
+        a_err_max = abs(a - a_max)
+        return a, a_err_min, a_err_max
+    elif err_method == 2:
+        period_err = max(period_err_min, period_err_max) * DAY
+        m_star_err = max(m_star_err_min, m_star_err_max) * M_SUN
+        m_planet_err = max(m_planet_err_min, m_planet_err_max) * M_JUP
+    elif err_method == 23 or err_method == 4:
+        period_err = (period_err_min + period_err_max) * 0.5 * DAY
+        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * M_SUN
+        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * M_JUP
+        if err_method == 3:
+            period = (period - period_err_min + period + period_err_max) * 0.5
+            m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
+            m_planet = (
+                m_planet - m_planet_err_min + m_planet + m_planet_err_max
+            ) * 0.5
+    else:
+        raise ValueError("Invalid error propagation method.")
+
+    # Calculate the semi-major axis (in AU)
+    a = calc_a(period, m_star, m_planet)
+
+    # Partial derivatives for error propagation
+    da_dm_star = G * (period * DAY) ** 2 / (12 * pi**2 * (a * AU) ** 2)
+    da_dm_planet = da_dm_star  # Same derivative as the star
+    da_dP = 2 / 3 * (a * AU) / (period * DAY)
+
+    # Errors
+    a_err = (
+        sqrt(
+            (da_dP * period_err) ** 2
+            + (da_dm_star * m_star_err) ** 2
+            + (da_dm_planet * m_planet_err) ** 2
+        )
+        / AU
+    )  # In AU
+
+    return a, a_err, a_err  # Same error for min and max
+
+
+def hill_radius(a: float, e: float, m_star: float, m_planet: float) -> float:
+    """Calculate the Hill radius of a planet.
+
+    Parameters
+    ----------
+    a : float
+        Semi-major axis of the planet, in AU.
+    e : float
+        Eccentricity of the planet.
+    m_star : float
+        Mass of the star, in solar masses.
+    m_planet : float
+        Mass of the planet, in Jupiter masses.
+
+    Returns
+    -------
+    float
+        Hill radius of the planet, in AU.
+    """
+    return (
+        a
+        * (1 - e)
+        * (m_planet * M_JUP / (3 * (m_star * M_SUN + m_planet * M_JUP)))
+        ** (1 / 3.0)
+    )
+
+
+def hill_radius_with_errors(
+    a: float,
+    a_err_min: float,
+    a_err_max: float,
+    e: float,
+    e_err_min: float,
+    e_err_max: float,
+    m_star: float,
+    m_star_err_min: float,
+    m_star_err_max: float,
+    m_planet: float,
+    m_planet_err_min: float,
+    m_planet_err_max: float,
+    err_method: int = 0,
+) -> Tuple[float, float, float]:
+    """Calculate the Hill radius and its error using error propagation.
+
+    Parameters
+    ----------
+    a : float
+        Semi-major axis of the planet, in AU.
+    a_err_min : float
+        Minimum error in the semi-major axis, in AU.
+    a_err_max : float
+        Maximum error in the semi-major axis, in AU.
+    e : float
+        Eccentricity of the planet.
+    e_err_min : float
+        Minimum error in the eccentricity.
+    e_err_max : float
+        Maximum error in the eccentricity.
+    m_star : float
+        Mass of the star, in solar masses.
+    m_star_err_min : float
+        Minimum error in the star's mass, in solar masses.
+    m_star_err_max : float
+        Maximum error in the star's mass, in solar masses.
+    m_planet : float
+        Mass of the planet, in Jupiter masses.
+    m_planet_err_min : float
+        Minimum error in the planet's mass, in Jupiter masses.
+    m_planet_err_max : float
+        Maximum error in the planet's mass, in Jupiter masses.
+    err_method : int, optional. Default: 0
+        Error method to use:
+            - 0: No error. Return the period and 0 error.
+            - 1: Extremes. Estimate the period at the extreme values of
+                    each parameter and retrieve the errors from the difference.
+            - 2: Max propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            - 3: Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            - 4: Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+
+    Returns
+    -------
+    Tuple[float, float, float]
+        Hill radius and its minimum and maximum errors, in AU.
+    """
+    # Switch for the error propagation method
+    if err_method == 0:
+        return hill_radius(a, e, m_star, m_planet), 0, 0
+    elif err_method == 1:
+        hill = hill_radius(a, e, m_star, m_planet)
+        hill_min = hill_radius(
+            a - a_err_min,
+            e - e_err_min,
+            m_star + m_star_err_max,
+            m_planet + m_planet_err_max,
+        )
+        hill_max = hill_radius(
+            a + a_err_max,
+            e + e_err_max,
+            m_star - m_star_err_min,
+            m_planet - m_planet_err_min,
+        )
+        hill_err_min = abs(hill - hill_min)
+        hill_err_max = abs(hill - hill_max)
+        return hill, hill_err_min, hill_err_max
+    elif err_method == 2:
+        a_err = max(a_err_min, a_err_max) * AU
+        e_err = max(e_err_min, e_err_max)
+        m_star_err = max(m_star_err_min, m_star_err_max) * M_SUN
+        m_planet_err = max(m_planet_err_min, m_planet_err_max) * M_JUP
+    elif err_method == 3 or err_method == 4:
+        a_err = (a_err_min + a_err_max) * 0.5 * AU
+        e_err = (e_err_min + e_err_max) * 0.5
+        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * M_SUN
+        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * M_JUP
+        if err_method == 4:
+            a = (a - a_err_min + a + a_err_max) * 0.5
+            e = (e - e_err_min + e + e_err_max) * 0.5
+            m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
+            m_planet = (
+                m_planet - m_planet_err_min + m_planet + m_planet_err_max
+            ) * 0.5
+    else:
+        raise ValueError("Invalid error propagation method.")
+
+    # Calculate the Hill radius (in AU)
+    hill = hill_radius(a, e, m_star, m_planet)
+
+    # Auxiliary total mass
+    total_mass = m_star * M_SUN + m_planet * M_JUP
+
+    # Partial derivatives for error propagation
+    dH_da = hill / a
+    dH_de = -hill / (1 - e)
+    dH_dm_star = -hill / (3 * total_mass)
+    dH_dm_planet = -dH_dm_star * (m_star * M_SUN) / (m_planet * M_JUP)
+
+    # Errors
+    hill_err = sqrt(
+        (dH_da * a_err) ** 2
+        + (dH_de * e_err) ** 2
+        + (dH_dm_star * m_star_err) ** 2
+        + (dH_dm_planet * m_planet_err) ** 2
+    )
+
+    return hill, hill_err, hill_err  # Same error for min and max

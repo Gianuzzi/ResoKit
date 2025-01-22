@@ -42,6 +42,9 @@ from resokit.utils.utils import (
     R_EAR,
     R_JUP,
     float_to_fraction,
+    calc_a_with_errors,
+    calc_period_with_errors,
+    hill_radius_with_errors,
     parse_to_iter,
 )
 
@@ -1003,7 +1006,10 @@ class StaticSystem:
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
-        """Set the default value for __error_ratios__."""
+        """Set the default value for __error_ratios__.
+
+        The finale error is calculated assuming the maximum error
+        for each period."""
         if self.n_planets_ == 1:
             return None
         elif self.n_planets_ == 2:
@@ -1230,6 +1236,154 @@ class StaticSystem:
 
         return df
 
+    def estimate_period(
+        self, which: Union[str, int, List[int]] = "all", err_method: int = 0
+    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+        r"""Estimate the period of selected planets in the system.
+
+        Calculate the period of the planet using the third Kepler's law.
+
+        Parameters
+        ----------
+        which : str, int, list[int], optional. Default: 'all'.
+            Which planets to estimate the period. Union[float, pd.Series]:
+            If 'all', estimate all planets period.
+            If an :py:class:`int`, estimate the period of the planet with the
+            given index.
+            For example:
+            *0* will estimate the period of the first planet;
+            *1* will estimate the period of the second planet.
+            If a list of integers, estimate the period of the planets with the
+            given indices.
+        err_method : int, optional. Default: -1.
+            Method to estimate the error.
+            See py:func:`resokit.utils.calc_period_with_errors` for more
+            details.
+            *-1*: Nothing. Do not estimate the error.
+            *0* : No propagation. Estimate the period at the extreme values of
+                    each parameter and retrieve the errors from the difference.
+            *1* : Extended propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            *2* : Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            *3* : Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+        Returns
+        -------
+        period, period_err_min, period_err_max : tuple or DataFrame
+            Estimated period, and its minimum and maximum errors,
+            in days.
+
+        """
+        if which == "all":
+            which = list(range(self.n_planets_))
+        else:
+            which = parse_to_iter(which)
+
+        if all(isinstance(i, int) for i in which):
+            df = pd.DataFrame()  # Create an empty DataFrame
+
+            for i in which:  # Iterate over the planets
+                pl = self.planets[i]
+                P, P_err_min, P_err_max = calc_period_with_errors(
+                    pl.a,
+                    pl.a_err_min,
+                    pl.a_err_max,
+                    self.star.mass,
+                    self.star.mass_err_min,
+                    self.star.mass_err_max,
+                    pl.mass,
+                    pl.mass_err_min,
+                    pl.mass_err_max,
+                    err_method,
+                )
+                df[f"{pl.name}"] = [P, P_err_min, P_err_max]
+            df.index = ["P", "P_err_min", "P_err_max"]
+
+            if err_method == 0:  # No error
+                return df.loc["P"]  # Return only the mass
+
+            return df.T  # Return the DataFrame
+
+        raise ValueError("Invalid value for 'which'.")
+
+    def estimate_semi_major_axis(
+        self, which: Union[str, int, List[int]] = "all", err_method: int = 0
+    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+        r"""Estimate the semi-major axis of selected planets in the system.
+
+        Parameters
+        ----------
+        which : str, int, list[int], optional. Default: 'all'.
+            Which planets to estimate the semi-major axis.
+            If 'all', estimate all planets semi-major axis.
+            If an :py:class:`int`, estimate the semi-major axis of the planet
+            with the given index.
+            For example:
+            *0* will estimate the semi-major axis of the first planet;
+            *1* will estimate the semi-major axis of the second planet.
+            If a list of integers, estimate the semi-major axis of the planets
+            with the given indices.
+        err_method : int, optional. Default: -1.
+            Method to estimate the error.
+            See py:func:`resokit.utils.calc_semi_major_axis_with_errors` for
+            more details.
+            *-1*: Nothing. Do not estimate the error.
+            *0* : No propagation. Estimate the semi-major axis at the extreme
+                    values of each parameter and retrieve the errors from the
+                    difference.
+            *1* : Extended propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            *2* : Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            *3* : Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+        Returns
+        -------
+        a, a_err_min, a_err_max : tuple or DataFrame
+            Estimated semi-major axis, and its minimum and maximum errors,
+            in AU.
+        """
+        if which == "all":
+            which = list(range(self.n_planets_))
+        else:
+            which = parse_to_iter(which)
+
+        if all(isinstance(i, int) for i in which):
+            df = pd.DataFrame()  # Create an empty DataFrame
+
+            for i in which:  # Iterate over the planets
+                pl = self.planets[i]
+                a, a_err_min, a_err_max = calc_a_with_errors(
+                    pl.P,
+                    pl.P_err_min,
+                    pl.P_err_max,
+                    self.star.mass,
+                    self.star.mass_err_min,
+                    self.star.mass_err_max,
+                    pl.mass,
+                    pl.mass_err_min,
+                    pl.mass_err_max,
+                    err_method,
+                )
+                df[f"{pl.name}"] = [
+                    a,
+                    a_err_min,
+                    a_err_max,
+                ]
+            df.index = ["a", "a_err_min", "a_err_max"]
+
+            if err_method == 0:  # No error
+                return df.loc["a"]  # Return only the mass
+
+            return df.T  # Return the DataFrame
+
+        raise ValueError("Invalid value for 'which'.")
+
     def estimate_mass(
         self, which: Union[str, int, List[int]] = "all", **kwargs
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
@@ -1253,6 +1407,7 @@ class StaticSystem:
         Note
         ----
         If `err_method=0`, only the mass is returned.
+
 
         Returns
         -------
@@ -1337,6 +1492,86 @@ class StaticSystem:
 
             if kwargs.get("err_method", 0) == 0:  # No error
                 return df.loc["radius"]  # Return only the radius
+
+            return df.T  # Return the DataFrame
+
+        raise ValueError("Invalid value for 'which'.")
+
+    def estimate_hill_radius(
+        self,
+        which: Union[str, int, List[int]] = "all",
+        err_method: int = 0,
+    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+        """Calculate the Hill radius of selected planets in the system.
+
+        Parameters
+        ----------
+        which : str, int, list[int], optional. Default: 'all'.
+            Which planets to calculate the Hill radius.
+            If 'all', calculate the Hill radius of all planets.
+            If an :py:class:`int`, calculate the Hill radius of the planet with
+            the given index.
+            For example:
+            *0* will calculate the Hill radius of the first planet;
+            *1* will calculate the Hill radius of the second planet.
+            If a list of integers, calculate the Hill radius of the planets
+            with the given indices.
+        err_method : int, optional. Default: -1.
+            Method to estimate the error.
+            See py:func:`resokit.utils.hill_radius.hill_radius_with_errors` for
+            more details.
+            *-1*: Nothing. Do not estimate the error.
+            *0* : No propagation. Estimate the semi-major axis at the extreme
+                    values of each parameter and retrieve the errors from the
+                    difference.
+            *1* : Extended propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            *2* : Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            *3* : Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+        Returns
+        -------
+        rhill, rhill_err_min, rhill_err_max : tuple or DataFrame
+            Hill radius, and its minimum and maximum errors,
+            in AU.
+        """
+        if which == "all":
+            which = list(range(self.n_planets_))
+        else:
+            which = parse_to_iter(which)
+
+        if all(isinstance(i, int) for i in which):
+            df = pd.DataFrame()  # Create an empty DataFrame
+
+            for i in which:  # Iterate over the planets
+                pl = self.planets[i]
+                hill, hill_err_min, hill_err_max = hill_radius_with_errors(
+                    pl.a,
+                    pl.a_err_min,
+                    pl.a_err_max,
+                    pl.e,
+                    pl.e_err_min,
+                    pl.e_err_max,
+                    self.star.mass,
+                    self.star.mass_err_min,
+                    self.star.mass_err_max,
+                    pl.mass,
+                    pl.mass_err_min,
+                    pl.mass_err_max,
+                    err_method,
+                )
+                df[f"{pl.name}"] = [
+                    hill,
+                    hill_err_min,
+                    hill_err_max,
+                ]
+            df.index = ["hill", "hill_err_min", "hill_err_max"]
+
+            if err_method == 0:  # No error
+                return df.loc["hill"]  # Return only the mass
 
             return df.T  # Return the DataFrame
 
@@ -1928,18 +2163,20 @@ class StaticSystem:
             Pandas Data frame with the data.
         """
         # Create a DataFrame with the planets data
-        df = pd.DataFrame()
-        for planet in self.planets:
-            df = df.append(planet.data_df)
+        df = pd.DataFrame(
+            {planet.name: planet.data_df for planet in self.planets}
+        )
 
         # Add star data
-        df = pd.concat([self.star.data_df, df], axis=0)
+        df = pd.concat(
+            [pd.Series(self.star.data_df).to_frame(self.star.name), df], axis=0
+        )
 
         if columns is not None:
             used_cols = [col for col in columns if col in df.columns]
             df = df[used_cols]
 
-        return df
+        return df.T
 
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
