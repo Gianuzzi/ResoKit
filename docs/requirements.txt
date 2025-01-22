@@ -5,3 +5,5 @@ sphinx-rtd-theme
 nbsphinx
 m2r
 lxml_html_clean
+pandoc
+nbconvert

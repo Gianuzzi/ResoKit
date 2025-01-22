@@ -841,12 +841,13 @@ class StaticStar(ResokitDataFrame):
     @web_page.default
     def _web_page_default(self):
         """Set the default value for web_page."""
-        if self.source == "eu":
-            return ""
         if self.source == "nasa":
-            return f"https://exoplanetarchive.ipac.caltech.edu/overview/{
-                str(self.name).replace(' ', '%20')}/"
-
+            aux = str(self.name).replace(" ", "%20")
+            return (
+                "https://exoplanetarchive.ipac.caltech.edu/overview/"
+                + aux
+                + "/"
+            )
         return ""
 
     def __attrs_post_init__(self):
