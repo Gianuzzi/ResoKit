@@ -61,6 +61,7 @@ def _search_system_index(
     name: str,
     is_planet: bool = False,
     raw_df: pd.DataFrame = None,
+    alternative_names: bool = False,
     **load_extra_kwargs,
 ) -> Tuple[pd.Index, pd.Series, float]:
     """Search for the index of the system in the dataset.
@@ -75,6 +76,8 @@ def _search_system_index(
         Whether to search for a planet or a star.
     raw_df : pd.DataFrame, optional. Default: None.
         Raw dataset used for the search, instead of loading it.
+    alternative_names : bool, optional. Default: False.
+        Whether to search for alternative names.
     load_extra_kwargs : dict
         Extra keyword arguments for the load function.
 
@@ -87,27 +90,50 @@ def _search_system_index(
     ratio : float
         Similarity ratio.
     """
+    # Check not to search for alternative names in NASA
+    if alternative_names and source == "nasa":
+        raise ValueError("Alternative names not available in NASA dataset.")
+
     # Define the column to search
-    column = (
-        "pl_name"
-        if is_planet and source == "nasa"
-        else (
-            "hostname"
-            if source == "nasa"
-            else "name" if is_planet else "star_name"
+    if not alternative_names:
+        # Define the column to search
+        column = (
+            "pl_name"
+            if is_planet and source == "nasa"
+            else (
+                "hostname"
+                if source == "nasa"
+                else "name" if is_planet else "star_name"
+            )
         )
-    )
+    else:
+        column = "alternate_names" if is_planet else "star_alternate_names"
 
     # Load the dataset if not in memory
-    raw_series = (
-        raw_df
-        if raw_df is not None
-        else load_full(
+    if not alternative_names:
+        raw_series = (
+            raw_df
+            if raw_df is not None
+            else load_full(
+                source=source,
+                **load_extra_kwargs,
+            )
+        )
+        raw_series = raw_series[column]  # Get the column
+    else:
+        load_extra_kwargs.update(
+            {
+                "to_df": True,
+                "to_resokit": False,
+                "only_index": False,
+                "verbose": False,
+            }
+        )
+        raw_series = load_full(
             source=source,
             **load_extra_kwargs,
         )
-    )
-    raw_series = raw_series[column]  # Get the column
+        raw_series = raw_series[column].str.split(", ").explode()
 
     # Search for the system
     exact_matches = raw_series[raw_series == name]
@@ -155,6 +181,7 @@ def _load_system_from_db(
     load_kwargs: dict = None,
     verbose: bool = True,
     low_memory: bool = False,
+    alternative_names: bool = False,
 ) -> pd.DataFrame:
     """Load system from ExoplanetEU or NASA.
 
@@ -179,6 +206,8 @@ def _load_system_from_db(
         Whether to avoid loading the whole dataset into memory.
         Instead, first loads only the index,
         and then only the system data.
+    alternative_names : bool, optional. Default: False.
+        Whether to search for alternative names. Only available in ExoplanetEU.
 
     Returns
     -------
@@ -196,6 +225,15 @@ def _load_system_from_db(
     if store:
         store_index = True  # Store the index if the dataset will be stored
         low_memory = False  # Load the whole dataset if it will be stored
+
+    # Check if alternative names are available
+    if alternative_names:
+        if source != "eu":
+            raise ValueError(
+                "Alternative names only available in ExoplanetEU dataset."
+            )
+        if verbose:
+            print("Searching for alternative names.")
 
     # Update the keyword arguments
     if load_kwargs is None:
@@ -226,6 +264,7 @@ def _load_system_from_db(
         name=name,
         is_planet=is_planet,
         raw_df=raw_df,
+        alternative_names=alternative_names if source == "eu" else False,
         **load_extra_kwargs,
     )
 
@@ -249,6 +288,16 @@ def _load_system_from_db(
         print(f" Similar names found in {source} dataset:")
         print(f" - {most_prob + others}")
 
+        if source == "eu":
+            print(
+                "Note: ExoplanetEU has alternative names "
+                + "for some systems. "
+            )
+            print(
+                "      If no similar names found, try searching with: "
+                + "alternative_names=True."
+            )
+
         return pd.DataFrame()  # Return an empty DataFrame
 
     # Load the system
@@ -270,6 +319,7 @@ def load_system_from_eu(
     verbose: bool = True,
     low_memory: bool = True,
     as_resokit: bool = False,
+    alternative_names: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from ExoplanetEU.
 
@@ -295,6 +345,8 @@ def load_system_from_eu(
         Whether to avoid loading the whole dataset into memory.
     as_resokit : bool, optional. Default: False.
         Whether to return the dataset in ResoKit format.
+    alternative_names : bool, optional. Default: False.
+        Whether to search for alternative names.
 
     Returns
     -------
@@ -315,6 +367,7 @@ def load_system_from_eu(
         load_kwargs=load_kwargs,
         verbose=verbose,
         low_memory=low_memory,
+        alternative_names=alternative_names,
     )
 
     # Can't work with empty DataFrame
