@@ -41,9 +41,9 @@ from resokit.utils.utils import (
     RESO_SR_TYPES,
     R_EAR,
     R_JUP,
-    float_to_fraction,
     calc_a_with_errors,
     calc_period_with_errors,
+    float_to_fraction,
     hill_radius_with_errors,
     parse_to_iter,
 )
@@ -511,14 +511,19 @@ class StaticPlanet(ResokitDataFrame):
     def _web_page_default(self):
         """Set the default value for web_page."""
         if self.source == "eu":
-            return f"https://exoplanet.eu/catalog/{
-                self.name.replace(' ', '_').lower() +
-                "--" + str(self.metadata["eu_indexes"])
-             }/"
+            aux = (
+                str(self.name).replace(" ", "_").lower()
+                + "--"
+                + str(self.metadata["eu_indexes"])
+            )
+            return "https://exoplanet.eu/catalog/" + aux + "/"
         if self.source == "nasa":
-            return f"https://exoplanetarchive.ipac.caltech.edu/overview/{
-                self.name.replace(' ', '%20')}/"
-
+            aux = str(self.name).replace(" ", "%20")
+            return (
+                "https://exoplanetarchive.ipac.caltech.edu/overview/"
+                + aux
+                + "/"
+            )
         return ""
 
     def __attrs_post_init__(self):
@@ -1040,10 +1045,7 @@ class StaticSystem:
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
-        """Set the default value for __error_ratios__.
-
-        The finale error is calculated assuming the maximum error
-        for each period."""
+        """Set the default value for __error_ratios__."""
         if self.n_planets_ == 1:
             return None
         elif self.n_planets_ == 2:
@@ -1303,14 +1305,14 @@ class StaticSystem:
             details.
             *-1*: Nothing. Do not estimate the error.
             *0* : No propagation. Estimate the period at the extreme values of
-                    each parameter and retrieve the errors from the difference.
+            each parameter and retrieve the errors from the difference.
             *1* : Extended propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+            distribution with sigma = err_max.
             *2* : Centred propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_min + err_max) / 2.
+            distribution with sigma = (err_min + err_max) / 2.
             *3* : Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
 
         Returns
         -------
@@ -1329,7 +1331,7 @@ class StaticSystem:
 
             for i in which:  # Iterate over the planets
                 pl = self.planets[i]
-                P, P_err_min, P_err_max = calc_period_with_errors(
+                per, per_err_min, per_err_max = calc_period_with_errors(
                     pl.a,
                     pl.a_err_min,
                     pl.a_err_max,
@@ -1341,7 +1343,7 @@ class StaticSystem:
                     pl.mass_err_max,
                     err_method,
                 )
-                df[f"{pl.name}"] = [P, P_err_min, P_err_max]
+                df[f"{pl.name}"] = [per, per_err_min, per_err_max]
             df.index = ["P", "P_err_min", "P_err_max"]
 
             if err_method == 0:  # No error
@@ -1374,15 +1376,15 @@ class StaticSystem:
             more details.
             *-1*: Nothing. Do not estimate the error.
             *0* : No propagation. Estimate the semi-major axis at the extreme
-                    values of each parameter and retrieve the errors from the
-                    difference.
+            values of each parameter and retrieve the errors from the
+            difference.
             *1* : Extended propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+            distribution with sigma = err_max.
             *2* : Centred propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_min + err_max) / 2.
+            distribution with sigma = (err_min + err_max) / 2.
             *3* : Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
 
         Returns
         -------
@@ -1564,15 +1566,15 @@ class StaticSystem:
             more details.
             *-1*: Nothing. Do not estimate the error.
             *0* : No propagation. Estimate the semi-major axis at the extreme
-                    values of each parameter and retrieve the errors from the
-                    difference.
+            values of each parameter and retrieve the errors from the
+            difference.
             *1* : Extended propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+            distribution with sigma = err_max.
             *2* : Centred propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_min + err_max) / 2.
+            distribution with sigma = (err_min + err_max) / 2.
             *3* : Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
 
         Returns
         -------

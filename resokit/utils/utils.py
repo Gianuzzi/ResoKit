@@ -587,16 +587,18 @@ def calc_period_with_errors(
     period = calc_period(a, m_star, m_planet)
 
     # Partial derivatives for error propagation
-    dP_dm_star = -period * DAY / (2 * ((m_star * M_SUN) + (m_planet * M_JUP)))
-    dP_dm_planet = dP_dm_star  # Same derivative as the star
-    dP_da = -6 * pi**2 / ((period * DAY) * (a * AU))
+    dperiod_dm_star = (
+        -period * DAY / (2 * ((m_star * M_SUN) + (m_planet * M_JUP)))
+    )
+    dperiod_dm_planet = dperiod_dm_star  # Same derivative as the star
+    dperiod_da = -6 * pi**2 / ((period * DAY) * (a * AU))
 
     # Errors
     period_err = (
         sqrt(
-            (dP_da * a_err) ** 2
-            + (dP_dm_star * m_star_err) ** 2
-            + (dP_dm_planet * m_planet_err) ** 2
+            (dperiod_da * a_err) ** 2
+            + (dperiod_dm_star * m_star_err) ** 2
+            + (dperiod_dm_planet * m_planet_err) ** 2
         )
         / DAY
     )  # In days
@@ -719,12 +721,12 @@ def calc_a_with_errors(
     # Partial derivatives for error propagation
     da_dm_star = G * (period * DAY) ** 2 / (12 * pi**2 * (a * AU) ** 2)
     da_dm_planet = da_dm_star  # Same derivative as the star
-    da_dP = 2 / 3 * (a * AU) / (period * DAY)
+    da_dperiod = 2 / 3 * (a * AU) / (period * DAY)
 
     # Errors
     a_err = (
         sqrt(
-            (da_dP * period_err) ** 2
+            (da_dperiod * period_err) ** 2
             + (da_dm_star * m_star_err) ** 2
             + (da_dm_planet * m_planet_err) ** 2
         )
@@ -870,17 +872,17 @@ def hill_radius_with_errors(
     total_mass = m_star * M_SUN + m_planet * M_JUP
 
     # Partial derivatives for error propagation
-    dH_da = hill / a
-    dH_de = -hill / (1 - e)
-    dH_dm_star = -hill / (3 * total_mass)
-    dH_dm_planet = -dH_dm_star * (m_star * M_SUN) / (m_planet * M_JUP)
+    dhill_da = hill / a
+    dhill_de = -hill / (1 - e)
+    dhill_dm_star = -hill / (3 * total_mass)
+    dhill_dm_planet = -dhill_dm_star * (m_star * M_SUN) / (m_planet * M_JUP)
 
     # Errors
     hill_err = sqrt(
-        (dH_da * a_err) ** 2
-        + (dH_de * e_err) ** 2
-        + (dH_dm_star * m_star_err) ** 2
-        + (dH_dm_planet * m_planet_err) ** 2
+        (dhill_da * a_err) ** 2
+        + (dhill_de * e_err) ** 2
+        + (dhill_dm_star * m_star_err) ** 2
+        + (dhill_dm_planet * m_planet_err) ** 2
     )
 
     return hill, hill_err, hill_err  # Same error for min and max
