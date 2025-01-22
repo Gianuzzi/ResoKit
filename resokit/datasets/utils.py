@@ -560,6 +560,7 @@ def request_dataset(
     url: str,
     verbose: bool = True,
     chunk_size: int = 1024,
+    print_size: float = 0.15,
 ) -> bytes:
     """Download the data from a specified URL.
 
@@ -570,7 +571,11 @@ def request_dataset(
     verbose : bool, optional
         If True, print messages about the download process.
     chunk_size : int, optional
-        Size of the chunks to download the data.
+        Size of the chunks (in bytes) to download the data.
+    print_size : float, optional. Default is 0.15
+        Update frequency (in MB) for the download progress bar.
+        Used only if verbose is True. Useful for large downloads,
+        to avoid IO overhead, especially in Jupyter notebooks.
 
     Returns
     -------
@@ -582,6 +587,10 @@ def request_dataset(
 
     if verbose:
         print(f" Downloading data from {url}...")
+
+    # Check if Jupyter notebook is running
+    if is_notebook() and verbose:
+        print(f" Note: Download progress is shown at every {print_size} MB")
 
     # Send a GET request with streaming enabled
     response = requests.get(url, stream=True)
@@ -596,18 +605,34 @@ def request_dataset(
     downloaded_size = 0
 
     # Iterate over the response content
+    imb = 0.0
     for chunk in response.iter_content(chunk_size=chunk_size):
         if chunk:  # Filter out keep-alive new chunks
             downloaded_data.extend(chunk)  # Append the chunk to the data
             downloaded_size += len(chunk)  # Update the downloaded size
 
             # Print the download progress (in MB)
-            if verbose:
+            if verbose and downloaded_size >= 1e6 * imb:
                 print(
                     f" Downloaded: {downloaded_size / 1e6:.2f} MB",
                     end="\r",
                 )
+                imb += print_size
 
     return bytes(
         downloaded_data
     )  # Return the downloaded data as inmutable bytes
+
+
+def is_notebook() -> bool:
+    """Check if the code is running in a Jupyter notebook."""
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == "ZMQInteractiveShell":
+            return True  # Jupyter notebook or qtconsole
+        elif shell == "TerminalInteractiveShell":
+            return False  # Terminal running IPython
+        else:
+            return False  # Other type (?)
+    except NameError:
+        return False  # Probably standard Python interpreter
