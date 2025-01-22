@@ -325,7 +325,7 @@ def load_system_from_eu(
     # Note: Metadata is set from default values
     meta = dict(DEFAULT_METADATA)
     meta.update({f"load_{'planet' if is_planet else 'system'}": name})
-    meta.update({"eu_index": int(df.index[0])})
+    meta.update({"eu_indexes": [int(idx) for idx in df.index]})
 
     reso = df_to_resokit(  # Convert to ResoKit format
         df=df,

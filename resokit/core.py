@@ -480,11 +480,14 @@ class StaticPlanet(ResokitDataFrame):
         Flag indicating if the planet is user-defined.
     suffix_ : str
         Suffix for the planet name.
+    web_page : str
+        Web page of the planet.
     """
 
     name: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
     suffix_: str = attrs.field(init=False)
+    web_page: str = attrs.field(init=False)
 
     @name.default
     def _name_default(self):
@@ -503,6 +506,20 @@ class StaticPlanet(ResokitDataFrame):
         if len(aux) == 1:
             return aux
         return aux[-1]
+
+    @web_page.default
+    def _web_page_default(self):
+        """Set the default value for web_page."""
+        if self.source == "eu":
+            return f"https://exoplanet.eu/catalog/{
+                self.name.replace(' ', '_').lower() +
+                "--" + str(self.metadata["eu_indexes"])
+             }/"
+        if self.source == "nasa":
+            return f"https://exoplanetarchive.ipac.caltech.edu/overview/{
+                self.name.replace(' ', '%20')}/"
+
+        return ""
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -795,10 +812,13 @@ class StaticStar(ResokitDataFrame):
         Name of the star.
     user_defined_ : bool
         Flag indicating if the star is user-defined.
+    web_page : str
+        Web page of the star.
     """
 
     name: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
+    web_page: str = attrs.field(init=False)
 
     @name.default
     def _name_default(self):
@@ -812,6 +832,17 @@ class StaticStar(ResokitDataFrame):
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
         return self.source not in ["eu", "nasa"]
+
+    @web_page.default
+    def _web_page_default(self):
+        """Set the default value for web_page."""
+        if self.source == "eu":
+            return ""
+        if self.source == "nasa":
+            return f"https://exoplanetarchive.ipac.caltech.edu/overview/{
+                str(self.name).replace(' ', '%20')}/"
+
+        return ""
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -932,6 +963,8 @@ class StaticSystem:
         Name of the system.
     metadata : dict
         Metadata of the dataset.
+    web_page : list[str]
+        Web page(s) of the system.
     n_planets_ : int
         Number of planets in this static system.
     source_ : str
@@ -959,6 +992,7 @@ class StaticSystem:
         validator=attrs.validators.instance_of(str), default="unnamed"
     )
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+    web_page: list = attrs.field(init=False)
 
     n_planets_: int = attrs.field(init=False)
     source_: str = attrs.field(init=False)
@@ -1021,6 +1055,14 @@ class StaticSystem:
             )
 
         return pd.DataFrame()  # Empty mutable DataFrame
+
+    @web_page.default
+    def _web_page_default(self):
+        """Set the default value for web_page."""
+        return [
+            self.star.web_page,
+            *[planet.web_page for planet in self.planets],
+        ]
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -2359,13 +2401,19 @@ def resokit_to_system(
 
     # Create Planets
     if resokit_data.n_objects_ > 1:  # Multiple planets
+        new_metadata = resokit_data.to_dict()
+        # Create planets list
+        # Create planets list
         planets = [
             _create_static_planet(
                 planet_data=planet,
                 source=resokit_data.source,
-                metadata=resokit_data.metadata,
+                metadata={
+                    **new_metadata,
+                    f"{resokit_data.source}_indexes": idx,
+                },
             )
-            for _, planet in planet_df.iterrows()
+            for idx, planet in planet_df.iterrows()
         ]
     else:  # Single planet
         planets = _create_static_planet(
