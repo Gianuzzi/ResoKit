@@ -14,11 +14,16 @@ from tools import rmm
 # =============================================================================
 
 
+# constants
+pi = np.pi
+G = 4*pi**2 # in Msol, au, yr
+E2S = 1/333000. # Mearth to Msol
+
 # list of angles
 class Angles(np.ndarray):
     # First two methods are required when subclassing np.ndarray
     def __new__(cls, angls,rad=False):
-        units = 180/np.pi if rad else 1 
+        units = 180/pi if rad else 1 
         ang_arr = np.asarray(angls)*units
         ang_arr = ang_arr%360
         return ang_arr.view(cls)
@@ -31,7 +36,7 @@ class Angles(np.ndarray):
     
     @property
     def rad(self):
-        return(self*np.pi/180)
+        return(self*pi/180)
     
     @property
     def arr(self):
@@ -128,7 +133,7 @@ class DynamicPlanet:
     # Calculated arrays
     _varpi: list = attrs.field(
         init=False, default=None, validator=_validate_sequence
-    )  # mean longitude
+    )  # pericenter longitude
     _lam: list = attrs.field(
         init=False, default=None)  # mean longitude
 
@@ -213,15 +218,22 @@ class DynamicSystem:
     def Prat(self,which=None):
         masses = np.asarray([pli.mass for pli in self.planets])
         if not all(masses):
+            # if pl_masses = 0, then mu1/mu2 = G*m0/G*m0 = 1
+            # so we can take mu1 = mu2 = 1
             mu_l = 1
             Warning("Assuming mass=0 for planets in calculating prat")
         else:
-            mu_l = self.star.mass + masses  # neglect factor G because of ratio
-            
+            mu_l = self.star.mass + masses*E2S  # neglect factor G because of ratio
+        
         if which is None: planets = self.planets
-        elif len(np.shape(which))==0: planets = self.planets[which:which+2]
-        else: planets = [self.planets[which[0]],self.planets[which[1]]]
-        nl = np.asarray([(mu_l / pli.a**3) ** 0.5 for pli in planets])
+        elif len(np.shape(which))==0: 
+            planets = self.planets[which:which+2]
+            mu_l = mu_l[which:which+2]
+        else: 
+            planets = [self.planets[which[0]],self.planets[which[1]]]
+            mu_l = [mu_l[which[0]],mu_l[which[1]]]
+        Noutput = len(planets)
+        nl = np.asarray([(mu_l[i]/planets[i].a**3)**0.5 for i in range(Noutput)])
         prat = nl[:-1] / nl[1:]
         return prat
     
@@ -281,10 +293,12 @@ class DynamicSystem:
       return ax
 
     def sepspace(self,bounds=None,which=None,ax=None,r3p_labels=True,**kwargs):
+        # Organize kwargs
         rmm_kw_keys = ['r3p_order','r3p_maxint','r2p_order','r2p_maxint']
         rmm_kw = {k:kwargs[k] for k in rmm_kw_keys if k in kwargs}
         plot_kw = {k:v for k,v in kwargs.items() if k not in rmm_kw_keys}
         
+        #
         case = len(np.shape(which))
         if which is None:
             for i in range(self.npl-2):

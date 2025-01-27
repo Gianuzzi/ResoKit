@@ -20,12 +20,13 @@ sys1 = load_integration(
     "datasets/5planet_migration.dat",
     npl=5,
     names=["times","ibody", "a", "e", "_", "M", "w", "Omega"],
+    st_m=1,
+    mass=[1,1,1,1,1]
 )
 
 pl1 = sys1.planets[0]
 pl2 = sys1.planets[1]
 pl3 = sys1.planets[2]
-
 
 n1n2 = sys1.Prat(0)
 n2n3 = sys1.Prat(1)

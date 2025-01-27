@@ -10,7 +10,7 @@ from rsk_core import DynamicPlanet, Star, DynamicSystem, Angles
 # CONSTANTS
 # =============================================================================
 
-# allowed inputs
+# allowed inputs for columns of integration file
 ELEM_SPACE = {
     "times": None,
     "ibody": None,
@@ -187,9 +187,10 @@ def load_integration(
     if is_star is None:
         is_star = [False] * npl
 
-    # always use a list of masses
+    # mass list of masses
     if "mass" in names:
         mass = data["mass"].values[:npl]
+
 
     # =============== CREATE DYNAMIC PLANETS =============== #
     planets = []
