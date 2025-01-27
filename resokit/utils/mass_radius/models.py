@@ -26,7 +26,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from resokit.utils.utils import M_EAR, M_JUP, M_SUN, R_EAR
+from resokit.units import M_EAR, R_EAR, Mj2Me, Ms2Me
 
 # =============================================================================
 # FUNCTIONS
@@ -155,8 +155,8 @@ def chen_kipp_2017_radius(mass: float) -> Tuple[float, tuple, tuple, tuple]:
     x0 = (1.0, 0.0)
     # Transition mass
     m1_tr = 2.04
-    m2_tr = 0.414 * M_JUP / M_EAR
-    m3_tr = 0.08 * M_SUN / M_EAR
+    m2_tr = 0.414 * Mj2Me  # 0.414 Jupiter masses
+    m3_tr = 0.08 * Ms2Me   # 0.08 Solar masses
 
     if mass < m1_tr:  # First branch
         return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
@@ -1076,7 +1076,7 @@ def estimate_radius(
     mass_err_max: Union[float, np.ndarray] = 0.0,
     model: str = "ck17",
     bivariate: float = 0.5,
-    err_method: int = 0,
+    err_method: int = -1,
     density: float = 0.0,
     silent: bool = False,
 ) -> Union[Tuple[float, float, float], np.ndarray]:
@@ -1103,8 +1103,9 @@ def estimate_radius(
         Probability of using the lower branch if the estimation falls in a
         bivariate region. Must be a number between 0 and 1.
         Only used if model is 'o20'.
-    err_method : int, optional. Default: 0
+    err_method : int, optional. Default: -1
         Which method implement for error calculation.
+        Method -1: Do not calculate errors. Return only the radius.
         Method 0: Do not calculate errors. Return both as 0.0.
         Method 1: (Naive) Error propagation with the power-law approximation,
         using the mass error as the maximum of the two extremes.
@@ -1127,28 +1128,33 @@ def estimate_radius(
         else it is a (n,3) numpy array.
         If `err_method=0`, the tuple | array is (radius, 0.0, 0.0).
     """
+    err_method_aux = 0 if err_method == -1 else err_method
     if isinstance(mass, (int, float)):
-        return estimate_radius_single(
+        radius, radius_err_min, radius_err_max = estimate_radius_single(
             mass=mass,
             mass_err_min=mass_err_min,
             mass_err_max=mass_err_max,
             model=model,
             bivariate=bivariate,
-            err_method=err_method,
+            err_method=err_method_aux,
+            density=density,
+            silent=silent,
+        )
+    else:
+        radius, radius_err_min, radius_err_max = estimate_radius_vec(
+            mass=mass,
+            mass_err_min=mass_err_min,
+            mass_err_max=mass_err_max,
+            model=model,
+            bivariate=bivariate,
+            err_method=err_method_aux,
             density=density,
             silent=silent,
         )
 
-    radius, radius_err_min, radius_err_max = estimate_radius_vec(
-        mass=mass,
-        mass_err_min=mass_err_min,
-        mass_err_max=mass_err_max,
-        model=model,
-        bivariate=bivariate,
-        err_method=err_method,
-        density=density,
-        silent=silent,
-    )
+    # Return only the radius?
+    if err_method == -1:
+        return radius
 
     return np.array([radius, radius_err_min, radius_err_max]).T
 
@@ -1159,7 +1165,7 @@ def estimate_mass(
     radius_err_max: Union[float, np.ndarray] = 0.0,
     model: str = "ck17",
     multivariate: Union[float, tuple, list] = (0.1, 0.85),
-    err_method: int = 0,
+    err_method: int = -1,
     density: float = 0.0,
     silent: bool = False,
 ) -> Union[Tuple[float, float, float], np.ndarray]:
@@ -1189,8 +1195,9 @@ def estimate_mass(
         0 and 1.
         For trivariate model "ck17", it must be a tuple of two floats between
         0 and 1, where the sum of them must be lower equal than 1.
-    err_method : int, optional. Default: 0
+    err_method : int, optional. Default: -1
         Which method implement for error calculation.
+        Method -1: Do not calculate errors. Return only the mass.
         Method 0: Do not calculate errors. Return both as 0.0.
         Method 1: (Naive) Error propagation with the power-law approximation,
         using the radius error as the maximum of the two extremes.
@@ -1215,27 +1222,32 @@ def estimate_mass(
         else it is a (n,3) numpy array.
         If `err_method=0`, the tuple | array is (mass, 0.0, 0.0).
     """
+    err_method_aux = 0 if err_method == -1 else err_method
     if isinstance(radius, (int, float)):
-        return estimate_mass_single(
+        mass, mass_err_min, mass_err_max = estimate_mass_single(
             radius=radius,
             radius_err_min=radius_err_min,
             radius_err_max=radius_err_max,
             model=model,
             multivariate=multivariate,
-            err_method=err_method,
+            err_method=err_method_aux,
+            density=density,
+            silent=silent,
+        )
+    else:
+        mass, mass_err_min, mass_err_max = estimate_mass_vec(
+            radius=radius,
+            radius_err_min=radius_err_min,
+            radius_err_max=radius_err_max,
+            model=model,
+            multivariate=multivariate,
+            err_method=err_method_aux,
             density=density,
             silent=silent,
         )
 
-    mass, mass_err_min, mass_err_max = estimate_mass_vec(
-        radius=radius,
-        radius_err_min=radius_err_min,
-        radius_err_max=radius_err_max,
-        model=model,
-        multivariate=multivariate,
-        err_method=err_method,
-        density=density,
-        silent=silent,
-    )
+    # Return only the mass?
+    if err_method == -1:
+        return mass
 
     return np.array([mass, mass_err_min, mass_err_max]).T

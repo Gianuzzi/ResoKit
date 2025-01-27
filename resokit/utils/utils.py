@@ -26,6 +26,7 @@ from typing import Iterable, Tuple, Union
 from numpy import pi, sqrt
 
 from resokit import __version__ as version
+from resokit.units import G, M_JUP, M_SUN, AU, DAY
 
 # =============================================================================
 # DEFAULTS
@@ -47,37 +48,6 @@ DEFAULT_METADATA = MappingProxyType(
 # =============================================================================
 # CONSTANTS
 # =============================================================================
-
-# Gravitational constant in SI units
-G = 6.67430e-11  # m^3 kg^-1 s^-2
-
-# Astronomical unit in meters
-AU = 1.496e11  # m
-# Parsec in meters
-PC = 3.086e16  # m
-# Solar radius in m
-R_SUN = 6.957e8  # m
-# Jupiter radius in m
-R_JUP = 6.9911e7  # m
-# Earth radius in m
-R_EAR = 6.371e6  # m
-
-# Solar mass in kg
-M_SUN = 1.989e30  # kg
-# Jupiter mass in kg
-M_JUP = 1.898e27  # kg
-# Earth mass in kg
-M_EAR = 5.972e24  # kg
-
-# Hour in seconds
-HOUR = 3600  # s
-# Day in seconds
-DAY = 86400  # s
-# Year in seconds
-YEAR = 3.154e7  # s
-
-# Gravitational constant in AU^3 M_sun^-1 days^-2
-G_ASD = G * AU**3 / M_SUN / DAY**2
 
 
 # EU column to resokit
@@ -536,7 +506,7 @@ def calc_period_with_errors(
         Maximum error in the planet's mass, in Jupiter masses.
     err_method : int, optional. Default: 0
         Error method to use:
-            - 0: No error. Return the period and 0 error.
+            - <=0: No error. Return the period and 0 error.
             - 1: Extremes. Estimate the period at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
@@ -553,7 +523,7 @@ def calc_period_with_errors(
         Orbital period and its minimum and maximum errors, in days.
     """
     # Switch for the error propagation method
-    if err_method == 0:
+    if err_method <= 0:
         return calc_period(a, m_star, m_planet), 0, 0
     elif err_method == 1:
         period = calc_period(a, m_star, m_planet)
@@ -664,7 +634,7 @@ def calc_a_with_errors(
         Maximum error in the planet's mass, in Jupiter masses.
     err_method : int, optional. Default: 0
         Error method to use:
-            - 0: No error. Return the period and 0 error.
+            - <=0: No error. Return the period and 0 error.
             - 1: Extremes. Estimate the period at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
@@ -681,7 +651,7 @@ def calc_a_with_errors(
         Semi-major axis and its minimum and maximum errors, in AU.
     """
     # Switch for the error propagation method
-    if err_method == 0:
+    if err_method <= 0:
         return calc_a(period, m_star, m_planet), 0, 0
     elif err_method == 1:
         a = calc_a(period, m_star, m_planet)
@@ -808,7 +778,7 @@ def hill_radius_with_errors(
         Maximum error in the planet's mass, in Jupiter masses.
     err_method : int, optional. Default: 0
         Error method to use:
-            - 0: No error. Return the period and 0 error.
+            - <=0: No error. Return the period and 0 error.
             - 1: Extremes. Estimate the period at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
@@ -826,7 +796,7 @@ def hill_radius_with_errors(
         Hill radius and its minimum and maximum errors, in AU.
     """
     # Switch for the error propagation method
-    if err_method == 0:
+    if err_method <= 0:
         return hill_radius(a, e, m_star, m_planet), 0, 0
     elif err_method == 1:
         hill = hill_radius(a, e, m_star, m_planet)
