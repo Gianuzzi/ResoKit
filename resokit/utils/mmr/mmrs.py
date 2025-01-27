@@ -483,6 +483,77 @@ def closest_mmr3b(
     return closest_resonance, min_distance
 
 
+def label_mmr2b(
+    resonance: tuple,
+    ax: plt.Axes = None,
+    xaxis: bool = True,
+    lims: tuple = None,
+    warn: bool = True,
+) -> plt.Axes:
+    """Annotate a plot with the label of a 2-body resonance line.
+
+    The label is placed where the resonance line crosses either the
+    right or top axis of the plot. The resonance coefficients are
+    displayed in a compact format. If the line does not cross these
+    axes, a warning is printed.
+
+    Parameters
+    ----------
+    resonance : tuple
+        Coefficients of the resonance line (a, b) in the form a*x + b = 0.
+    ax : matplotlib.axes.Axes, optional. Default: None
+        The axis object on which the label will be placed.
+        If not provided, the function will use the current axis.
+    xaxis : bool, optional. Default: True
+        Whether the resonance is along the x-axis (True) or y-axis (False).
+    lims : tuple, optional. Default: None
+        Custom axis limits in the format (x_min, x_max, y_min, y_max).
+        If not provided, the function will use the current axis limits.
+    warn : bool, optional. Default: True
+        Whether to print a warning if the resonance does not cross
+        the right or top axis.
+
+    Returns
+    -------
+    ax : Matplotlib Axes
+        The axis object with the annotations.
+    """
+    a, b = resonance  # Coefficients of the resonance line
+    res = a / b
+
+    # Get the current axis if not provided
+    if ax is None:
+        ax = plt.gca()
+
+    # Get axis limits
+    if lims:
+        x_min, x_max, y_min, y_max = lims
+    else:
+        x_min, x_max = ax.get_xlim()
+        y_min, y_max = ax.get_ylim()
+
+    # X of y axis
+    if xaxis and x_min <= res <= x_max:
+        # Define label
+        label = f"{a}\n{b}"  # Compact label format
+        # Normalize x-coordinate for axis transform
+        res_ax = (res - x_min) / (x_max - x_min)
+        ax.text(res_ax, 1.02, label, transform=ax.transAxes, ha="center")
+    elif not xaxis and y_min <= res <= y_max:
+        # Define label
+        label = f"{a} {b}"  # Multi-line label format
+        # Normalize y-coordinate for axis transform
+        res_ax = (res - y_min) / (y_max - y_min)
+        ax.text(1.02, res_ax, label, transform=ax.transAxes, va="center")
+    elif warn:
+        warnings.warn(
+            f"{resonance} does not cross the right or top axis.",
+            stacklevel=2,
+        )
+
+    return ax
+
+
 def label_mmr3b(
     resonance: tuple,
     ax: plt.Axes = None,
@@ -540,18 +611,16 @@ def label_mmr3b(
     # Check crossing on the right axis
     if y_min <= y <= y_max:
         label = f"{a} {b} {c}"  # Compact label format
-        y_ax = (y - y_min) / (
-            y_max - y_min
-        )  # Normalize y-coordinate for axis transform
+        # Normalize y-coordinate for axis transform
+        y_ax = (y - y_min) / (y_max - y_min)
         ax.text(1.01, y_ax, label, transform=ax.transAxes, va="center")
 
     # Check crossing on the top axis
     elif x_min <= rinv(y_max) <= x_max:
         label = f"{a}\n{b}\n{c}"  # Multi-line label format
         x = rinv(y_max)
-        x_ax = (x - x_min) / (
-            x_max - x_min
-        )  # Normalize x-coordinate for axis transform
+        # Normalize x-coordinate for axis transform
+        x_ax = (x - x_min) / (x_max - x_min)
         ax.text(x_ax, 1.02, label, transform=ax.transAxes, ha="center")
 
     # If the line does not cross the right or top axis
@@ -576,6 +645,7 @@ def plot_mmrs(
     n_points: int = 1000,
     ax: plt.Axes = None,
     label_mmrs: bool = False,
+    label_2mmrs: bool = False,
     **plot_kwargs,
 ):
     """Plot 3-body and 2-body mean-motion resonances in a phase-space region.
@@ -619,6 +689,10 @@ def plot_mmrs(
         If not provided, a new figure and axis will be created.
     label_mmrs : bool, optional. Default: False
         Whether to label the resonances on the plot.
+        Recommended to set xlim and ylim before using this option,
+        or the labels may be placed outside the plot. (default: False).
+    label_2mmrs : bool, optional. Default: False
+        Whether to label the 2-body resonances on the plot.
         Recommended to set xlim and ylim before using this option,
         or the labels may be placed outside the plot. (default: False).
     plot_kwargs : dict, optional
@@ -666,10 +740,14 @@ def plot_mmrs(
     # Plot the 2P-MMRs
     for r2x in mmr2x:
         ax.axvline(r2x[0] / r2x[1], color="k", linestyle="--")
+        if label_2mmrs:
+            label_mmr2b(r2x, ax, xaxis=True, warn=True)
 
     # Plot the 2P-MMRs
     for r2y in mmr2y:
         ax.axhline(r2y[0] / r2y[1], color="k", linestyle="--")
+        if label_2mmrs:
+            label_mmr2b(r2y, ax, xaxis=False, warn=True)
 
     # Plot the 3P-MMRs
     for r3 in mmr3:
