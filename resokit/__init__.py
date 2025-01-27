@@ -30,8 +30,9 @@ from . import core  # noqa
 from . import datasets  # noqa
 from . import io  # noqa
 from . import utils  # noqa
+from . import units  # noqa
 from .utils import mmr  # noqa
 
 # Make the core classes available directly from the package.
 
-__all__ = ["core", "datasets", "io", "utils", "mmr"]
+__all__ = ["core", "datasets", "io", "units", "utils", "mmr"]

@@ -29,21 +29,18 @@ from numpy import isnan, pi, sqrt
 
 import pandas as pd
 
+from resokit.units import Mj2Me, Me2Mj, Re2Rj, Rj2Re
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.utils import (
     DEFAULT_METADATA,
     MAPPINGS,
-    M_EAR,
-    M_JUP,
     RESO_DTYPES,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
-    R_EAR,
-    R_JUP,
-    float_to_fraction,
     calc_a_with_errors,
     calc_period_with_errors,
+    float_to_fraction,
     hill_radius_with_errors,
     parse_to_iter,
 )
@@ -249,13 +246,19 @@ class ResokitDataFrame:
         df: DataFrame
             Data frame with the requested columns.
         """
-        if columns is not None:
-            used_cols = [col for col in list(columns) if col in self.columns_]
-            df = self.data_df[used_cols]
+        if columns is None:
+            # my_cols = RESO_DTYPES.keys()
+            # # Add columns in this df, but not in the default mapping
+            # my_cols = my_cols | [
+            #     col for col in self.columns_ if col not in my_cols
+            # ]
+            used_cols = list(self.columns_)
         else:
-            df = self.data_df
+            used_cols = [col for col in list(columns) if col in self.columns_]
 
-        return df.copy() if copy else df
+        df = self.data_df[used_cols]
+
+        return df.copy(deep=True) if copy else df
 
     def to_dict(self) -> dict:
         """Convert metadata to a dictionary.
@@ -444,6 +447,11 @@ def df_to_resokit(
             df["n_err_max"] = 2.0 * pi / df["P_err_min"]
         df["n"] = 2.0 * pi / df["P"]
 
+    # Define all errors positive
+    for col in df.columns:
+        if col.endswith("_err_min") or col.endswith("_err_max"):
+            df[col] = df[col].abs()
+
     # Sort by
     if sort_by and sort_by is not None:
         if sort_by is True:
@@ -511,14 +519,19 @@ class StaticPlanet(ResokitDataFrame):
     def _web_page_default(self):
         """Set the default value for web_page."""
         if self.source == "eu":
-            return f"https://exoplanet.eu/catalog/{
-                self.name.replace(' ', '_').lower() +
-                "--" + str(self.metadata["eu_indexes"])
-             }/"
+            aux = (
+                str(self.name).replace(" ", "_").lower()
+                + "--"
+                + str(self.metadata["eu_indexes"])
+            )
+            return "https://exoplanet.eu/catalog/" + aux + "/"
         if self.source == "nasa":
-            return f"https://exoplanetarchive.ipac.caltech.edu/overview/{
-                self.name.replace(' ', '%20')}/"
-
+            aux = str(self.name).replace(" ", "%20")
+            return (
+                "https://exoplanetarchive.ipac.caltech.edu/overview/"
+                + aux
+                + "/"
+            )
         return ""
 
     def __attrs_post_init__(self):
@@ -652,16 +665,21 @@ class StaticPlanet(ResokitDataFrame):
             Estimated mass, and its minimum and maximum errors,
             in Jupiter masses.
             If `err_method=0`, the errors are 0.0.
+            If `err_method=-1` (default), the errors are not returned.
         """
         # Get planet radius and convert to Earth radii
-        radius = self["radius"] / R_JUP * R_EAR
+        radius = self["radius"] * Rj2Re
 
         radius_err_min = 0.0
         radius_err_max = 0.0
         # Get the errors and convert to Earth radii, if needed (and available)
-        if kwargs.get("err_method", 0) in [1, 2]:
-            radius_err_min = self["radius_err_min"] / R_JUP * R_EAR
-            radius_err_max = self["radius_err_max"] / R_JUP * R_EAR
+        ret_err = True
+        if kwargs.get("err_method", -1) in [1, 2]:
+            radius_err_min = self["radius_err_min"] * Rj2Re
+            radius_err_max = self["radius_err_max"] * Rj2Re
+        elif kwargs.get("err_method", -1) == -1:
+            ret_err = False
+            kwargs["err_method"] = 0  # Set to 0 for the function
 
         # Remove radius and its errors from kwargs (just in case)
         kwargs.pop("radius", None)
@@ -677,9 +695,15 @@ class StaticPlanet(ResokitDataFrame):
         )
 
         # Convert mass to Jupiter masses
-        mass = mass / M_EAR * M_JUP
-        mass_err_min = mass_err_min / M_EAR * M_JUP
-        mass_err_max = mass_err_max / M_EAR * M_JUP
+        mass = mass * Me2Mj
+
+        # Return?
+        if not ret_err:
+            return mass
+
+        # Convert errors to Jupiter masses
+        mass_err_min = mass_err_min * Me2Mj
+        mass_err_max = mass_err_max * Me2Mj
 
         return mass, mass_err_min, mass_err_max
 
@@ -709,14 +733,18 @@ class StaticPlanet(ResokitDataFrame):
             Maximum error in Jupiter radii. If `err_method=0`, the error is 0.0.
         """
         # Get planet mass and convert to Earth masses
-        mass = self["mass"] / M_JUP * M_EAR
+        mass = self["mass"] * Mj2Me
 
         # Get the errors and convert to Earth masses, if needed (and available)
+        ret_err = True
         mass_err_min = 0.0
         mass_err_max = 0.0
         if kwargs.get("err_method", 0) in [1, 2]:
-            mass_err_min = self["mass_err_min"] / M_JUP * M_EAR
-            mass_err_max = self["mass_err_max"] / M_JUP * M_EAR
+            mass_err_min = self["mass_err_min"] * Mj2Me
+            mass_err_max = self["mass_err_max"] * Mj2Me
+        elif kwargs.get("err_method", -1) == -1:
+            ret_err = False
+            kwargs["err_method"] = 0  # Set to 0 for the function
 
         # Remove mass and its errors from kwargs (just in case)
         kwargs.pop("mass", None)
@@ -732,9 +760,15 @@ class StaticPlanet(ResokitDataFrame):
         )
 
         # Convert radius to Jupiter radii
-        radius = radius / R_EAR * R_JUP
-        radius_err_min = radius_err_min / R_EAR * R_JUP
-        radius_err_max = radius_err_max / R_EAR * R_JUP
+        radius = radius * Re2Rj
+
+        # Return?
+        if not ret_err:
+            return radius
+
+        # Convert errors to Jupiter radii
+        radius_err_min = radius_err_min * Re2Rj
+        radius_err_max = radius_err_max * Re2Rj
 
         return radius, radius_err_min, radius_err_max
 
@@ -836,12 +870,13 @@ class StaticStar(ResokitDataFrame):
     @web_page.default
     def _web_page_default(self):
         """Set the default value for web_page."""
-        if self.source == "eu":
-            return ""
         if self.source == "nasa":
-            return f"https://exoplanetarchive.ipac.caltech.edu/overview/{
-                str(self.name).replace(' ', '%20')}/"
-
+            aux = str(self.name).replace(" ", "%20")
+            return (
+                "https://exoplanetarchive.ipac.caltech.edu/overview/"
+                + aux
+                + "/"
+            )
         return ""
 
     def __attrs_post_init__(self):
@@ -1040,10 +1075,7 @@ class StaticSystem:
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
-        """Set the default value for __error_ratios__.
-
-        The finale error is calculated assuming the maximum error
-        for each period."""
+        """Set the default value for __error_ratios__."""
         if self.n_planets_ == 1:
             return None
         elif self.n_planets_ == 2:
@@ -1302,15 +1334,16 @@ class StaticSystem:
             See py:func:`resokit.utils.calc_period_with_errors` for more
             details.
             *-1*: Nothing. Do not estimate the error.
-            *0* : No propagation. Estimate the period at the extreme values of
-                    each parameter and retrieve the errors from the difference.
-            *1* : Extended propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
-            *2* : Centred propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_min + err_max) / 2.
-            *3* : Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
+            *0* : No propagation. Return both errors as 0.0.
+            *1* : Extremes. Estimate the period at the extreme values of
+            each parameter and retrieve the errors from the difference.
+            *2* : Extended propagation. Assume each parameters follows a normal
+            distribution with sigma = err_max.
+            *3* : Centred propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_min + err_max) / 2.
+            *4* : Deviated propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
 
         Returns
         -------
@@ -1329,7 +1362,7 @@ class StaticSystem:
 
             for i in which:  # Iterate over the planets
                 pl = self.planets[i]
-                P, P_err_min, P_err_max = calc_period_with_errors(
+                per, per_err_min, per_err_max = calc_period_with_errors(
                     pl.a,
                     pl.a_err_min,
                     pl.a_err_max,
@@ -1341,11 +1374,11 @@ class StaticSystem:
                     pl.mass_err_max,
                     err_method,
                 )
-                df[f"{pl.name}"] = [P, P_err_min, P_err_max]
+                df[f"{pl.name}"] = [per, per_err_min, per_err_max]
             df.index = ["P", "P_err_min", "P_err_max"]
 
-            if err_method == 0:  # No error
-                return df.loc["P"]  # Return only the mass
+            if err_method == -1:  # No error requested
+                return df.loc["P"]  # Return only the period
 
             return df.T  # Return the DataFrame
 
@@ -1373,16 +1406,17 @@ class StaticSystem:
             See py:func:`resokit.utils.calc_semi_major_axis_with_errors` for
             more details.
             *-1*: Nothing. Do not estimate the error.
-            *0* : No propagation. Estimate the semi-major axis at the extreme
-                    values of each parameter and retrieve the errors from the
-                    difference.
-            *1* : Extended propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
-            *2* : Centred propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_min + err_max) / 2.
-            *3* : Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
+            *0* : No propagation. Return both errors as 0.0.
+            *1* : Extremes. Estimate the semi-major axis at the extreme
+            values of each parameter and retrieve the errors from the
+            difference.
+            *2* : Extended propagation. Assume each parameters follows a normal
+            distribution with sigma = err_max.
+            *3* : Centred propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_min + err_max) / 2.
+            *4* : Deviated propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
 
         Returns
         -------
@@ -1419,8 +1453,8 @@ class StaticSystem:
                 ]
             df.index = ["a", "a_err_min", "a_err_max"]
 
-            if err_method == 0:  # No error
-                return df.loc["a"]  # Return only the mass
+            if err_method == -1:  # No error requested
+                return df.loc["a"]  # Return only the semi-major axis
 
             return df.T  # Return the DataFrame
 
@@ -1448,7 +1482,8 @@ class StaticSystem:
 
         Note
         ----
-        If `err_method=0`, only the mass is returned.
+        If `err_method=-1`, only the mass is returned. If `err_method=0`, the
+        errors are 0.0.
 
 
         Returns
@@ -1465,6 +1500,12 @@ class StaticSystem:
         if all(isinstance(i, int) for i in which):
             df = pd.DataFrame()  # Create an empty DataFrame
 
+            # Define the error method
+            ret_err = True
+            if kwargs.get("err_method", -1) == -1:
+                kwargs["err_method"] = 0  # Set to 0 for the function
+                ret_err = False
+
             for i in which:  # Iterate over the planets
                 mass, mass_err_min, mass_err_max = self.planets[
                     i
@@ -1476,7 +1517,7 @@ class StaticSystem:
                 ]
             df.index = ["mass", "mass_err_min", "mass_err_max"]
 
-            if kwargs.get("err_method", 0) == 0:  # No error
+            if not ret_err:  # No error requested
                 return df.loc["mass"]  # Return only the mass
 
             return df.T  # Return the DataFrame
@@ -1505,7 +1546,8 @@ class StaticSystem:
 
         Note
         ----
-        If `err_method=0`, only the radius is returned.
+        If `err_method=-1`, only the radius is returned. If `err_method=0`, the
+        errors are 0.0.
 
         Returns
         -------
@@ -1521,6 +1563,12 @@ class StaticSystem:
         if all(isinstance(i, int) for i in which):
             df = pd.DataFrame()  # Create an empty DataFrame
 
+            # Define the error method
+            ret_err = True
+            if kwargs.get("err_method", -1) == -1:
+                kwargs["err_method"] = 0
+                ret_err = False
+
             for i in which:
                 radius, radius_err_min, radius_err_max = self.planets[
                     i
@@ -1532,7 +1580,7 @@ class StaticSystem:
                 ]
             df.index = ["radius", "radius_err_min", "radius_err_max"]
 
-            if kwargs.get("err_method", 0) == 0:  # No error
+            if not ret_err:  # No error requested
                 return df.loc["radius"]  # Return only the radius
 
             return df.T  # Return the DataFrame
@@ -1563,16 +1611,17 @@ class StaticSystem:
             See py:func:`resokit.utils.hill_radius.hill_radius_with_errors` for
             more details.
             *-1*: Nothing. Do not estimate the error.
-            *0* : No propagation. Estimate the semi-major axis at the extreme
-                    values of each parameter and retrieve the errors from the
-                    difference.
-            *1* : Extended propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
-            *2* : Centred propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_min + err_max) / 2.
-            *3* : Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
+            *0* : No propagation. Return both errors as 0.0.
+            *1* : Extremes. Estimate the semi-major axis at the extreme
+            values of each parameter and retrieve the errors from the
+            difference.
+            *2* : Extended propagation. Assume each parameters follows a normal
+            distribution with sigma = err_max.
+            *3* : Centred propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_min + err_max) / 2.
+            *4* : Deviated propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
 
         Returns
         -------
@@ -1676,8 +1725,12 @@ class StaticSystem:
         if not star_plot:  # Planet plot
 
             # Check label
-            if (label is True) or isinstance(label, str):
-                label = [label] * self.n_planets_  # Anything is True
+            if label is True:
+                # True means use planet names
+                label = [label] * self.n_planets_
+            elif isinstance(label, str):
+                # If label is a string, use it for the last planet
+                label = [False] * (self.n_planets_ - 1) + [label]
             elif len(label) != self.n_planets_:
                 raise ValueError(
                     "Length of planet_label must be equal "
@@ -2191,11 +2244,19 @@ class StaticSystem:
 
         return pair_ratio * sqrt(sigma2)  # Return the error
 
-    def to_dataframe(self, columns: list = None) -> pd.DataFrame:
-        """Return data_df as a new pandas DataFrame.
+    def to_dataframe(
+        self, add_star: Union[bool, None] = True, columns: list = None
+    ) -> pd.DataFrame:
+        """Combine and return system objects data as a new pandas DataFrame.
 
         Parameters
         ----------
+        add_star : bool, optional. Default: True.
+            Whether to include the star data in the DataFrame as a row
+            (same level as the planets).
+            If False, the star data is included in the planets DataFrame
+            as repeated rows.
+            If None, do not include any star data.
         columns : list, optional. Default: None.
             Subset of columns to include in the DataFrame.
 
@@ -2209,16 +2270,39 @@ class StaticSystem:
             {planet.name: planet.data_df for planet in self.planets}
         )
 
-        # Add star data
-        df = pd.concat(
-            [pd.Series(self.star.data_df).to_frame(self.star.name), df], axis=0
-        )
+        if add_star is None:
+            if columns is not None:
+                used_cols = [col for col in columns if col in df.columns]
+                df = df[used_cols]
+            return df.T
+
+        # Generate star data
+        star_df = pd.Series(self.star.data_df).to_frame(self.star.name)
+
+        # Drop RESO_OB_TYPES columns, as they are already in the planets
+        drop2 = [col for col in RESO_OB_TYPES.keys() if col in star_df.index]
+        star_df.drop(drop2, inplace=True)
+
+        # Change star columns to inlclude "star_". Exclude RESO_OB_TYPES
+        star_df = star_df.rename(lambda x: f"star_{x}")
+
+        if add_star:
+            # Concatenate star data
+            df = pd.concat([star_df, df], axis=0)
+        else:
+            # Add the same star data for all planets
+            vals = [val[0] for val in star_df.values]  # So messy
+            new_rows = pd.DataFrame(
+                {col: vals for col in df.columns},
+                index=star_df.index,
+            )
+            df = pd.concat([new_rows, df])
 
         if columns is not None:
             used_cols = [col for col in columns if col in df.columns]
             df = df[used_cols]
 
-        return df.T
+        return df
 
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
