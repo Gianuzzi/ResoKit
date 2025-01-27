@@ -39,8 +39,8 @@ n2n3 = sys1.Prat(1)
 # plt.ylim(l1y,l2y)
 # plt.show()
 
-sys1.sepspace(s=1)
-
+sys1.sepspace(which=[[0,1,4],[0,1,2]])
+plt.legend()
 
 
 
