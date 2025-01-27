@@ -1,0 +1,3 @@
+- sobre la unidad de masa planetaria: cuando pregunto por ella me gustaria que me la devuelva en mearth,
+pero al hacer cuentas deberia estar en msol, ¿hago un repr para que cuando la pido me la devuelva en mearth?
+¿o la dejo siempre en mearth y transformo a msol en cada cuenta?
