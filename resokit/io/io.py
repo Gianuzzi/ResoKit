@@ -268,12 +268,13 @@ def _load_system_from_db(
         **load_extra_kwargs,
     )
 
+    auxmsg = "alternate names column of" if alternative_names else ""
     # Check if the system was found
     if ratio < 1:
         if is_planet:
-            print(f"Planet {name} not found in {source} dataset.")
+            print(f"Planet {name} not found in {auxmsg} {source} dataset.")
         else:
-            print(f"Star {name} not found in {source} dataset.")
+            print(f"Star {name} not found in {auxmsg} {source} dataset.")
         if ratio == 0:  # No similar names found
             return pd.DataFrame()
 
@@ -285,10 +286,10 @@ def _load_system_from_db(
         others.sort()  # Sort the others
 
         # Forced to print the most probable and others
-        print(f" Similar names found in {source} dataset:")
+        print(f" Similar names found in {auxmsg} {source} dataset:")
         print(f" - {most_prob + others}")
 
-        if source == "eu":
+        if source == "eu" and not alternative_names:
             print(
                 "Note: ExoplanetEU has alternative names "
                 + "for some systems. "
