@@ -29,7 +29,7 @@ from numpy import isnan, pi, sqrt
 
 import pandas as pd
 
-from resokit.units import (Mj2Me, Me2Mj, Re2Rj, Rj2Re)
+from resokit.units import Mj2Me, Me2Mj, Re2Rj, Rj2Re
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.utils import (
     DEFAULT_METADATA,

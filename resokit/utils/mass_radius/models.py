@@ -156,7 +156,7 @@ def chen_kipp_2017_radius(mass: float) -> Tuple[float, tuple, tuple, tuple]:
     # Transition mass
     m1_tr = 2.04
     m2_tr = 0.414 * Mj2Me  # 0.414 Jupiter masses
-    m3_tr = 0.08 * Ms2Me   # 0.08 Solar masses
+    m3_tr = 0.08 * Ms2Me  # 0.08 Solar masses
 
     if mass < m1_tr:  # First branch
         return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
