@@ -35,7 +35,7 @@ from resokit.utils.utils import DEFAULT_METADATA
 # CONSTANTS
 # =============================================================================
 
-RATIOS_THRESHOLD = 0.94
+RATIOS_THRESHOLD = 0.92  # Similarity ratio threshold
 
 # =============================================================================
 # FUNCTIONS
@@ -53,6 +53,123 @@ def _n_close(a: any, b: str, length: int, n=0) -> bool:
 
     return (stra[:length] == str(b)) and (
         (len(stra) == length + n) or stra[length] == " "
+    )
+
+
+def _parse_system_name(name: str, force: bool = False) -> str:
+    """Parse a name to a more versatile format.
+
+    Steps:
+    1) The trailing whitespaces are removed.
+    2) The trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
+    are removed.
+    2.5) If force is `True`, removes (AB) from the middle of the name.
+    3) The name is converted to lowercase.
+    4) All whitespaces and hyphens are removed.
+
+    Parameters
+    ----------
+    name : str
+        Object name.
+
+    Returns
+    -------
+    str
+        Name in a more versatile format.
+    """
+    # Remove the trailing whitespaces
+    name = name.strip()
+
+    # Remove the trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
+    # Only if it is at the end of the name
+    if name.endswith(" A") or name.endswith(" B") or name.endswith(" AB"):
+        name = name[:-2]
+    elif name.endswith("(AB)") or name.endswith(" (AB)"):
+        name = name[:-4]
+
+    # Remove (AB) from the middle of the name
+    if force:
+        name = name.replace("(AB)", "")
+
+    # Convert the name to lowercase
+    name = name.lower()
+
+    # Remove all whitespaces and hyphens
+    name = name.replace(" ", "").replace("-", "")
+
+    return name
+
+
+def _find_best_match(
+    raw_series: pd.Series, name: str, force: bool = False
+) -> Tuple[pd.Index, pd.Series, float]:
+    """Find the best match for a name in a series.
+
+    Parameters
+    ----------
+    raw_series : pd.Series
+        Series to search in.
+    name : str
+        Name to search for.
+    force : bool, optional. Default: False.
+        Whether to force the removal of trailing letters.
+
+    Returns
+    -------
+    index : pd.Index
+        Index of the best match.
+    values : pd.Series
+        Values of the best match.
+    ratio : float
+        Similarity ratio.
+    """
+    # Edit the names using _parse_system_name
+    def my_parse(x):
+        return _parse_system_name(x, force)
+
+    # Edit (clean) the series
+    edited_series = raw_series.copy()  # Copy the series
+    edited_series = edited_series.astype(str).apply(my_parse)
+    # Edit (clean) the name
+    original_name = str(name)
+    name = _parse_system_name(name, force)
+
+    exact_matches = edited_series[edited_series == name]
+    if not exact_matches.empty:
+        exact_matches = raw_series[exact_matches.index]
+        if exact_matches.values[0] == original_name:
+            return exact_matches.index, exact_matches.values, 1
+        return exact_matches.index, exact_matches.values, 0.99999  # Almost 1
+
+    # If no exact matches, search for 1 space-close names
+    length = len(name)
+    close_matches = edited_series.apply(lambda x: _n_close(x, name, length, 1))
+
+    if close_matches.any():  # If 1 space-close names found
+        return raw_series[close_matches].index, raw_series[close_matches], 0.9
+
+    # If no 1 space-close names, search for 2 space-close names
+    close_matches = edited_series.apply(lambda x: _n_close(x, name, length, 2))
+
+    if close_matches.any():  # If 2 space-close names found
+        return raw_series[close_matches].index, raw_series[close_matches], 0.8
+
+    # If no 2 space-close names, search for similar names
+    similarity_ratios = edited_series.apply(lambda x: _similar(x, name))
+    good_matches = similarity_ratios >= RATIOS_THRESHOLD
+
+    if not good_matches.any():  # No similar names found
+        top_3_indices = similarity_ratios.nlargest(3).index
+        good_matches = similarity_ratios.index.isin(top_3_indices)
+
+    # Get the good matches
+    similarity_ratios = similarity_ratios[good_matches]
+
+    # Return the index, values, and the minimum similarity ratio
+    return (
+        similarity_ratios.index,
+        raw_series[good_matches],
+        similarity_ratios.values.min(),
     )
 
 
@@ -135,41 +252,9 @@ def _search_system_index(
         )
         raw_series = raw_series[column].str.split(", ").explode()
 
-    # Search for the system
-    exact_matches = raw_series[raw_series == name]
-    if not exact_matches.empty:
-        return exact_matches.index, exact_matches.values, 1
-
-    # If no exact matches, search for 1 space-close names
-    length = len(name)
-    close_matches = raw_series.apply(lambda x: _n_close(x, name, length, 1))
-
-    if close_matches.any():  # If 1 space-close names found
-        return raw_series[close_matches].index, raw_series[close_matches], 0.9
-
-    # If no 1 space-close names, search for 2 space-close names
-    close_matches = raw_series.apply(lambda x: _n_close(x, name, length, 2))
-
-    if close_matches.any():  # If 2 space-close names found
-        return raw_series[close_matches].index, raw_series[close_matches], 0.8
-
-    # If no 2 space-close names, search for similar names
-    similarity_ratios = raw_series.apply(lambda x: _similar(x, name))
-    good_matches = similarity_ratios >= RATIOS_THRESHOLD
-
-    if not good_matches.any():  # No similar names found
-        top_3_indices = similarity_ratios.nlargest(3).index
-        good_matches = similarity_ratios.index.isin(top_3_indices)
-
-    # Get the good matches
-    similarity_ratios = similarity_ratios[good_matches]
-
-    # Return the index, values, and the minimum similarity ratio
-    return (
-        similarity_ratios.index,
-        raw_series[good_matches],
-        similarity_ratios.values.min(),
-    )
+    # Use the new function
+    index, values, ratio = _find_best_match(raw_series, name, force=is_planet)
+    return index, values, ratio
 
 
 def _load_system_from_db(
@@ -268,13 +353,13 @@ def _load_system_from_db(
         **load_extra_kwargs,
     )
 
-    auxmsg = "alternate names column of" if alternative_names else ""
+    auxmsg = "alternate names column of " if alternative_names else ""
     # Check if the system was found
-    if ratio < 1:
+    if ratio < 0.99999:  # To take into account the almost 1 ratio
         if is_planet:
-            print(f"Planet {name} not found in {auxmsg} {source} dataset.")
+            print(f"Planet {name} not found in {auxmsg}{source} dataset.")
         else:
-            print(f"Star {name} not found in {auxmsg} {source} dataset.")
+            print(f"Star {name} not found in {auxmsg}{source} dataset.")
         if ratio == 0:  # No similar names found
             return pd.DataFrame()
 
@@ -286,7 +371,7 @@ def _load_system_from_db(
         others.sort()  # Sort the others
 
         # Forced to print the most probable and others
-        print(f" Similar names found in {auxmsg} {source} dataset:")
+        print(f" Similar names found in {auxmsg}{source} dataset:")
         print(f" - {most_prob + others}")
 
         if source == "eu" and not alternative_names:
@@ -300,6 +385,13 @@ def _load_system_from_db(
             )
 
         return pd.DataFrame()  # Return an empty DataFrame
+    elif ratio < 1 and verbose:  # Only spaces or hyphens differences
+        # Note: get most probable by whitespace separation
+        pl = "planet" if is_planet else "star"
+        print(
+            f"Found almost exact match {pl} {values[0]} "
+            + f"in {auxmsg}{source} dataset."
+        )
 
     # Load the system
     if raw_df is None:  # Load only the system data
