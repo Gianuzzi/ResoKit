@@ -29,6 +29,8 @@ import pandas as pd
 from resokit.core import MetaData, df_to_resokit
 from resokit.datasets.utils import (
     DATASET_DTYPES,
+    ZIP_FILENAME,
+    load_from_zip,
     remove_from_zip,
     request_dataset,
 )
@@ -48,7 +50,6 @@ _DATASET_URLS = {
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?"
     + "query=select+*+from+ps&format=csv",
 }
-_ZIP_FILENAME = "datasets.zip"  # Name for the ZIP archive
 
 # Index columns for each dataset
 _INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
@@ -676,9 +677,8 @@ def download(
         `Path` to the downloaded dataset (and or zip archive),
         or the dataset if `to_resokit` is not `None`.
     """
-    source = source.lower()  # Ensure lowercase
-
     # Check if source is valid
+    source = source.lower()  # Ensure lowercase
     if source not in _DATASET_FILENAMES:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
@@ -730,7 +730,7 @@ def download(
     # Check if zip exists
     if to_zip:
         if to_zip is True:
-            zip_name = _ZIP_FILENAME
+            zip_name = ZIP_FILENAME
         else:
             zip_name = to_zip
         zip_path = dir_path / zip_name
@@ -738,7 +738,7 @@ def download(
             raise FileExistsError(f"ZIP archive {zip_path} already exists.")
     else:
         zip_path = None
-        zip_name = _ZIP_FILENAME
+        zip_name = ZIP_FILENAME
 
     # Download the dataset
     data = request_dataset(
@@ -777,7 +777,7 @@ def download(
         if verbose:
             print(f" Written {file_path}.")
 
-    # Store the data in memory? Only if not to_memory nor to_resokit
+    # Store the data in memory? Only if to_memory or to_resokit
     if to_memory or to_resokit is not None:
         # Create a dataframe from the data
         df = pd.read_csv(BytesIO(data), dtype=DATASET_DTYPES[source])
@@ -914,69 +914,6 @@ def _check_file_age(
         print(f"Last modified: {creation} ({age} days ago)")
 
     return age
-
-
-def _load_from_zip(
-    zip_path: Path,
-    file_name: str,
-    source: str,
-    skip_rows: Union[int, callable, None] = None,
-    usecols: Union[list, callable, None] = None,
-    verbose: bool = True,
-) -> pd.DataFrame:
-    """Load the dataset from a ZIP archive.
-
-    Reads the dataset from a ZIP archive and returns it as a pandas DataFrame.
-
-    Parameters
-    ----------
-    zip_path : Path
-        Full path to the ZIP archive.
-    file_name : str
-        Name of the file to load from the ZIP archive.
-    source : str
-        Identifier for the data source ('eu' or 'nasa').
-    skip_rows : int, optional
-        Number of rows to skip.
-    usecols : list, optional
-        Columns to load.
-    verbose : bool, optional
-        If `True`, prints messages about the process.
-
-    Returns
-    -------
-    data : pd.DataFrame
-        Loaded dataset as a pandas DataFrame.
-    """
-    # Check if the zip exists
-    if not zip_path.exists():
-        raise FileNotFoundError(f"ZIP archive {zip_path} not found.")
-
-    # Define the zip name
-    zip_name = zip_path.name  # Name of the ZIP archive
-
-    # Load the dataset from the ZIP archive
-    with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
-        if file_name in zipf.namelist():
-            if verbose:  # Print message if verbose
-                print(
-                    f" Loading {file_name} " + f"directly from {zip_name}..."
-                )
-            # Load directly from the .zip
-            with zipf.open(file_name) as file:
-                data = pd.read_csv(
-                    file,
-                    header=0,
-                    skiprows=skip_rows,
-                    usecols=usecols,
-                    dtype=DATASET_DTYPES[source],
-                )
-        else:
-            raise FileNotFoundError(
-                f"File {file_name} not found in {zip_name}."
-            )
-
-    return data
 
 
 def _load_stored_full(
@@ -1434,7 +1371,7 @@ def load_full(
     # Define paths and ZIP extraction flag
     if from_zip:
         if from_zip is True:
-            from_zip = _ZIP_FILENAME
+            from_zip = ZIP_FILENAME
 
     # Define file path
     if from_file:
@@ -1592,7 +1529,7 @@ def load_full(
     if from_zip:
         zip_path = dir_path / from_zip
         file_name = from_file if from_file else _DATASET_FILENAMES[source]
-        data = _load_from_zip(
+        data = load_from_zip(
             zip_path=zip_path,
             file_name=file_name,
             source=source,

@@ -16,9 +16,13 @@
 
 import os
 import shutil
+from pathlib import Path
 from tempfile import mkdtemp
 from types import MappingProxyType
+from typing import Union
 from zipfile import ZIP_DEFLATED, ZipFile
+
+from pandas import DataFrame, read_csv
 
 from resokit.utils.utils import assert_module_imported
 
@@ -32,6 +36,9 @@ except ImportError:
 # =============================================================================
 # CONSTANTS
 # =============================================================================
+
+# Name for the ZIP archive
+ZIP_FILENAME = "datasets.zip"
 
 # EU dtypes
 _EU_MAPPING = {
@@ -134,7 +141,6 @@ _EU_MAPPING = {
     "star_magnetic_field": "object",
     "star_alternate_names": "object",
 }
-
 
 # Nasa dtypes
 _NASA_MAPPING = {
@@ -502,6 +508,82 @@ DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
 # =============================================================================
 
 
+def load_from_zip(
+    zip_path: Path,
+    file_name: str,
+    source: Union[str, None] = None,
+    skip_rows: Union[int, callable, None] = None,
+    usecols: Union[list, callable, None] = None,
+    verbose: bool = True,
+    custom_load: Union[callable, None] = None,
+) -> Union[DataFrame, any]:
+    """Load the dataset from a ZIP archive.
+
+    Reads the dataset from a ZIP archive and returns it as a pandas DataFrame.
+
+    Parameters
+    ----------
+    zip_path : Path
+        Full path to the ZIP archive.
+    file_name : str
+        Name of the file to load from the ZIP archive.
+    source : str, optional
+        Identifier for the data source ('eu' or 'nasa').
+        Used to define the dtypes of the dataset.
+        If not 'eu' or 'nasa', no dtypes are defined.
+    skip_rows : int, optional
+        Number of rows to skip.
+    usecols : list, optional
+        Columns to load.
+    verbose : bool, optional
+        If `True`, prints messages about the process.
+    custom_load : callable, optional
+        Custom function to load the data from the ZIP archive.
+        If provided, it is used instead of the default read_csv.
+        It neglects the skip_rows, usecols, and dtypes parameters.
+
+    Returns
+    -------
+    Union[pd.DataFrame, any]
+        data : pd.DataFrame
+            Loaded dataset as a pandas DataFrame.
+        data : any
+            Loaded data from the ZIP archive, if custom_load is provided.
+    """
+    # Check if the zip exists
+    if not zip_path.exists():
+        raise FileNotFoundError(f"ZIP archive {zip_path} not found.")
+
+    # Define the zip nameload_from_zip(
+    zip_name = zip_path.name  # Name of the ZIP archive
+
+    # Load the dataset from the ZIP archive
+    with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
+        if file_name in zipf.namelist():
+            if verbose:  # Print message if verbose
+                print(
+                    f" Loading {file_name} " + f"directly from {zip_name}..."
+                )
+            # Load directly from the .zip
+            dtypes = DATASET_DTYPES.get(source, None)
+            with zipf.open(file_name) as file:
+                if custom_load is not None:
+                    return custom_load(file)
+                data = read_csv(
+                    file,
+                    header=0,
+                    skiprows=skip_rows,
+                    usecols=usecols,
+                    dtype=dtypes,
+                )
+        else:
+            raise FileNotFoundError(
+                f"File {file_name} not found in {zip_name}."
+            )
+
+    return data
+
+
 def remove_from_zip(zipfname: str, *filenames: str, verbose: bool = False):
     """Remove files from a zip archive.
 
@@ -572,7 +654,8 @@ def request_dataset(
     chunk_size : int, optional
         Size of the chunks (in bytes) to download the data.
     print_size : float, optional. Default is 0.15
-        Update frequency (in MB) for the download progress bar.
+        Update frequency (in MB, or KB if <=0.001) for the
+        download progress bar.
         Used only if verbose is True. Useful for large downloads,
         to avoid IO overhead, especially in Jupyter notebooks.
 
@@ -584,12 +667,21 @@ def request_dataset(
     # Check if requests is imported
     assert_module_imported(requests_imported, "requests")
 
+    # Print message
     if verbose:
         print(f" Downloading data from {url}...")
 
+    # Check if the print size is in MB or KB
+    print_unit = "MB"
+    bytes_unit = 1e6
+    if print_size <= 0.001:
+        print_size *= 1e3
+        print_unit = "KB"
+        bytes_unit = 1e3
+
     # Check if Jupyter notebook is running
     if is_notebook() and verbose:
-        print(f" Note: Download progress is shown at every {print_size} MB")
+        print(f" Note: Progress is shown at every {print_size} {print_unit}")
 
     # Send a GET request with streaming enabled
     response = requests.get(url, stream=True)
@@ -604,19 +696,28 @@ def request_dataset(
     downloaded_size = 0
 
     # Iterate over the response content
-    imb = 0.0
+    increment = 0.0
     for chunk in response.iter_content(chunk_size=chunk_size):
         if chunk:  # Filter out keep-alive new chunks
             downloaded_data.extend(chunk)  # Append the chunk to the data
-            downloaded_size += len(chunk)  # Update the downloaded size
+            downloaded_size += len(
+                chunk
+            )  # Update the downloaded size (in bytes)
 
-            # Print the download progress (in MB)
-            if verbose and downloaded_size >= 1e6 * imb:
+            # Print the download progress (in MB or KB)
+            if verbose and downloaded_size >= bytes_unit * increment:
                 print(
-                    f" Downloaded: {downloaded_size / 1e6:.2f} MB",
+                    f" Downloaded: {downloaded_size / bytes_unit:.3f} "
+                    + f"{print_unit}",
                     end="\r",
                 )
-                imb += print_size
+                increment += print_size
+    # Check printed 0.0 MB
+    if verbose and downloaded_size <= 1e3 and print_unit == "MB":
+        print(
+            f" Downloaded: {downloaded_size / 1e3:.3f} KB",
+            end="\r",
+        )
 
     return bytes(
         downloaded_data
