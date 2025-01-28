@@ -34,7 +34,6 @@ from resokit.datasets.utils import (
 )
 from resokit.utils.utils import DEFAULT_METADATA, parse_to_iter
 
-
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -53,7 +52,6 @@ _ZIP_FILENAME = "datasets.zip"  # Name for the ZIP archive
 
 # Index columns for each dataset
 _INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
-
 
 # =============================================================================
 # CLASSES
@@ -297,7 +295,6 @@ class ResoKitDataset:
 # VARIABLES
 # =============================================================================
 
-
 # Store the datasets in memory
 _IN_MEMORY_INDEXES = {
     "eu": ResoKitDataset(
@@ -332,7 +329,6 @@ _IN_MEMORY_DATASETS = {
     ),
 }
 _IS_FULLY_STORED = {"eu": False, "nasa": False}
-
 
 # =============================================================================
 # FUNCTIONS

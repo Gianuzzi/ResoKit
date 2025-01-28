@@ -22,7 +22,7 @@ from io import StringIO
 # =============================================================================
 
 # Define the sources
-SOURCES = {
+_DATASET_URLS = {
     "p": "https://lesia.obspm.fr/perso/philippe-thebault/plan_circ.txt",
     "s": "https://lesia.obspm.fr/perso/philippe-thebault/plan_bin500au.txt",
 }
@@ -97,7 +97,3 @@ def read_multi_star(
 
     # Return the DataFrame
     return data
-
-
-# Call the function with the filename
-read_multi_star(circumbinary=True, inferr=False)

@@ -497,7 +497,6 @@ _NASA_MAPPING = {
 # Mapping of dataset names to their respective dtypes
 DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
 
-
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
