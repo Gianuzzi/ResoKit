@@ -26,7 +26,7 @@ from typing import Iterable, Tuple, Union
 from numpy import pi, sqrt
 
 from resokit import __version__ as version
-from resokit.units import G, M_JUP, M_SUN, AU, DAY
+from resokit.units import AU, DAY, G, M_JUP, M_SUN
 
 # =============================================================================
 # DEFAULTS

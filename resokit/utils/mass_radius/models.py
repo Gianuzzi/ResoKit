@@ -26,7 +26,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from resokit.units import M_EAR, R_EAR, Mj2Me, Ms2Me
+from resokit.units import M_EAR, Mj2Me, Ms2Me, R_EAR
 
 # =============================================================================
 # FUNCTIONS
