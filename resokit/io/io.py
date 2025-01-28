@@ -123,12 +123,13 @@ def _find_best_match(
     ratio : float
         Similarity ratio.
     """
+    # Edit (clean) the series
+    edited_series = raw_series.copy()  # Copy the series
+
     # Edit the names using _parse_system_name
     def my_parse(x):
         return _parse_system_name(x, force)
 
-    # Edit (clean) the series
-    edited_series = raw_series.copy()  # Copy the series
     edited_series = edited_series.astype(str).apply(my_parse)
     # Edit (clean) the name
     original_name = str(name)
