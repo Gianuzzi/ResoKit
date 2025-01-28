@@ -28,6 +28,17 @@ pl1 = sys1.planets[0]
 pl2 = sys1.planets[1]
 pl3 = sys1.planets[2]
 
+M1 = pl1.M[-200:]
+M2 = pl2.M[-200:]
+
+lam1 = pl1.lam[-200:]
+lam2 = pl2.lam[-200:]
+
+from tools import forgacs
+
+forgacs.plot_forgacs(M1, M2, lam1, lam2, s=.1,input_crossings=[1,4,1,3])
+
+
 n1n2 = sys1.Prat(0)
 n2n3 = sys1.Prat(1)
 
@@ -39,7 +50,8 @@ n2n3 = sys1.Prat(1)
 # plt.ylim(l1y,l2y)
 # plt.show()
 
-sys1.sepspace(which=[[0,1,4],[0,1,2]])
+plt.figure()
+sys1.sepspace(which=0)
 plt.legend()
 
 

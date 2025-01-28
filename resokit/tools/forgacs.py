@@ -289,12 +289,15 @@ def detect_2pmmr(M1,M2,lam1,lam2,verbose=True):
     else:
         return(res1,res2)
     
-def plot_forgacs(M1,M2,lam1,lam2,instructions=True,**scatter_kwargs):
+def plot_forgacs(M1,M2,lam1,lam2,instructions=True,input_crossings=False,**scatter_kwargs):
     """
     Plots the relevant plots to find the intervening 2-planet mean-motion
     resonance (MMR), as per the process described in Forgacs-Dajka et al. 
     (2018).
-
+    
+    Use the 'input_crossings' parameter to input the crossings as seen in the
+    plots by the user, and get the results of the method.
+    
     Parameters
     ----------
     M1, M2 : array-like
@@ -304,6 +307,11 @@ def plot_forgacs(M1,M2,lam1,lam2,instructions=True,**scatter_kwargs):
     instructions : bool, optional
         Print instructions explaining how to use the x- and y-crossings to
         calculate the 2-planet MMR. The default is True.
+    input_crossings : bool or list, optional
+        List of crossings in the x and y axes, and also of the left and right
+        plot, as in [x1,y1,x2,y2]. E.g, if we see one crossing per x-axis,
+        and two crossings per y-axis, then input_crossings = [1,2,1,2].
+        Use the number 0 if you can't find a crossing for a given axis.
     **scatter_kwargs : dict, optional
         Additional keyword arguments to pass to the scatter plot.
 
@@ -322,18 +330,38 @@ def plot_forgacs(M1,M2,lam1,lam2,instructions=True,**scatter_kwargs):
     axs[0].set_xlim(0,360)
     axs[0].set_ylim(0,360)
     
-    axs[1].scatter(M1,lam2-lam1,**scatter_kwargs)
-    axs[1].set_xlabel(r'$M_1$')
+    axs[1].scatter(M2,lam2-lam1,**scatter_kwargs)
+    axs[1].set_xlabel(r'$M_2$')
     axs[1].set_ylabel(r'$\lambda_2-\lambda_1$')
     axs[1].set_title(r'$\sigma_2=\varphi(\lambda_1,\lambda_2) + q\ \varpi_2$')
     axs[1].set_xlim(0,360)
     axs[1].set_ylim(0,360)
     plt.show()
     
-    print('Instructions for a (p+q)/p mean-motion resonance:')
-    print('')
-    print('        Resonant angle         |  x-crossings  |  y-crossings')
-    print('-------------------------------------------------------------')
-    print('p lam1 - (p+q) lam2 + q vp1    |       q       |     p + q')
-    print('p lam1 - (p+q) lam2 + q vp2    |       q       |       p')
+    if instructions:
+        print('Instructions for a (p+q)/p mean-motion resonance:')
+        print('')
+        print('        Resonant angle         |  x-crossings  |  y-crossings')
+        print('-------------------------------------------------------------')
+        print('p lam1 - (p+q) lam2 + q vp1    |       q       |     p + q')
+        print('p lam1 - (p+q) lam2 + q vp2    |       q       |       p')
+        
+    if input_crossings:
+        q1,pq1,q2,p2 = input_crossings
+        res1,res2 = 0,0
+        if 0 not in [q1,pq1]:
+            p1 = pq1 - q1
+            res1 = (pq1,p1)
+        if 0 not in [q1,p2]:
+            pq2 = p2 + q2
+            res2 = (pq2,p2)
+        res = res1 if res1!=(0,0) else None
+        res1state = 'circ' if res1==(0,0) else 'lib'
+        res2state = 'circ' if res2==(0,0) else 'lib'
+        print('\n\n')
+        print(f'2P-MMR found  -->  {res}')
+        print('-----------------------')
+        print(f'fi + q*vp1    -->  {res1state}')
+        print(f'fi + q*vp2    -->  {res2state}')
+        print('-----------------------')
     return
