@@ -2727,6 +2727,9 @@ class StaticBinarySystem:
             member_validator=attrs.validators.instance_of(StaticPlanet)
         )
     )
+    circumbinary: bool = attrs.field(
+        validator=attrs.validators.instance_of(bool)
+    )
     name: str = attrs.field(
         validator=attrs.validators.instance_of(str), default="unnamed"
     )
@@ -2754,6 +2757,7 @@ class StaticBinarySystem:
         return StaticBinarySystem(
             binary_star=self.binary_star.copy(),
             planets=[planet.copy() for planet in self.planets],
+            circumbinary=self.circumbinary,
             name=self.name,
             metadata=self.metadata,
         )
