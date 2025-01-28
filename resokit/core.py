@@ -46,7 +46,7 @@ from resokit.utils.utils import (
 )
 
 # =============================================================================
-# CLASSES
+# BASE CLASSES
 # =============================================================================
 
 
@@ -185,30 +185,35 @@ class ResokitDataFrame:
         """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
         return getattr(self.data_df, a)
 
-    def __repr__(self):
+    def __repr__(self, prefoot=None):
         """repr(x) <=> x.__repr__()."""
         with pd.option_context("display.show_dimensions", False):
             df_body = repr(self.data_df).splitlines()
 
-        if self.n_objects_ > 1:
-            sdf_dim = f"{self.n_objects_} rows x {self.n_columns_} columns"
-            fotter = f"\nResokitDataFrame - {sdf_dim}"
-        else:
-            sdf_dim = f"1 row x {self.n_columns_} columns"
-            fotter = f"\nResokitSeries - {sdf_dim}"
+        rows = f"{self.n_objects_} row{'s' if self.n_objects_ > 1 else ''}"
+        columns = f"{self.n_columns_} columns"
+        if prefoot is None:
+            prefoot = f"\n{type(self).__name__}"
+        footer = f"{prefoot} - {rows} x {columns}"
 
-        resokit_data_repr = "\n".join(df_body + [fotter])
+        resokit_data_repr = "\n".join(df_body + [footer])
 
         return resokit_data_repr
 
-    def _repr_html_(self):
+    def _repr_html_(self, ad_id=None, prefoot=None, switch=False):
         """Return a HTML representation of the DataFrame."""
-        ad_id = id(self)
+        if ad_id is None:
+            ad_id = id(self)
 
-        rows = f"{self.n_objects_} row{'s' if self.n_objects_ > 1 else ''}"
-        columns = f"{self.n_columns_} columns"
-        footer = "ResokitDataFrame" if self.n_objects_ > 1 else "ResokitSeries"
-        footer = footer + f" - {rows} x {columns}"
+        if switch:
+            r = f"{self.n_objects_} column{'s' if self.n_objects_ > 1 else ''}"
+            c = f"{self.n_columns_} row{'s' if self.n_columns_ > 1 else ''}"
+        else:
+            r = f"{self.n_objects_} row{'s' if self.n_objects_ > 1 else ''}"
+            c = f"{self.n_columns_} column{'s' if self.n_columns_ > 1 else ''}"
+        if prefoot is None:
+            prefoot = f"\n{type(self).__name__}"
+        footer = f"{prefoot} - {r} x {c}"
 
         with pd.option_context("display.show_dimensions", False):
             if self.n_objects_ > 1:  # It is a DataFrame
@@ -376,6 +381,11 @@ class ResokitDataFrame:
         )
 
 
+# =============================================================================
+# BASE FUNCTIONS
+# =============================================================================
+
+
 def df_to_resokit(
     df: pd.DataFrame,
     source: str,
@@ -383,6 +393,7 @@ def df_to_resokit(
     copy: bool = False,
     sort_by: Union[str, bool] = "P",
     return_df: bool = False,
+    rename_index: bool = True,
     metadata: dict = None,
 ) -> ResokitDataFrame:
     """Convert ExoplanetEU or NASA data to :py:class:`ResokitDataFrame`.
@@ -410,6 +421,8 @@ def df_to_resokit(
     return_df : bool, optional. Default: False.
         Whether to return the a pandas Data frame instead of the
         :py:class:`ResokitDataFrame`.
+    rename_index : bool, optional. Default: True.
+        Whether to rename the index column to "name" of the object/body.
     metadata : dict, optional. Default: None.
         Metadata to be added to the :py:class:`ResokitDataFrame`.
 
@@ -458,6 +471,11 @@ def df_to_resokit(
             sort_by = "P"
         df = df.sort_values(by=sort_by, ascending=True)
 
+    # Rename index if needed
+    if rename_index and "name" in df.columns:
+        df.reset_index(drop=True, inplace=True)
+        df.set_index("name", inplace=True, drop=False)
+
     # Return DataFrame if needed
     if return_df:
         return df
@@ -467,6 +485,11 @@ def df_to_resokit(
         metadata = dict(DEFAULT_METADATA)
 
     return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
+
+
+# =============================================================================
+# STATIC CLASSES
+# =============================================================================
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
@@ -578,29 +601,24 @@ class StaticPlanet(ResokitDataFrame):
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        return (
-            f"StaticPlanet [{self.data_df['name']}]"
-            + f" from {self.source} data source."
-            if not self.user_defined_
-            else "user defined."
-        )
+        text = f"StaticPlanet [{self.name}]"
+        if not self.user_defined_:
+            text += f" from {self.source} data source"
+        else:
+            text += " user defined"
+
+        return text
 
     def _repr_html_(self):
         """Return a HTML representation of the StaticPlanet."""
         ad_id = id(self)
+        prefoot = f"StaticPlanet [{self.name}]"
+        if not self.user_defined_:
+            prefoot += f" from {self.source} data source"
+        else:
+            prefoot += " user defined"
 
-        # footer = f"ResokitSeries - 1 row x {self.n_columns_} columns"
-        repre = self.__repr__()
-
-        parts = [
-            f'<div class="resokit-data-container" id={ad_id}>',
-            repre,
-            "</div>",
-        ]
-
-        html = "".join(parts)
-
-        return html
+        return super()._repr_html_(ad_id=ad_id, prefoot=prefoot, switch=True)
 
     def get_item(
         self,
@@ -918,11 +936,24 @@ class StaticStar(ResokitDataFrame):
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        return (
-            f"StaticStar [{self.name}]" + f" from {self.source} data source."
-            if not self.user_defined_
-            else "user defined."
-        )
+        text = f"StaticStar [{self.name}]"
+        if not self.user_defined_:
+            text += f" from {self.source} data source"
+        else:
+            text += " user defined"
+
+        return text
+
+    def _repr_html_(self):
+        """Return a HTML representation of the StaticStar."""
+        ad_id = id(self)
+        prefoot = f"StaticStar [{self.name}]"
+        if not self.user_defined_:
+            prefoot += f" from {self.source} data source"
+        else:
+            prefoot += " user defined"
+
+        return super()._repr_html_(ad_id=ad_id, prefoot=prefoot, switch=True)
 
     def plot(
         self,
@@ -2319,7 +2350,7 @@ class StaticSystem:
 
 
 # =============================================================================
-# NEW FUNCTIONS
+# FUNCTIONS
 # =============================================================================
 
 
@@ -2475,6 +2506,11 @@ def resokit_to_system(
 
     # Redefine star columns to avoid "star_"
     star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
+    # EXTRA: Check if the df name is number (idx from db) or a name
+    # If it's not a number, then the name is one of the planets names,
+    # and we must change it to the star name
+    if not str(star_df.name).isnumeric():
+        star_df.name = star_df["name"]
 
     # Create star
     star = _create_static_star(
@@ -2512,3 +2548,156 @@ def resokit_to_system(
         name=star.name,
         metadata=resokit_data.metadata,
     )
+
+
+# =============================================================================
+# NEW STATIC CLASSES (TBD)
+# =============================================================================
+
+
+@attrs.define(repr=False, frozen=True, slots=True)
+class StaticBinaryStar:
+    """StaticBinaryStar class.
+
+    Attributes
+    ----------
+    star1 : StaticStar
+        StaticStar instance for the primary star.
+    star2 : StaticStar
+        StaticStar instance for the secondary star.
+    name : str, optional. Default: 'unnamed'.
+        Name of the binary system.
+    alternative_name : str, optional. Default: 'unknown'.
+        Alternative name of the binary system.
+    detection_method : str, optional. Default: 'unknown'.
+        Detection method of the binary system.
+    distance : float, optional. Default: 0.0.
+        Distance to the binary system, in parsecs.
+    known_orbit : bool, optional. Default: False.
+        Whether the orbit is known.
+    a : float, optional. Default: 0.0.
+        Semi-major axis of the binary system, in AU.
+    e : float, optional. Default: 0.0.
+        Eccentricity of the binary system.
+    imut : float, optional. Default: 0.0.
+        Inclination of the mutual orbit, in degrees.
+    n_planets : int, optional. Default: 0.
+        Number of planets in the binary system.
+    metadata : dict, optional. Default: {}.
+        Metadata of the dataset.
+    """
+
+    star1: StaticStar = attrs.field(
+        validator=attrs.validators.instance_of(StaticStar)
+    )
+    star2: StaticStar = attrs.field(
+        validator=attrs.validators.instance_of(StaticStar)
+    )
+    name: str = attrs.field(
+        validator=attrs.validators.instance_of(str), default="unnamed"
+    )
+    alternative_name: str = attrs.field(
+        validator=attrs.validators.instance_of(str), default="unknown"
+    )
+    detection_method: str = attrs.field(
+        validator=attrs.validators.instance_of(str), default="unknown"
+    )
+    distance: float = attrs.field(
+        validator=attrs.validators.instance_of(float), default=0.0
+    )
+    known_orbit: bool = attrs.field(
+        validator=attrs.validators.instance_of(bool), default=False
+    )
+    a: float = attrs.field(
+        validator=attrs.validators.instance_of(float), default=0.0
+    )
+    e: float = attrs.field(
+        validator=attrs.validators.instance_of(float), default=0.0
+    )
+    imut: float = attrs.field(
+        validator=attrs.validators.instance_of(float), default=0.0
+    )
+    n_planets: int = attrs.field(
+        validator=attrs.validators.instance_of(int), default=0
+    )
+    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    def __attrs_post_init__(self):
+        """Post-init method."""
+        pass
+
+    def __repr__(self):
+        """Return a string representation of the StaticBinaryStar."""
+        return (
+            f"StaticBinaryStar(star1={self.star1}, star2={self.star2}, "
+            + f"name='{self.name}', metadata={self.metadata})"
+        )
+
+    def to_dict(self) -> dict:
+        """Return the metadata as a new dictionary."""
+        return dict(self.metadata)
+
+    def copy(self) -> "StaticBinaryStar":
+        """Return a copy of the :py:class:`StaticBinaryStar`."""
+        return StaticBinaryStar(
+            star1=self.star1.copy(),
+            star2=self.star2.copy(),
+            name=self.name,
+            metadata=self.metadata,
+        )
+
+
+@attrs.define(repr=False, frozen=True, slots=True)
+class StaticBinarySystem:
+    """StaticBinarySystem class.
+
+    Attributes
+    ----------
+    binary_star : StaticBinaryStar
+        StaticBinaryStar instance for the binary system.
+    planets : list, tuple, StaticPlanet
+        List of StaticPlanet instances.
+    name : str, optional. Default: 'unnamed'.
+        Name of the system.
+    metadata : dict, optional. Default: {}.
+        Metadata of the dataset.
+    """
+
+    binary_star: StaticBinaryStar = attrs.field(
+        validator=attrs.validators.instance_of(StaticBinaryStar)
+    )
+    planets: List[StaticPlanet] = attrs.field(
+        validator=attrs.validators.deep_iterable(
+            member_validator=attrs.validators.instance_of(StaticPlanet)
+        )
+    )
+    name: str = attrs.field(
+        validator=attrs.validators.instance_of(str), default="unnamed"
+    )
+    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    def __attrs_post_init__(self):
+        """Post-init method."""
+        pass
+
+    def __repr__(self):
+        """Return a string representation of the StaticBinarySystem."""
+        return (
+            f"StaticBinarySystem(binary_star={self.binary_star}, "
+            + f"planets={self.planets}, "
+            + f"name='{self.name}', "
+            + f"metadata={self.metadata})"
+        )
+
+    def to_dict(self) -> dict:
+        """Return the metadata as a new dictionary."""
+        return dict(self.metadata)
+
+    def copy(self) -> "StaticBinarySystem":
+        """Return a copy of the :py:class:`StaticBinarySystem`."""
+        return StaticBinarySystem(
+            binary_star=self.binary_star.copy(),
+            planets=[planet.copy() for planet in self.planets],
+            name=self.name,
+            metadata=self.metadata,
+        )
