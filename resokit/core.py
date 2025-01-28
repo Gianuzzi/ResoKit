@@ -29,7 +29,7 @@ from numpy import isnan, pi, sqrt
 
 import pandas as pd
 
-from resokit.units import Mj2Me, Me2Mj, Re2Rj, Rj2Re
+from resokit.units import Me2Mj, Mj2Me, Re2Rj, Rj2Re
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.utils import (
     DEFAULT_METADATA,
@@ -108,7 +108,7 @@ class ResokitDataFrame:
         converter=lambda df: df.squeeze(),  # Convert to Series if possible
     )
     source: str = attrs.field(
-        validator=attrs.validators.in_({"eu", "nasa", "user"}),
+        validator=attrs.validators.in_({"eu", "nasa", "binary", "user"}),
         converter=str.lower,  # Convert to lowercase
     )
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
@@ -883,7 +883,7 @@ class StaticStar(ResokitDataFrame):
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
-        return self.source not in ["eu", "nasa"]
+        return self.source not in ["eu", "nasa", "binary"]
 
     @web_page.default
     def _web_page_default(self):
@@ -912,7 +912,10 @@ class StaticStar(ResokitDataFrame):
                 col.replace("star_", "") for col in RESO_SR_TYPES.keys()
             }
             for col in self.data_df.index:
-                if col not in aux_cols | RESO_OB_TYPES.keys():
+                if (
+                    col not in aux_cols | RESO_OB_TYPES.keys()
+                    and self.source != "binary"
+                ):
                     warnings.warn(
                         "Found columns not in the default star mapping.",
                         stacklevel=2,
@@ -1087,7 +1090,7 @@ class StaticSystem:
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
-        return self.source_ not in ["eu", "nasa"]
+        return self.source_ not in ["eu", "nasa", "binary"]
 
     @planet_names_.default
     def _planet_names__default(self):
@@ -2593,55 +2596,107 @@ class StaticBinaryStar:
     star2: StaticStar = attrs.field(
         validator=attrs.validators.instance_of(StaticStar)
     )
+    binary_df: Union[pd.DataFrame, pd.Series] = attrs.field(
+        validator=attrs.validators.instance_of((pd.DataFrame, pd.Series)),
+        converter=lambda df: df.squeeze(),  # Convert to Series if possible
+    )
     name: str = attrs.field(
         validator=attrs.validators.instance_of(str), default="unnamed"
     )
-    alternative_name: str = attrs.field(
-        validator=attrs.validators.instance_of(str), default="unknown"
-    )
-    detection_method: str = attrs.field(
-        validator=attrs.validators.instance_of(str), default="unknown"
-    )
-    distance: float = attrs.field(
-        validator=attrs.validators.instance_of(float), default=0.0
-    )
-    known_orbit: bool = attrs.field(
-        validator=attrs.validators.instance_of(bool), default=False
-    )
-    a: float = attrs.field(
-        validator=attrs.validators.instance_of(float), default=0.0
-    )
-    e: float = attrs.field(
-        validator=attrs.validators.instance_of(float), default=0.0
-    )
-    imut: float = attrs.field(
-        validator=attrs.validators.instance_of(float), default=0.0
-    )
-    n_planets: int = attrs.field(
-        validator=attrs.validators.instance_of(int), default=0
-    )
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    source_: str = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
+
+    @source_.default
+    def _source__default(self):
+        """Set the default value for source_."""
+        main_source = self.star1.source
+
+        return main_source if main_source == self.star2.source else "user"
+
+    @user_defined_.default
+    def _user_defined__default(self):
+        """Set the default value for user_defined_."""
+        return self.source_ != "binary"
 
     def __attrs_post_init__(self):
         """Post-init method."""
         pass
 
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return 2
+
+    def __getitem__(self, key):
+        """x[y] <==> x.__getitem__(y)."""
+        return self.binary_df.__getitem__(key)
+
+    def __dir__(self):
+        """dir(pdf) <==> pdf.__dir__()."""
+        return super().__dir__() + dir(self.binary_df)
+
+    def __getattr__(self, a):
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        return getattr(self.binary_df, a)
+
     def __repr__(self):
-        """Return a string representation of the StaticBinaryStar."""
+        """repr(x) <=> x.__repr__()."""
+        star1 = "\n Star 1:\n  " + f"{self.star1.name}"
+        star2 = "\n Star 2:\n  " + f"{self.star2.name}"
+
         return (
-            f"StaticBinaryStar(star1={self.star1}, star2={self.star2}, "
-            + f"name='{self.name}', metadata={self.metadata})"
+            "StaticBinaryStar: "
+            + f"{star1} "
+            + f"{star2}"
+            + "\n"
+            + " from binary data source."
+            if not self.user_defined_
+            else ""
         )
+
+    def _repr_html_(self):
+        """Return a HTML representation of the DataFrame."""
+        if self.binary_df.empty:
+            return self.__repr__()
+
+        ad_id = id(self)
+
+        header = f" StaticBinaryStar: {self.name}"
+        +f"[{self.star1.name} - {self.star2.name}]"
+        footer = "Binary data"
+        if not self.user_defined_:
+            footer += " from binary data source."
+
+        with pd.option_context("display.show_dimensions", False):
+            df_html = self.binary_df.to_frame()._repr_html_()
+
+        parts = [
+            f'<div class="resokit-data-container" id={ad_id}>',
+            header,
+            df_html,
+            footer,
+            "</div>",
+        ]
+
+        html = "".join(parts)
+
+        return html
 
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
         return dict(self.metadata)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Return the binary data as a new DataFrame."""
+        return self.binary_df.to_frame(name=self.name)
 
     def copy(self) -> "StaticBinaryStar":
         """Return a copy of the :py:class:`StaticBinaryStar`."""
         return StaticBinaryStar(
             star1=self.star1.copy(),
             star2=self.star2.copy(),
+            binary_df=self.binary_df.copy(deep=True),
             name=self.name,
             metadata=self.metadata,
         )
