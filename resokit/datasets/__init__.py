@@ -27,7 +27,7 @@ from .databases import update_eu  # noqa
 from .databases import update_nasa  # noqa
 from .data_multi import download_binary  # noqa
 from .data_multi import load_binary  # noqa
-from .data_multi import read_binary  # noqa
+from .data_multi import load_from_binary  # noqa
 
 # Make the functions available at the package level
 
@@ -35,10 +35,10 @@ __all__ = [
     "clear_memory",
     "download",
     "download_binary",
+    "load_from_binary",
     "load_binary",
     "load_eu",
     "load_nasa",
     "update_eu",
     "update_nasa",
-    "read_binary",
 ]

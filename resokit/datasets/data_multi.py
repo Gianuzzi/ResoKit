@@ -16,6 +16,7 @@
 
 import os
 from io import StringIO, TextIOWrapper
+from itertools import product
 from pathlib import Path
 from typing import BinaryIO, Callable, List, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -120,7 +121,7 @@ def _extract_header_and_data(
     return header, data
 
 
-def read_binary(
+def load_binary(
     circumbinary: bool = False,
     inferr: bool = False,
     ret_header: bool = False,
@@ -129,6 +130,7 @@ def read_binary(
     from_file: Union[str, bool] = True,
     dir_path: Union[str, Path, bool] = True,
     rename_columns: bool = True,
+    clean: bool = True,
     verbose: bool = True,
 ) -> Union[pd.DataFrame, str]:
     """Read the provided multi-star system dataset.
@@ -162,7 +164,10 @@ def read_binary(
     dir_path : str, Path or bool, optional. Default: True.
         Directory path to load the dataset from.
         If `True` or `None` the default directory is used. (resokit.datasets)
-
+    rename_columns : bool, optional. Default is True.
+        If True, rename the columns for human readability.
+    clean : bool, optional. Default is True.
+        If True, replace the unknown values with NaN.
     verbose : bool, optional. Default is False.
         If True, print the header and messages.
 
@@ -173,6 +178,9 @@ def read_binary(
             The header of the dataset.
         data : pd.DataFrame if ret_header is False.
     """
+    # Assert the circumbinary parameter
+    if not isinstance(circumbinary, bool):
+        raise TypeError("circumbinary must be a boolean.")
     # Define the filename based on the circumbinary parameter
     letter = "p" if circumbinary else "s"
 
@@ -256,6 +264,11 @@ def read_binary(
     if verbose:
         print(f"Stored the type-{letter} dataset and header into memory.")
 
+    # Clean data
+    if clean:
+        data.loc[data[7] > 98, 7] = pd.NA  # eccentricity
+        data.loc[data[13] > 998, 13] = pd.NA  # imutual
+
     # Rename columns
     if rename_columns:
         data.columns = _BINARIES_COLUMNS
@@ -277,7 +290,7 @@ def download_binary(
     overwrite: bool = False,
     verbose: bool = True,
     chunk_size: int = 1024,
-    print_size: float = 0.0005,
+    print_size: float = 0.00001,
 ) -> Union[Path, pd.DataFrame, None]:
     """Download a dataset from a specified source and save it locally.
 
@@ -460,7 +473,7 @@ def download_binary(
     return
 
 
-def _create_static_binary_star(
+def _create_static_binary_star_from_binary(
     binary_row: pd.Series,
     source="user",
     metadata=None,
@@ -535,7 +548,7 @@ def _create_static_binary_star(
     )
 
 
-def load_binary(
+def load_from_binary(
     name: str, soft: bool = True, as_pandas: bool = False, verbose: bool = True
 ) -> StaticBinaryStar:
     """Load a binary star system from the dataset.
@@ -558,12 +571,18 @@ def load_binary(
         The loaded binary star system.
     """
     # Load the datasets
-    datas = read_binary(circumbinary=False, verbose=verbose)
-    datap = read_binary(circumbinary=True, verbose=verbose)
+    datas = load_binary(
+        circumbinary=False, verbose=verbose, rename_columns=True, clean=True
+    )
+    datap = load_binary(
+        circumbinary=True, verbose=verbose, rename_columns=True, clean=True
+    )
 
     # Find the row with the given name. It can be in either dataset,
     # so we try both. It can be in the star1_name or alternate_name columns.
-    for dataset, col in zip([datas, datap], ["star1_name", "alternate_name"]):
+    for dataset, col in product(
+        [datas, datap], ["star1_name", "alternate_name"]
+    ):
         row = dataset[dataset[col] == name]
         if not row.empty:
             # Which dataset was it? circumbinary means it was in datap
@@ -594,7 +613,7 @@ def load_binary(
     metadata["circumbinary"] = circumbinary
 
     # Define the star system
-    binary = _create_static_binary_star(
+    binary = _create_static_binary_star_from_binary(
         row, source="binary", metadata=metadata
     )
 

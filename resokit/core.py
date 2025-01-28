@@ -98,7 +98,7 @@ class ResokitDataFrame:
     data_df : pd.DataFrame or pd.Series
         DataFrame containing the data.
     source : str
-        Source of the dataset. Either 'eu' or 'nasa' or 'user'.
+        Source of the dataset. Either 'eu' or 'nasa' or 'binary' or 'user'.
     metadata : dict
         Metadata of the dataset.
     """
@@ -857,7 +857,7 @@ class StaticStar(ResokitDataFrame):
     data_df : pd.Series
         Series containing the data.
     source : str
-        Source of the dataset. Either 'eu' or 'nasa' or 'user'.
+        Source of the dataset. Either 'eu' or 'nasa' or 'binary' or 'user'.
     metadata : dict
         Metadata of the dataset.
     name : str
@@ -2702,6 +2702,7 @@ class StaticBinaryStar:
         )
 
 
+# Unluckily (for me), this class is extremely similar to StaticSystem
 @attrs.define(repr=False, frozen=True, slots=True)
 class StaticBinarySystem:
     """StaticBinarySystem class.
