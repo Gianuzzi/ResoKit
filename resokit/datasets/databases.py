@@ -34,7 +34,7 @@ from resokit.datasets.utils import (
     remove_from_zip,
     request_dataset,
 )
-from resokit.utils.utils import DEFAULT_METADATA, parse_to_iter
+from resokit.utils.utils import DEFAULT_METADATA, parse_name, parse_to_iter
 
 # =============================================================================
 # CONSTANTS
@@ -331,6 +331,12 @@ _IN_MEMORY_DATASETS = {
 }
 _IS_FULLY_STORED = {"eu": False, "nasa": False}
 
+# Store parsed indexes for even faster lookup
+_IN_MEMORY_PARSED_INDEXES = {
+    "eu": None,
+    "nasa": None,
+}
+
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
@@ -480,7 +486,7 @@ def _update_stored_dataset(
         # Get the index columns
         new_index = new_df[_INDEX_COLUMNS[source]].copy()
 
-        # Update the index
+        # Update the index. ONLY IF FULL READED THE INDEX
         _IN_MEMORY_INDEXES[source] = df_to_dataset(
             new_index,
             source=source,
@@ -490,6 +496,19 @@ def _update_stored_dataset(
             metadata=metadata,
             copy=True,
             as_resokit=False,
+        )
+
+        # Silently, parse and store the index
+        _IN_MEMORY_PARSED_INDEXES[source] = new_index.astype(str)
+        _IN_MEMORY_PARSED_INDEXES[source][_INDEX_COLUMNS[source][0]] = (
+            _IN_MEMORY_PARSED_INDEXES[source][_INDEX_COLUMNS[source][0]].apply(
+                parse_name
+            )
+        )
+        _IN_MEMORY_PARSED_INDEXES[source][_INDEX_COLUMNS[source][1]] = (
+            _IN_MEMORY_PARSED_INDEXES[source][_INDEX_COLUMNS[source][1]].apply(
+                parse_name, force=True
+            )
         )
 
         if verbose:
@@ -1324,6 +1343,9 @@ def load_full(
         used by ResoKit.
     only_index : bool, optional. Default: False.
         If `True`, loads only the index columns.
+        If `p` or a string starting with "p", loads the parsed index
+        columns. Only compatible with `from_memory=True`. If not previously
+        stored, `None` is returned.
     only_rows : list|int, optional. Default: [].
         If provided, loads only the specified rows.
         Remember that python is 0-indexed, so
@@ -1492,6 +1514,16 @@ def load_full(
 
     # Check if the index columns are already stored in memory
     if only_index and from_memory:
+        # Check if parsed requested
+        if isinstance(only_index, str) and only_index.lower()[0] == "p":
+            data = _IN_MEMORY_PARSED_INDEXES[source]
+            if data is None and verbose:
+                print(" Parsed index not stored.")
+            elif data is not None and verbose:
+                print(
+                    " Loaded parsed index columns from memory stored dataset."
+                )
+            return data
         data = _load_stored_index(source, to_df=to_df, to_resokit=to_resokit)
         if not data.empty:
             if verbose:
@@ -1651,6 +1683,7 @@ def clear_memory(source: str, verbose: bool = True) -> None:
             _IN_MEMORY_INDEXES[key] = _mk_empty_dataset(key)
             _IN_MEMORY_DATASETS[key] = _mk_empty_dataset(key)
             _IS_FULLY_STORED[key] = False
+            _IN_MEMORY_PARSED_INDEXES[source] = None
             if verbose:
                 print(f" Cleared memory for source: {key}")
         return
@@ -1662,6 +1695,7 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     _IN_MEMORY_INDEXES[source] = _mk_empty_dataset(source)
     _IN_MEMORY_DATASETS[source] = _mk_empty_dataset(source)
     _IS_FULLY_STORED[source] = False  # Reset the fully stored flag
+    _IN_MEMORY_PARSED_INDEXES[source] = None
 
     if verbose:
         print(f" Cleared memory for source: {source}")

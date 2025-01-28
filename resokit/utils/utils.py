@@ -443,6 +443,50 @@ def parse_to_iter(value: any, to: type = list) -> Iterable:
     return value
 
 
+def parse_name(name: str, force: bool = False) -> str:
+    """Parse a name to a more versatile format.
+
+    Steps:
+    1) The trailing whitespaces are removed.
+    2) The trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
+    are removed.
+    2.5) If force is `True`, removes (AB) from the middle of the name.
+    3) The name is converted to lowercase.
+    4) All whitespaces and hyphens are removed.
+
+    Parameters
+    ----------
+    name : str
+        Object name.
+
+    Returns
+    -------
+    str
+        Name in a more versatile format.
+    """
+    # Remove the trailing whitespaces
+    name = name.strip()
+
+    # Remove the trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
+    # Only if it is at the end of the name
+    if name.endswith(" A") or name.endswith(" B") or name.endswith(" AB"):
+        name = name[:-2]
+    elif name.endswith("(AB)") or name.endswith(" (AB)"):
+        name = name[:-4]
+
+    # Remove (AB) from the middle of the name
+    if force:
+        name = name.replace("(AB)", "")
+
+    # Convert the name to lowercase
+    name = name.lower()
+
+    # Remove all whitespaces and hyphens
+    name = name.replace(" ", "").replace("-", "")
+
+    return name
+
+
 # Below are the functions used in ResokitPlanet (and ResokitSystem) class, but
 # could also be used by the user. They are not part of the public API, but they
 # are still useful for the user.

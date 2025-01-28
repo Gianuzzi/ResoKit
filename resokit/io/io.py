@@ -29,7 +29,7 @@ from resokit.core import (
     resokit_to_system,
 )
 from resokit.datasets.databases import load_full
-from resokit.utils.utils import DEFAULT_METADATA
+from resokit.utils.utils import DEFAULT_METADATA, parse_name
 
 # =============================================================================
 # CONSTANTS
@@ -56,52 +56,8 @@ def _n_close(a: any, b: str, length: int, n=0) -> bool:
     )
 
 
-def _parse_system_name(name: str, force: bool = False) -> str:
-    """Parse a name to a more versatile format.
-
-    Steps:
-    1) The trailing whitespaces are removed.
-    2) The trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
-    are removed.
-    2.5) If force is `True`, removes (AB) from the middle of the name.
-    3) The name is converted to lowercase.
-    4) All whitespaces and hyphens are removed.
-
-    Parameters
-    ----------
-    name : str
-        Object name.
-
-    Returns
-    -------
-    str
-        Name in a more versatile format.
-    """
-    # Remove the trailing whitespaces
-    name = name.strip()
-
-    # Remove the trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
-    # Only if it is at the end of the name
-    if name.endswith(" A") or name.endswith(" B") or name.endswith(" AB"):
-        name = name[:-2]
-    elif name.endswith("(AB)") or name.endswith(" (AB)"):
-        name = name[:-4]
-
-    # Remove (AB) from the middle of the name
-    if force:
-        name = name.replace("(AB)", "")
-
-    # Convert the name to lowercase
-    name = name.lower()
-
-    # Remove all whitespaces and hyphens
-    name = name.replace(" ", "").replace("-", "")
-
-    return name
-
-
 def _find_best_match(
-    raw_series: pd.Series, name: str, force: bool = False
+    raw_series: pd.Series, name: str, parse: bool = True, force: bool = False
 ) -> Tuple[pd.Index, pd.Series, float]:
     """Find the best match for a name in a series.
 
@@ -111,6 +67,10 @@ def _find_best_match(
         Series to search in.
     name : str
         Name to search for.
+    parse : bool, optional. Default: True.
+        Whether to parse the raw_series and name.
+        If `False`, the raw_series and name are not parsed.
+        If `None`, the raw_series is not parsed, but the name is.
     force : bool, optional. Default: False.
         Whether to force the removal of trailing letters.
 
@@ -126,14 +86,18 @@ def _find_best_match(
     # Edit (clean) the series
     edited_series = raw_series.copy()  # Copy the series
 
-    # Edit the names using _parse_system_name
-    def my_parse(x):
-        return _parse_system_name(x, force)
+    # Parse the series?
+    if parse is not None and parse:
+        edited_series = edited_series.astype(str).apply(
+            parse_name, force=force
+        )
 
-    edited_series = edited_series.astype(str).apply(my_parse)
     # Edit (clean) the name
     original_name = str(name)
-    name = _parse_system_name(name, force)
+
+    # Parse the name?
+    if parse is None or parse:
+        name = parse_name(name, force)
 
     exact_matches = edited_series[edited_series == name]
     if not exact_matches.empty:
@@ -227,16 +191,21 @@ def _search_system_index(
     else:
         column = "alternate_names" if is_planet else "star_alternate_names"
 
+    # Define parsing
+    parse = True
     # Load the dataset if not in memory
     if not alternative_names:
-        raw_series = (
-            raw_df
-            if raw_df is not None
-            else load_full(
+        parsed = load_full(source=source, only_index="parsed", verbose=False)
+        if raw_df is not None:
+            raw_series = raw_df
+        elif parsed is not None:
+            parse = None
+            raw_series = parsed
+        else:
+            raw_series = load_full(
                 source=source,
                 **load_extra_kwargs,
-            )
-        )
+            )  # Will be stored and parsed next time
         raw_series = raw_series[column]  # Get the column
     else:
         load_extra_kwargs.update(
@@ -254,8 +223,26 @@ def _search_system_index(
         raw_series = raw_series[column].str.split(", ").explode()
 
     # Use the new function
-    index, values, ratio = _find_best_match(raw_series, name, force=is_planet)
-    return index, values, ratio
+    index, values, ratio = _find_best_match(
+        raw_series, name=name, parse=parse, force=is_planet
+    )
+
+    # If parse, return originals
+    if parse is not None:
+        return index, values, ratio
+
+    # If parse is None, then we have to get back the original values
+    original_values = (
+        load_full(source=source, only_index=True, verbose=False)[column]
+        .loc[index]
+        .tolist()
+    )
+
+    # Redefine ratio if exact match
+    if original_values[0] == name:
+        ratio = 1
+
+    return index, original_values, ratio
 
 
 def _load_system_from_db(
@@ -268,6 +255,7 @@ def _load_system_from_db(
     verbose: bool = True,
     low_memory: bool = False,
     alternative_names: bool = False,
+    exact_match: bool = False,
 ) -> pd.DataFrame:
     """Load system from ExoplanetEU or NASA.
 
@@ -294,6 +282,8 @@ def _load_system_from_db(
         and then only the system data.
     alternative_names : bool, optional. Default: False.
         Whether to search for alternative names. Only available in ExoplanetEU.
+    exact_match : bool, optional. Default: False.
+        Whether to return only an exact match.
 
     Returns
     -------
@@ -371,28 +361,32 @@ def _load_system_from_db(
         most_prob.sort()  # Sort the most probable
         others.sort()  # Sort the others
 
-        # Forced to print the most probable and others
-        print(f" Similar names found in {auxmsg}{source} dataset:")
-        print(f" - {most_prob + others}")
+        # Message for the most probable and others
+        if verbose:
+            print(f" Similar names found in {auxmsg}{source} dataset:")
+            print(f" - {most_prob + others}")
 
-        if source == "eu" and not alternative_names:
-            print(
-                "Note: ExoplanetEU has alternative names "
-                + "for some systems. "
-            )
-            print(
-                "      If no similar names found, try searching with: "
-                + "alternative_names=True."
-            )
+            if source == "eu" and not alternative_names:
+                print(
+                    "Note: ExoplanetEU has alternative names "
+                    + "for some systems. "
+                )
+                print(
+                    "      If no similar names found, try searching with: "
+                    + "alternative_names=True."
+                )
 
         return pd.DataFrame()  # Return an empty DataFrame
-    elif ratio < 1 and verbose:  # Only spaces or hyphens differences
+    elif ratio < 1:  # Only spaces or hyphens differences
         # Note: get most probable by whitespace separation
         pl = "planet" if is_planet else "star"
-        print(
-            f"Found almost exact match {pl} {values[0]} "
-            + f"in {auxmsg}{source} dataset."
-        )
+        if verbose:
+            print(
+                f"Found almost exact match {pl} {values[0]} "
+                + f"in {auxmsg}{source} dataset."
+            )
+        if exact_match:
+            return pd.DataFrame()  # Return an empty DataFrame
 
     # Load the system
     if raw_df is None:  # Load only the system data
@@ -414,6 +408,7 @@ def load_system_from_eu(
     low_memory: bool = True,
     as_resokit: bool = False,
     alternative_names: bool = False,
+    exact_match: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from ExoplanetEU.
 
@@ -441,6 +436,12 @@ def load_system_from_eu(
         Whether to return the dataset in ResoKit format.
     alternative_names : bool, optional. Default: False.
         Whether to search for alternative names.
+    exact_match : bool, optional. Default: False.
+        Whether to search for an exact match.
+        If `False`, the search will be more flexible, and a
+        very (very) similar name will be accepted. Useful for
+        names with different characters (e.g., hyphens), or
+        for names with extra information (e.g., "A" or "B").
 
     Returns
     -------
@@ -462,6 +463,7 @@ def load_system_from_eu(
         verbose=verbose,
         low_memory=low_memory,
         alternative_names=alternative_names,
+        exact_match=exact_match,
     )
 
     # Can't work with empty DataFrame
@@ -500,6 +502,7 @@ def load_system_from_nasa(
     controversial_set: bool = False,
     default_set: bool = True,
     as_resokit: bool = False,
+    exact_match: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from NASA.
 
@@ -531,6 +534,12 @@ def load_system_from_nasa(
         None to include all data.
     as_resokit : bool, optional. Default: False.
         Whether to return the dataset in ResoKit format.
+    exact_match : bool, optional. Default: False.
+        Whether to search for an exact match.
+        If `False`, the search will be more flexible, and a
+        very (very) similar name will be accepted. Useful for
+        names with different characters (e.g., hyphens), or
+        for names with extra information (e.g., "A" or "B").
 
     Returns
     -------
@@ -551,6 +560,7 @@ def load_system_from_nasa(
         store_index=store_index,
         verbose=verbose,
         low_memory=low_memory,
+        exact_match=exact_match,
     )
 
     # Check if the dataset is empty
