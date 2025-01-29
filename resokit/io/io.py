@@ -210,8 +210,8 @@ def _load_system_from_db(
     # Print information
     if verbose:
         print(
-            f"Loading {'planet' if is_planet else 'star system'} {name} "
-            + f"from {source}."
+            f"Looking for {'planet' if is_planet else 'star system'} {name} "
+            + f"in {source} database."
         )
 
     # If storing, then load the whole dataset
@@ -293,11 +293,19 @@ def _load_system_from_db(
         pl = "planet" if is_planet else "star"
         if verbose:
             print(
-                f"Found almost exact match {pl} {values[0]} "
+                f" Found an almost exact match: {pl} {values[0]} "
                 + f"in {auxmsg}{source} dataset."
             )
-        if exact_match:
+        if exact_match:  # Return an empty DataFrame
+            if verbose:
+                print(
+                    " Execute with exact_match=False to load it, "
+                    + "or rewrite the name."
+                )
             return pd.DataFrame(), "n", -1  # Return an empty DataFrame
+        # We will load the system with the almost exact match
+        if verbose:
+            print(" Loading the almost exact match...")
 
     # In case duplicated entries (due to alternate nemes used), we use the
     # list of the set of idx.
@@ -350,8 +358,8 @@ def load_system_from_eu(
     low_memory: bool = True,
     as_resokit: bool = False,
     alternative_names: bool = False,
-    exact_match: bool = False,
-    check_binary: Union[bool, None] = None,
+    exact_match: bool = True,
+    check_binary: Union[bool, None] = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from ExoplanetEU.
 
@@ -377,13 +385,14 @@ def load_system_from_eu(
         Whether to return the dataset in ResoKit format.
     alternative_names : bool, optional. Default: False.
         Whether to search for alternative names.
-    exact_match : bool, optional. Default: False.
-        Whether to search for an exact match.
-        If `False`, the search will be more flexible, and a
-        very (very) similar name will be accepted. Useful for
-        names with different characters (e.g., hyphens), or
+    exact_match : bool, optional. Default: True.
+        Whether to search for an exact match. If `True`
+        `verbose=True`, suggestions will be printed in case
+        of no exact match. If `False`, the search will be more
+        flexible, and a very (very) similar name will be accepted.
+        Useful for names with different characters (e.g., hyphens), or
         for names with extra information (e.g., "A" or "B").
-    check_binary : bool, optional. Default: True.
+    check_binary : bool, optional. Default: False.
         Whether to check if the system is a binary system.
         If it is a binary system indeed, then the final system
         created is a `StaticBinarySystem` instead of a `StaticSystem`.
@@ -397,7 +406,7 @@ def load_system_from_eu(
         or :py:class:`StaticSystem`.
     """
     # Load the system from the database
-    df, binary, bindx = _load_system_from_db(
+    df, binary, _ = _load_system_from_db(
         name=name,
         is_planet=is_planet,
         source="eu",
@@ -449,8 +458,8 @@ def load_system_from_nasa(
     controversial_set: bool = False,
     default_set: bool = True,
     as_resokit: bool = False,
-    exact_match: bool = False,
-    check_binary: Union[bool, None] = None,
+    exact_match: bool = True,
+    check_binary: Union[bool, None] = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from NASA.
 
@@ -480,13 +489,14 @@ def load_system_from_nasa(
         None to include all data.
     as_resokit : bool, optional. Default: False.
         Whether to return the dataset in ResoKit format.
-    exact_match : bool, optional. Default: False.
-        Whether to search for an exact match.
-        If `False`, the search will be more flexible, and a
-        very (very) similar name will be accepted. Useful for
-        names with different characters (e.g., hyphens), or
+    exact_match : bool, optional. Default: True.
+        Whether to search for an exact match. If `True`
+        `verbose=True`, suggestions will be printed in case
+        of no exact match. If `False`, the search will be more
+        flexible, and a very (very) similar name will be accepted.
+        Useful for names with different characters (e.g., hyphens), or
         for names with extra information (e.g., "A" or "B").
-    check_binary : bool, optional. Default: True.
+    check_binary : bool, optional. Default: False.
         Whether to check if the system is a binary system.
         If it is a binary system indeed, then the final system
         created is a `StaticBinarySystem` instead of a `StaticSystem`.
@@ -549,7 +559,7 @@ def load_system_from_nasa(
 
 def load_from_binary(
     name: str,
-    exact_match: bool = False,
+    exact_match: bool = True,
     as_pandas: bool = False,
     soft: bool = True,
     verbose: bool = True,
@@ -560,7 +570,7 @@ def load_from_binary(
     ----------
     name : str
         Name of the binary star system to load.
-    exact_match : bool, optional. Default is False.
+    exact_match : bool, optional. Default is True.
         If True, return the exact match only.
         If False, return the best match.
     as_pandas : bool, optional. Default is False.
@@ -614,7 +624,7 @@ def load_from_binary(
 
 
 def check_if_binary(
-    star_name: str, exact_match: bool = False, verbose: bool = True
+    star_name: str, exact_match: bool = True, verbose: bool = True
 ) -> Tuple[bool, bool, str, List[str], float]:
     """Check if a star is part of a binary system.
 
@@ -622,7 +632,7 @@ def check_if_binary(
     ----------
     star_name : str
         Name of the star to check.
-    exact_match : bool, optional. Default is False.
+    exact_match : bool, optional. Default is True.
         If True, return `True` only if an exact match.
         If False, return `True` if a very (99%) close match is found.
     verbose : bool, optional. Default is True.
@@ -657,10 +667,11 @@ def check_if_binary(
         if ratio > 0.99:  # Found a binary system
             if exact_match and ratio < 1:
                 if verbose:
-                    print(f"Found a very close binary match in [{values}]")
+                    print(f" Found a very close binary match in {values}")
+                    print(" Execute with exact_match=False to load it.")
                 continue
             if verbose:
-                print(f"Binary system found in {values}")
+                print(f" Binary system found in {values}")
             # Check if multiple values
             if len(values) > 1:
                 # In this case, it is probable we looked in

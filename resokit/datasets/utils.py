@@ -562,7 +562,7 @@ def load_from_zip(
         if file_name in zipf.namelist():
             if verbose:  # Print message if verbose
                 print(
-                    f" Loading {file_name} " + f"directly from {zip_name}..."
+                    f"  Reading {file_name} " + f"directly from {zip_name}..."
                 )
             # Load directly from the .zip
             dtypes = DATASET_DTYPES.get(source, None)

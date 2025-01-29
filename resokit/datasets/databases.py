@@ -1817,6 +1817,7 @@ def load_binary(
         header : str if ret_header is True.
             The header of the dataset.
         data : pd.DataFrame if ret_header is False.
+            The dataset as a pandas DataFrame.
     """
     # Assert the circumbinary parameter
     if not isinstance(circumbinary, bool):
@@ -1876,7 +1877,10 @@ def load_binary(
     # Load the dataset from the ZIP archive
     if from_zip:
         if verbose:
-            print(f"Loading the type-{letter} dataset from the ZIP archive.")
+            print(
+                f"Loading the type-{letter} dataset "
+                + f"from ZIP archive {from_zip}."
+            )
         zip_path = dir_path / from_zip
         file_name = from_file if from_file else _BINARIES_FILENAMES[letter]
         my_open: Callable[[BinaryIO], List[str]] = lambda file: TextIOWrapper(
@@ -1892,7 +1896,7 @@ def load_binary(
     # Load the dataset from the file
     elif from_file:
         if verbose:
-            print(f"Loading the type-{letter} dataset from the file.")
+            print(f"Loading the type-{letter} dataset from file {from_file}")
         file_path = dir_path / from_file
         with open(file_path, "r") as f:
             lines = f.readlines()
