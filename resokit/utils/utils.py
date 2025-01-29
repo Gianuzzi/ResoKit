@@ -886,7 +886,7 @@ def hill_radius_with_errors(
     total_mass = m_star * M_SUN + m_planet * M_JUP
 
     # Partial derivatives for error propagation
-    dhill_da = hill / a
+    dhill_da = hill / (a * AU)
     dhill_de = -hill / (1 - e)
     dhill_dm_star = -hill / (3 * total_mass)
     dhill_dm_planet = -dhill_dm_star * (m_star * M_SUN) / (m_planet * M_JUP)
