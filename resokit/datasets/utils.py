@@ -4,9 +4,9 @@
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
-# ============================================================================
+# =============================================================================
 # DOCS
-# ============================================================================
+# =============================================================================
 
 """Module with internal utility functions for the datasets module."""
 
@@ -24,7 +24,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from pandas import DataFrame, read_csv
 
-from resokit.utils.utils import assert_module_imported
+from resokit.utils.parser import assert_module_imported
 
 try:
     import requests

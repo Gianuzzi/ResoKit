@@ -21,13 +21,12 @@
 
 from .databases import clear_memory  # noqa
 from .databases import download  # noqa
+from .databases import download_binary  # noqa
+from .databases import load_binary  # noqa
 from .databases import load_eu  # noqa
 from .databases import load_nasa  # noqa
 from .databases import update_eu  # noqa
 from .databases import update_nasa  # noqa
-from .data_multi import download_binary  # noqa
-from .data_multi import load_binary  # noqa
-from .data_multi import load_from_binary  # noqa
 
 # Make the functions available at the package level
 

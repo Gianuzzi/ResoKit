@@ -7,9 +7,9 @@
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
-# ============================================================================
+# =============================================================================
 # DOCS
-# ============================================================================
+# =============================================================================
 
 """Module ResoKit."""
 
@@ -31,18 +31,20 @@ import pandas as pd
 
 from resokit.units import Me2Mj, Mj2Me, Re2Rj, Rj2Re
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
-from resokit.utils.utils import (
+from resokit.utils.parser import (
     DEFAULT_METADATA,
     MAPPINGS,
     RESO_DTYPES,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
+    parse_to_iter,
+)
+from resokit.utils.utils import (
     calc_a_with_errors,
+    calc_hill_radius_with_errors,
     calc_period_with_errors,
     float_to_fraction,
-    hill_radius_with_errors,
-    parse_to_iter,
 )
 
 # =============================================================================
@@ -392,6 +394,7 @@ def df_to_resokit(
     drop: bool = True,
     copy: bool = False,
     sort_by: Union[str, bool] = "P",
+    # add_binary: bool = True,
     return_df: bool = False,
     rename_index: bool = True,
     metadata: dict = None,
@@ -418,6 +421,14 @@ def df_to_resokit(
         Column to sort the data by.
         If `False` or `None`, do not sort the data.
         If `True`, sort by period ("P").
+    add_binary : bool, optional. Default: True.
+        Whether to add the "binary" column to the DataFrame.
+        Assumes the columns "hostname", "star_name" or "star_alternate_names".
+        In this column:
+        -1 means unknown.
+        0 means the planet is not in a binary system.
+        1 means the planet is a circumsingle planet in a binary system.
+        2 means the planet is a circumbinary planet.
     return_df : bool, optional. Default: False.
         Whether to return the a pandas Data frame instead of the
         :py:class:`ResokitDataFrame`.
@@ -455,10 +466,56 @@ def df_to_resokit(
 
     # Add "n" column if not present
     if "P" in df.columns:
+        df["n"] = 2.0 * pi / df["P"]
         if "P_err_min" in df.columns and "P_err_max" in df.columns:
             df["n_err_min"] = 2.0 * pi / df["P_err_max"]
             df["n_err_max"] = 2.0 * pi / df["P_err_min"]
-        df["n"] = 2.0 * pi / df["P"]
+
+    # # Add "binary" column
+    # if add_binary:
+    #     # Check if the star name column is present
+    #     if "star_name" not in df.columns and "hostname" not in df.columns:
+    #         raise ValueError(
+    #             "Cannot add the binary column without the star name column."
+    #         )
+    #     star_name_col = (
+    #         "star_name" if "star_name" in df.columns else "hostname"
+    #     )
+    #     # Initialize the binary column
+    #     if "binary" not in df.columns:
+    #         df["binary"] = -1
+    #     else:
+    #         df["binary"] = df["binary"].fillna(-1)
+
+    #     # Define the binary search function
+    #     def my_binary_search(name):
+    #         bina, circ, _, _ = check_if_binary(name)
+    #         if not bina:
+    #             return 0
+    #         return 2 if circ else 1
+
+    #     # Create the binary column
+    #     df["binary"] = df[star_name_col].apply(my_binary_search)
+    #     # Check if alternative names are present
+    #     if "star_alternate_names" in df.columns:
+    #         # La magia del inline:
+    #         # Tomá la columna, hacela str, dividila por ", ",
+    #         # expandila en filas, aplicale la función, y al final
+    #         # agrupala por el índice original usando el máximo.
+    #         # Así, si hay algún mach entre los varios alternativos,
+    #         # se toma el máximo.
+    #         binalter = (
+    #             df["star_alternate_names"]
+    #             .str.split(", ")
+    #             .explode()
+    #             .apply(my_binary_search)
+    #             .groupby(level=0)
+    #             .max()
+    #         )
+
+    #         # Update the binary column. Get the max between itself
+    #         # and the alternative names
+    #         df["binary"] = df["binary"].combine(binalter, max)
 
     # Define all errors positive
     for col in df.columns:
@@ -574,6 +631,7 @@ class StaticPlanet(ResokitDataFrame):
                     "n",
                     "n_err_min",
                     "n_err_max",
+                    "binary",
                 }:
                     warnings.warn(
                         "Found columns not in the default planet mapping.",
@@ -1649,7 +1707,7 @@ class StaticSystem:
 
         raise ValueError("Invalid value for 'which'.")
 
-    def estimate_hill_radius(
+    def estimate_calc_hill_radius(
         self,
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
@@ -1670,8 +1728,8 @@ class StaticSystem:
             with the given indices.
         err_method : int, optional. Default: -1.
             Method to estimate the error.
-            See py:func:`resokit.utils.hill_radius.hill_radius_with_errors` for
-            more details. The planet must have "a", "e" and "mass" error
+            See py:func:`resokit.utils.hill_radius.calc_hill_radius_with_errors`
+            for more details. The planet must have "a", "e" and "mass" error
             columns, and the star must have "mass" errors columns.
             The options are:
             *-1*: Nothing. Do not estimate the error.
@@ -1703,20 +1761,22 @@ class StaticSystem:
 
             for i in which:  # Iterate over the planets
                 pl = self.planets[i]
-                hill, hill_err_min, hill_err_max = hill_radius_with_errors(
-                    pl.a,
-                    pl.a_err_min if err_method > 0 else 0.0,
-                    pl.a_err_max if err_method > 0 else 0.0,
-                    pl.e,
-                    pl.e_err_min if err_method > 0 else 0.0,
-                    pl.e_err_max if err_method > 0 else 0.0,
-                    self.star.mass,
-                    self.star.mass_err_min if err_method > 0 else 0.0,
-                    self.star.mass_err_max if err_method > 0 else 0.0,
-                    pl.mass,
-                    pl.mass_err_min if err_method > 0 else 0.0,
-                    pl.mass_err_max if err_method > 0 else 0.0,
-                    err_method,
+                hill, hill_err_min, hill_err_max = (
+                    calc_hill_radius_with_errors(
+                        pl.a,
+                        pl.a_err_min if err_method > 0 else 0.0,
+                        pl.a_err_max if err_method > 0 else 0.0,
+                        pl.e,
+                        pl.e_err_min if err_method > 0 else 0.0,
+                        pl.e_err_max if err_method > 0 else 0.0,
+                        self.star.mass,
+                        self.star.mass_err_min if err_method > 0 else 0.0,
+                        self.star.mass_err_max if err_method > 0 else 0.0,
+                        pl.mass,
+                        pl.mass_err_min if err_method > 0 else 0.0,
+                        pl.mass_err_max if err_method > 0 else 0.0,
+                        err_method,
+                    )
                 )
                 df[f"{pl.name}"] = [
                     hill,
@@ -2393,207 +2453,6 @@ class StaticSystem:
 
 
 # =============================================================================
-# FUNCTIONS
-# =============================================================================
-
-
-def _create_static_system(
-    star,
-    planets,
-    name,
-    metadata=None,
-) -> StaticSystem:
-    """Create a :py:class:`StaticSystem` instance.
-
-    Parameters
-    ----------
-    star : StaticStar
-        StaticStar instance.
-    planets : list, tuple, StaticPlanet
-        List of StaticPlanet instances.
-    name : str
-        Name of the system.
-    metadata : dict, optional. Default: {}.
-        Metadata of the dataset.
-
-    Returns
-    -------
-    StaticSystem
-        A new StaticSystem instance.
-    """
-    if metadata is None:
-        metadata = {}
-
-    return StaticSystem(
-        star=star,
-        planets=planets,
-        name=name,
-        metadata=metadata,
-    )
-
-
-def _create_static_star(
-    star_data,
-    source="user",
-    metadata=None,
-) -> StaticStar:
-    """Create a :py:class:`StaticStar` instance.
-
-    Parameters
-    ----------
-    star_data : pd.Series
-        Pandas Series with the star data.
-    source : str, optional. Default: 'user'.
-        Source of the data.
-    metadata : dict, optional. Default: {}.
-        Additional metadata about the star.
-
-    Returns
-    -------
-    StaticStar
-        A new StaticStar instance.
-    """
-    if metadata is None:
-        metadata = {}
-
-    return StaticStar(data_df=star_data, source=source, metadata=metadata)
-
-
-def _create_static_planet(
-    planet_data,
-    source="user",
-    metadata=None,
-) -> StaticPlanet:
-    """Create a :py:class:`StaticPlanet` instance.
-
-    Parameters
-    ----------
-    planet_data : pd.Series
-        Pandas Series with the planet data.
-    source : str, optional. Default: 'user'.
-        Source of the data.
-    metadata : dict, optional. Default: {}.
-        Additional metadata about the planet.
-
-    Returns
-    -------
-    StaticPlanet
-        A new StaticPlanet instance.
-    """
-    if metadata is None:
-        metadata = {}
-
-    return StaticPlanet(data_df=planet_data, source=source, metadata=metadata)
-
-
-def resokit_to_system(
-    resokit_data: ResokitDataFrame,
-) -> StaticSystem:
-    """Convert a :py:class:`ResokitDataFrame` to a :py:class:`StaticSystem`.
-
-    Parameters
-    ----------
-    resokit_data : ResokitDataFrame
-        ResokitDataFrame instance with the data.
-
-    Returns
-    -------
-    StaticSystem
-        :py:class:`StaticSystem` instance.
-    """
-    columns = resokit_data.columns_  # Columns of the data
-
-    # Convert to DataFrame
-    resokit_df = resokit_data.to_dataframe()
-
-    # Stars
-    aux_star_cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
-    star_cols = list(set(aux_star_cols).intersection(columns))
-    star_df = resokit_df[star_cols]
-
-    # Planets
-    aux_planet_cols = (
-        RESO_PL_TYPES.keys()
-        | RESO_OB_TYPES.keys()
-        | {"star_name", "n", "n_err_min", "n_err_max"}
-    )
-    planet_cols = list(set(aux_planet_cols).intersection(columns))
-    planet_df = resokit_df[planet_cols]
-
-    # Clean data if more than 1 planet
-    if resokit_data.n_objects_ > 1:
-        # Assert unique star
-        star_names = set(star_df["star_name"])
-        if len(star_names) > 1:
-            raise ValueError(
-                "All planets must have the same star name."
-                + f"Found {star_names} instead."
-            )
-
-        # Assert no duplicated planets
-        planet_names = set(planet_df["name"])
-        if len(planet_names) < len(planet_df):
-            raise ValueError("Duplicated planet names found.")
-
-        # If multiple lines (i.e. multiple planets), then:
-        # Option1: create a star from the star_df line with less
-        # null or NaN values
-        # if len(star_df) > 1:
-        #     star_df = star_df.loc[star_df.notnull().sum(axis=1).idxmax()]
-
-        # Option2: preserve the row with most recent rowupdate column date
-        # To get this, check the date from rowupdate column
-        # and get the row with the most recent date
-        rowupdate = pd.to_datetime(star_df["rowupdate"], errors="coerce")
-        star_df = star_df.loc[rowupdate.idxmax()]
-
-    # Redefine star columns to avoid "star_"
-    star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
-    # EXTRA: Check if the df name is number (idx from db) or a name
-    # If it's not a number, then the name is one of the planets names,
-    # and we must change it to the star name
-    if not str(star_df.name).isnumeric():
-        star_df.name = star_df["name"]
-
-    # Create star
-    star = _create_static_star(
-        star_data=star_df,
-        source=resokit_data.source,
-        metadata=resokit_data.metadata,
-    )
-
-    # Create Planets
-    if resokit_data.n_objects_ > 1:  # Multiple planets
-        new_metadata = resokit_data.to_dict()
-        # Create planets list
-        # Create planets list
-        planets = [
-            _create_static_planet(
-                planet_data=planet,
-                source=resokit_data.source,
-                metadata={
-                    **new_metadata,
-                    f"{resokit_data.source}_indexes": idx,
-                },
-            )
-            for idx, planet in planet_df.iterrows()
-        ]
-    else:  # Single planet
-        planets = _create_static_planet(
-            planet_data=planet_df,
-            source=resokit_data.source,
-            metadata=resokit_data.metadata,
-        )
-
-    return _create_static_system(
-        star=star,
-        planets=planets,
-        name=star.name,
-        metadata=resokit_data.metadata,
-    )
-
-
-# =============================================================================
 # NEW STATIC CLASSES (TBD)
 # =============================================================================
 
@@ -2801,3 +2660,315 @@ class StaticBinarySystem:
             name=self.name,
             metadata=self.metadata,
         )
+
+
+# =============================================================================
+# CREATION FUNCTIONS
+# =============================================================================
+
+
+def _create_static_planet(
+    planet_data: pd.Series,
+    source="user",
+    metadata=None,
+) -> StaticPlanet:
+    """Create a :py:class:`StaticPlanet` instance.
+
+    Parameters
+    ----------
+    planet_data : pd.Series
+        Pandas Series with the planet data.
+    source : str, optional. Default: 'user'.
+        Source of the data.
+    metadata : dict, optional. Default: {}.
+        Additional metadata about the planet.
+
+    Returns
+    -------
+    StaticPlanet
+        A new StaticPlanet instance.
+    """
+    if metadata is None:
+        metadata = {}
+
+    return StaticPlanet(data_df=planet_data, source=source, metadata=metadata)
+
+
+def _create_static_star(
+    star_data: pd.Series,
+    source="user",
+    metadata=None,
+) -> StaticStar:
+    """Create a :py:class:`StaticStar` instance.
+
+    Parameters
+    ----------
+    star_data : pd.Series
+        Pandas Series with the star data.
+    source : str, optional. Default: 'user'.
+        Source of the data.
+    metadata : dict, optional. Default: {}.
+        Additional metadata about the star.
+
+    Returns
+    -------
+    StaticStar
+        A new StaticStar instance.
+    """
+    if metadata is None:
+        metadata = {}
+
+    return StaticStar(data_df=star_data, source=source, metadata=metadata)
+
+
+def _create_static_system(
+    star: StaticStar,
+    planets: List[StaticPlanet],
+    name: str,
+    metadata=None,
+) -> StaticSystem:
+    """Create a :py:class:`StaticSystem` instance.
+
+    Parameters
+    ----------
+    star : StaticStar
+        StaticStar instance.
+    planets : list, tuple, StaticPlanet
+        List of StaticPlanet instances.
+    name : str
+        Name of the system.
+    metadata : dict, optional. Default: {}.
+        Metadata of the dataset.
+
+    Returns
+    -------
+    StaticSystem
+        A new StaticSystem instance.
+    """
+    if metadata is None:
+        metadata = {}
+
+    return StaticSystem(
+        star=star,
+        planets=planets,
+        name=name,
+        metadata=metadata,
+    )
+
+
+def _create_static_binary_star_from_binaries(
+    star1: StaticStar,
+    star2: StaticStar,
+    binary_row: pd.Series,
+    name: str,
+    metadata=None,
+) -> StaticBinaryStar:
+    """Create a :py:class:`StaticBinaryStar` instance.
+
+    Parameters
+    ----------
+    star1 : StaticStar
+        StaticStar instance for the primary star.
+    star2 : StaticStar
+        StaticStar instance for the secondary star.
+    binary_row : pd.Series
+        Pandas Series with the binary data.
+    name : str
+        Name of the binary system.
+    metadata : dict, optional. Default: {}.
+        Additional metadata about the star.
+
+    Returns
+    -------
+    StaticBinaryStar
+        A new StaticBinaryStar instance.
+    """
+    if metadata is None:
+        metadata = {}
+
+    # Create the StaticBinaryStar instance
+    return StaticBinaryStar(
+        star1=star1,
+        star2=star2,
+        binary_df=binary_row.to_frame(name=name).T,
+        name=name,
+        metadata=metadata,
+    )
+
+
+def resokit_to_system(
+    resokit_data: ResokitDataFrame,
+) -> StaticSystem:
+    """Convert a :py:class:`ResokitDataFrame` to a :py:class:`StaticSystem`.
+
+    Parameters
+    ----------
+    resokit_data : ResokitDataFrame
+        ResokitDataFrame instance with the data.
+
+    Returns
+    -------
+    StaticSystem
+        :py:class:`StaticSystem` instance.
+    """
+    columns = resokit_data.columns_  # Columns of the data
+
+    # Convert to DataFrame
+    resokit_df = resokit_data.to_dataframe()
+
+    # Stars
+    aux_star_cols = RESO_SR_TYPES.keys() | RESO_OB_TYPES.keys()
+    star_cols = list(set(aux_star_cols).intersection(columns))
+    star_df = resokit_df[star_cols]
+
+    # Planets
+    aux_planet_cols = (
+        RESO_PL_TYPES.keys()
+        | RESO_OB_TYPES.keys()
+        | {"star_name", "n", "n_err_min", "n_err_max", "binary"}
+    )
+    planet_cols = list(set(aux_planet_cols).intersection(columns))
+    planet_df = resokit_df[planet_cols]
+
+    # Clean data if more than 1 planet
+    if resokit_data.n_objects_ > 1:
+        # Assert unique star
+        star_names = set(star_df["star_name"])
+        if len(star_names) > 1:
+            raise ValueError(
+                "All planets must have the same star name."
+                + f"Found {star_names} instead."
+            )
+
+        # Assert no duplicated planets
+        planet_names = set(planet_df["name"])
+        if len(planet_names) < len(planet_df):
+            raise ValueError("Duplicated planet names found.")
+
+        # If multiple lines (i.e. multiple planets), then:
+        # Option1: create a star from the star_df line with less
+        # null or NaN values
+        # if len(star_df) > 1:
+        #     star_df = star_df.loc[star_df.notnull().sum(axis=1).idxmax()]
+
+        # Option2: preserve the row with most recent rowupdate column date
+        # To get this, check the date from rowupdate column
+        # and get the row with the most recent date
+        rowupdate = pd.to_datetime(star_df["rowupdate"], errors="coerce")
+        star_df = star_df.loc[rowupdate.idxmax()]
+
+    # Redefine star columns to avoid "star_"
+    star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
+    # EXTRA: Check if the df name is number (idx from db) or a name
+    # If it's not a number, then the name is one of the planets names,
+    # and we must change it to the star name
+    if not str(star_df.name).isnumeric():
+        star_df.name = star_df["name"]
+
+    # Create star
+    star = _create_static_star(
+        star_data=star_df,
+        source=resokit_data.source,
+        metadata=resokit_data.metadata,
+    )
+
+    # Create Planets
+    if resokit_data.n_objects_ > 1:  # Multiple planets
+        new_metadata = resokit_data.to_dict()
+        # Create planets list
+        # Create planets list
+        planets = [
+            _create_static_planet(
+                planet_data=planet,
+                source=resokit_data.source,
+                metadata={
+                    **new_metadata,
+                    f"{resokit_data.source}_indexes": idx,
+                },
+            )
+            for idx, planet in planet_df.iterrows()
+        ]
+    else:  # Single planet
+        planets = _create_static_planet(
+            planet_data=planet_df,
+            source=resokit_data.source,
+            metadata=resokit_data.metadata,
+        )
+
+    return _create_static_system(
+        star=star,
+        planets=planets,
+        name=star.name,
+        metadata=resokit_data.metadata,
+    )
+
+
+def binary_row_to_binary_star(
+    binary_row: pd.Series,
+    source="user",
+    metadata=None,
+) -> StaticBinaryStar:
+    """Convert a binary row to a :py:class:`StaticBinaryStar`.
+
+    Parameters
+    ----------
+    binary_row : pd.Series
+        Pandas Series with the binary data.
+    source : str, optional. Default: 'user'.
+        Source of the data.
+    metadata : dict, optional. Default: {}.
+        Additional metadata about the star.
+
+    Returns
+    -------
+    StaticBinaryStar
+        :py:class:`StaticBinaryStar` instance.
+    """
+    # Get the systems name
+    name = binary_row["star1_name"]
+    star1_name = name + " A"
+    star2_name = name + " B"
+
+    # Create the necessary series for the StaticStar instances
+    # First, the shared parameters we usually get in a StaticStar
+    shared_resokit = binary_row[["star_dist", "disc_method"]].copy()
+    # Then, the parameters for each star
+    star1_resokit = pd.Series(
+        {
+            "star_name": star1_name,
+            "star_mass": binary_row["star1_mass"],
+        }
+    )
+    star2_resokit = pd.Series(
+        {
+            "star_name": star2_name,
+            "star_mass": binary_row["star2_mass"],
+        }
+    )
+
+    # Create the StaticStar dfs
+    star1_df = pd.concat([shared_resokit, star1_resokit], axis=0)
+    star2_df = pd.concat([shared_resokit, star2_resokit], axis=0)
+
+    # Rename the columns. If the column starts with "star_" we remove it.
+    star1_df.rename(lambda x: str(x).replace("star_", ""), inplace=True)
+    star2_df.rename(lambda x: str(x).replace("star_", ""), inplace=True)
+
+    # Set the dataframe names
+    star1_df.name = star1_name
+    star2_df.name = star2_name
+
+    # Create the StaticStar instances
+    star1 = _create_static_star(star1_df, source=source, metadata=metadata)
+    star2 = _create_static_star(star2_df, source=source, metadata=metadata)
+
+    # Add the total binary mass to binary_row
+    binary_row["mass"] = binary_row["star1_mass"] + binary_row["star2_mass"]
+
+    return _create_static_binary_star_from_binaries(
+        star1=star1,
+        star2=star2,
+        binary_row=binary_row,
+        name=name,
+        metadata=metadata,
+    )

@@ -9,9 +9,9 @@
 
 # This file indicates that the directory should be treated as a package.
 
-# ============================================================================
+# =============================================================================
 # DOCS
-# ============================================================================
+# =============================================================================
 
 """The ResoKit.utils module includes tools for data analysis."""
 
@@ -21,6 +21,9 @@
 
 from . import mass_radius  # noqa
 from . import mmr  # noqa
+from .utils import calc_a  # noqa
+from .utils import calc_hill_radius  # noqa
+from .utils import calc_period  # noqa
 from .utils import float_to_fraction  # noqa
 
 # Make the functions available at the package level
@@ -28,5 +31,8 @@ from .utils import float_to_fraction  # noqa
 __all__ = [
     "mass_radius",
     "mmr",
+    "calc_a",
+    "calc_hill_radius",
+    "calc_period",
     "float_to_fraction",
 ]

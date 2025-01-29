@@ -4,9 +4,9 @@
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
-# ============================================================================
+# =============================================================================
 # DOCS
-# ============================================================================
+# =============================================================================
 
 """Module to query exoplanet.eu and NASA datasets with optimized structure."""
 
@@ -25,7 +25,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.utils.utils import DEFAULT_METADATA, assert_module_imported
+from resokit.utils.parser import DEFAULT_METADATA, assert_module_imported
 
 try:
     import requests
