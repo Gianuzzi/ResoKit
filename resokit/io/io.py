@@ -320,6 +320,7 @@ def _load_system_from_db(
     # Check if the system is a binary system?
     is_binary = False  # Default: not a binary system
     binary_type = "f"  # Default: not a binary system
+    idxbin = -1  # Default: not a binary system
     if check_binary:  # Check if binary
         star_name_col = "star_name" if source == "eu" else "hostname"
         star_name = data[star_name_col].iloc[0]  # Get the (first) star name
