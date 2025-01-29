@@ -716,7 +716,7 @@ def calc_a_with_errors(
         period_err = max(period_err_min, period_err_max) * DAY
         m_star_err = max(m_star_err_min, m_star_err_max) * M_SUN
         m_planet_err = max(m_planet_err_min, m_planet_err_max) * M_JUP
-    elif err_method == 23 or err_method == 4:
+    elif err_method == 3 or err_method == 4:
         period_err = (period_err_min + period_err_max) * 0.5 * DAY
         m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * M_SUN
         m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * M_JUP
