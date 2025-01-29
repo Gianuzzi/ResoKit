@@ -77,7 +77,7 @@ def do_setup():
         include_package_data=True,
         license="MIT",
         install_requires=REQUIREMENTS,
-        extras_require={"query": ["requests", "astropy"]},
+        extras_require={"query": ["requests", "astropy"], "reb": ["rebound"]},
         keywords=["resokit", "planetary systems", "resonances"],
         classifiers=[
             "Intended Audience :: Education",
@@ -85,7 +85,7 @@ def do_setup():
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
             "Programming Language :: Python",
-            "Programming Language :: Python :: 3.8",
+            "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: Implementation :: CPython",
             "Topic :: Scientific/Engineering",
         ],

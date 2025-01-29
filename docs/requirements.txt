@@ -7,3 +7,4 @@ m2r
 lxml_html_clean
 pandoc
 nbconvert
+rebound
