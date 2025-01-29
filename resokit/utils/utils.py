@@ -615,3 +615,68 @@ def calc_hill_radius_with_errors(
     )
 
     return hill, hill_err, hill_err  # Same error for min and max
+
+
+def calc_sum_with_errors(
+    *vals: Tuple[float, float, float], err_method: int = -1
+) -> Tuple[float, float, float]:
+    r"""Calculate the sum of values with errors using error propagation.
+
+    Equation:
+        :math:`\Sigma = \sum_{i=1}^{N} x_i`
+
+    Parameters
+    ----------
+    vals : Tuple[Tuple[float, float, float], ...]
+        Tuple with the values and their minimum and maximum errors.
+    err_method : int, optional. Default: -1
+        Error method to use:
+            - <=0: No error. Return the sum and 0 error.
+            - 1: Extremes. Estimate the sum at the extreme values of
+                    each parameter and retrieve the errors from the difference.
+            - 2: Max propagation. Assume each parameters follows a normal
+                    distribution with sigma = err_max.
+            - 3: Centred propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_min + err_max) / 2.
+            - 4: Deviated propagation. Assume each parameters follows a normal
+                    distribution with sigma = (err_max + err_min) / 2, but the
+                    mean is at ((val + err_min) + (val + err_max)) / 2.
+
+    Returns
+    -------
+    Tuple[float, float]
+        Sum of the values and its error.
+    """
+    # Switch for the error propagation method
+    if err_method <= 0:
+        return sum(val[0] for val in vals), 0.0, 0.0
+    elif err_method == 1:
+        suma = sum(val[0] for val in vals)
+        suma_min = sum(val[0] - val[1] for val in vals)
+        suma_max = sum(val[0] + val[2] for val in vals)
+        suma_err_min = abs(suma - suma_min)
+        suma_err_max = abs(suma - suma_max)
+        return suma, suma_err_min, suma_err_max
+    elif err_method == 2:
+        vals_err = [max(val[1], val[2]) for val in vals]
+    elif err_method == 3 or err_method == 4:
+        vals_err = [(val[1] + val[2]) * 0.5 for val in vals]
+        if err_method == 4:
+            vals = [
+                [(val[0] - val[1] + val[0] + val[2]) * 0.5] for val in vals
+            ]
+    else:
+        raise ValueError("Invalid error propagation method.")
+
+    # Calculate the sum
+    suma = sum(val[0] for val in vals)
+
+    # Partial derivatives for error propagation
+    dsuma_dvals = [1.0 for _ in vals]
+
+    # Errors
+    suma_err = sqrt(
+        sum((dsuma_dvals[i] * vals_err[i]) ** 2 for i in range(len(vals)))
+    )
+
+    return suma, suma_err, suma_err  # Same error for min and max
