@@ -14,6 +14,12 @@
 """Module with utilities for unit conversion and manipulation."""
 
 # =============================================================================
+# IMPORTS
+# =============================================================================
+
+from numpy import pi
+
+# =============================================================================
 # CONSTANTS
 # =============================================================================
 
@@ -66,4 +72,7 @@ Rs2Rj = R_SUN / R_JUP  # Solar to Jupiter radius
 # Distance conversions
 AU2PC = AU / PC  # AU to parsec
 PC2AU = PC / AU  # Parsec to AU
+# Angle conversions
+DEG2RAD = pi / 180.0  # Degrees to radians
+RAD2DEG = 180.0 / pi  # Radians to degrees
 # Time conversions too obvious to write them here
