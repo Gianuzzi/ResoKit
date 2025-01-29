@@ -1725,7 +1725,7 @@ class StaticSystem:
                 ]
             df.index = ["hill", "hill_err_min", "hill_err_max"]
 
-            if err_method == 0:  # No error
+            if err_method == -1:  # No error
                 return df.loc["hill"]  # Return only the mass
 
             return df.T  # Return the DataFrame

@@ -524,7 +524,7 @@ def calc_period_with_errors(
     m_planet: float,
     m_planet_err_min: float,
     m_planet_err_max: float,
-    err_method: int = 0,
+    err_method: int = -1,
 ) -> Tuple[float, float, float]:
     """Calculate the orbital period and its error using error propagation.
 
@@ -548,7 +548,7 @@ def calc_period_with_errors(
         Minimum error in the planet's mass, in Jupiter masses.
     m_planet_err_max : float
         Maximum error in the planet's mass, in Jupiter masses.
-    err_method : int, optional. Default: 0
+    err_method : int, optional. Default: -1
         Error method to use:
             - <=0: No error. Return the period and 0 error.
             - 1: Extremes. Estimate the period at the extreme values of
@@ -652,7 +652,7 @@ def calc_a_with_errors(
     m_planet: float,
     m_planet_err_min: float,
     m_planet_err_max: float,
-    err_method: int = 0,
+    err_method: int = -1,
 ) -> Tuple[float, float, float]:
     """Calculate the semi-major axis and its error using error propagation.
 
@@ -676,7 +676,7 @@ def calc_a_with_errors(
         Minimum error in the planet's mass, in Jupiter masses.
     m_planet_err_max : float
         Maximum error in the planet's mass, in Jupiter masses.
-    err_method : int, optional. Default: 0
+    err_method : int, optional. Default: -1
         Error method to use:
             - <=0: No error. Return the period and 0 error.
             - 1: Extremes. Estimate the period at the extreme values of
@@ -790,7 +790,7 @@ def hill_radius_with_errors(
     m_planet: float,
     m_planet_err_min: float,
     m_planet_err_max: float,
-    err_method: int = 0,
+    err_method: int = -1,
 ) -> Tuple[float, float, float]:
     """Calculate the Hill radius and its error using error propagation.
 
@@ -820,7 +820,7 @@ def hill_radius_with_errors(
         Minimum error in the planet's mass, in Jupiter masses.
     m_planet_err_max : float
         Maximum error in the planet's mass, in Jupiter masses.
-    err_method : int, optional. Default: 0
+    err_method : int, optional. Default: -1
         Error method to use:
             - <=0: No error. Return the period and 0 error.
             - 1: Extremes. Estimate the period at the extreme values of
