@@ -670,6 +670,11 @@ class StaticPlanet(ResokitDataFrame):
         Equation:
             :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
 
+        Note
+        ----
+        To use the errors, set `err_method` to 1 or 2. Be aware that the
+        planet must have `radius_err_min` and `radius_err_max` columns.
+
         Parameters
         ----------
         kwargs : dict
@@ -733,6 +738,11 @@ class StaticPlanet(ResokitDataFrame):
 
         Equation:
             :math:`radius = C \\times mass^S`
+
+        Note
+        ----
+        To use the errors, set `err_method` to 1 or 2. Be aware that the
+        planet must have `mass_err_min` and `mass_err_max` columns.
 
         Parameters
         ----------
@@ -801,6 +811,12 @@ class StaticPlanet(ResokitDataFrame):
         **plot_kwargs: dict,
     ) -> plt.Axes:
         """Plot the x vs y data of the planet.
+
+        Note
+        ----
+        The parameters `error_x` and `error_y` link each error to the
+        input parameter `x` and `y`, respectively. The error columns must be
+        named as `x_err_min`, `x_err_max`, `y_err_min`, and `y_err_max`.
 
         Parameters
         ----------
@@ -1345,7 +1361,7 @@ class StaticSystem:
         return df
 
     def estimate_period(
-        self, which: Union[str, int, List[int]] = "all", err_method: int = 0
+        self, which: Union[str, int, List[int]] = "all", err_method: int = -1
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the period of selected planets in the system.
 
@@ -1366,7 +1382,9 @@ class StaticSystem:
         err_method : int, optional. Default: -1.
             Method to estimate the error.
             See py:func:`resokit.utils.calc_period_with_errors` for more
-            details.
+            details. The planet must have "a" and "mass" errors" columns, and
+            the star must have "mass" errors columns.
+            The options are:
             *-1*: Nothing. Do not estimate the error.
             *0* : No propagation. Return both errors as 0.0.
             *1* : Extremes. Estimate the period at the extreme values of
@@ -1398,14 +1416,14 @@ class StaticSystem:
                 pl = self.planets[i]
                 per, per_err_min, per_err_max = calc_period_with_errors(
                     pl.a,
-                    pl.a_err_min,
-                    pl.a_err_max,
+                    pl.a_err_min if err_method > 0 else 0.0,
+                    pl.a_err_max if err_method > 0 else 0.0,
                     self.star.mass,
-                    self.star.mass_err_min,
-                    self.star.mass_err_max,
+                    self.star.mass_err_min if err_method > 0 else 0.0,
+                    self.star.mass_err_max if err_method > 0 else 0.0,
                     pl.mass,
-                    pl.mass_err_min,
-                    pl.mass_err_max,
+                    pl.mass_err_min if err_method > 0 else 0.0,
+                    pl.mass_err_max if err_method > 0 else 0.0,
                     err_method,
                 )
                 df[f"{pl.name}"] = [per, per_err_min, per_err_max]
@@ -1419,7 +1437,7 @@ class StaticSystem:
         raise ValueError("Invalid value for 'which'.")
 
     def estimate_semi_major_axis(
-        self, which: Union[str, int, List[int]] = "all", err_method: int = 0
+        self, which: Union[str, int, List[int]] = "all", err_method: int = -1
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the semi-major axis of selected planets in the system.
 
@@ -1438,7 +1456,9 @@ class StaticSystem:
         err_method : int, optional. Default: -1.
             Method to estimate the error.
             See py:func:`resokit.utils.calc_semi_major_axis_with_errors` for
-            more details.
+            more details. The planet must have "P" and "mass" errors" columns,
+            and the star must have "mass" errors columns.
+            The options are:
             *-1*: Nothing. Do not estimate the error.
             *0* : No propagation. Return both errors as 0.0.
             *1* : Extremes. Estimate the semi-major axis at the extreme
@@ -1470,14 +1490,14 @@ class StaticSystem:
                 pl = self.planets[i]
                 a, a_err_min, a_err_max = calc_a_with_errors(
                     pl.P,
-                    pl.P_err_min,
-                    pl.P_err_max,
+                    pl.P_err_min if err_method > 0 else 0.0,
+                    pl.P_err_max if err_method > 0 else 0.0,
                     self.star.mass,
-                    self.star.mass_err_min,
-                    self.star.mass_err_max,
+                    self.star.mass_err_min if err_method > 0 else 0.0,
+                    self.star.mass_err_max if err_method > 0 else 0.0,
                     pl.mass,
-                    pl.mass_err_min,
-                    pl.mass_err_max,
+                    pl.mass_err_min if err_method > 0 else 0.0,
+                    pl.mass_err_max if err_method > 0 else 0.0,
                     err_method,
                 )
                 df[f"{pl.name}"] = [
@@ -1518,6 +1538,10 @@ class StaticSystem:
         ----
         If `err_method=-1`, only the mass is returned. If `err_method=0`, the
         errors are 0.0.
+
+        Note
+        ----
+        To use the errors, the planet must have "radius" error columns.
 
 
         Returns
@@ -1583,6 +1607,10 @@ class StaticSystem:
         If `err_method=-1`, only the radius is returned. If `err_method=0`, the
         errors are 0.0.
 
+        Note
+        ----
+        To use the errors, the planet must have "mass" error columns.
+
         Returns
         -------
         radius, radius_err_min, radius_err_max : tuple or DataFrame
@@ -1624,7 +1652,7 @@ class StaticSystem:
     def estimate_hill_radius(
         self,
         which: Union[str, int, List[int]] = "all",
-        err_method: int = 0,
+        err_method: int = -1,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         """Calculate the Hill radius of selected planets in the system.
 
@@ -1643,7 +1671,9 @@ class StaticSystem:
         err_method : int, optional. Default: -1.
             Method to estimate the error.
             See py:func:`resokit.utils.hill_radius.hill_radius_with_errors` for
-            more details.
+            more details. The planet must have "a", "e" and "mass" error
+            columns, and the star must have "mass" errors columns.
+            The options are:
             *-1*: Nothing. Do not estimate the error.
             *0* : No propagation. Return both errors as 0.0.
             *1* : Extremes. Estimate the semi-major axis at the extreme
@@ -1675,17 +1705,17 @@ class StaticSystem:
                 pl = self.planets[i]
                 hill, hill_err_min, hill_err_max = hill_radius_with_errors(
                     pl.a,
-                    pl.a_err_min,
-                    pl.a_err_max,
+                    pl.a_err_min if err_method > 0 else 0.0,
+                    pl.a_err_max if err_method > 0 else 0.0,
                     pl.e,
-                    pl.e_err_min,
-                    pl.e_err_max,
+                    pl.e_err_min if err_method > 0 else 0.0,
+                    pl.e_err_max if err_method > 0 else 0.0,
                     self.star.mass,
-                    self.star.mass_err_min,
-                    self.star.mass_err_max,
+                    self.star.mass_err_min if err_method > 0 else 0.0,
+                    self.star.mass_err_max if err_method > 0 else 0.0,
                     pl.mass,
-                    pl.mass_err_min,
-                    pl.mass_err_max,
+                    pl.mass_err_min if err_method > 0 else 0.0,
+                    pl.mass_err_max if err_method > 0 else 0.0,
                     err_method,
                 )
                 df[f"{pl.name}"] = [
@@ -1715,6 +1745,15 @@ class StaticSystem:
         """Plot the x vs y data of the system.
 
         Uses :py:func:`plt.errorbar` internally.
+
+        Note
+        ----
+        Crossed attributes (e.g., x='star_mass', y='mass') are allowed.
+
+        Note
+        ----
+        To use the error bars, the planets (star) must have the corresponding
+        error columns.
 
         Parameters
         ----------
@@ -1815,6 +1854,7 @@ class StaticSystem:
             *1* will plot the second triplet: (1, 2, 3).
         error : bool, optional. Default: False.
             Whether to plot the error bars.
+            Only available if the planets have period ratio error columns.
         ax : plt.Axes, optional. Default: None.
             Matplotlib Axes to plot on.
             If None, get and use the current Axes.
@@ -2083,7 +2123,7 @@ class StaticSystem:
             and fraction_arg is not 0.
         error : bool, optional. Default: False.
             Whether to return the error of the period ratio, instead of the
-            period ratio itself.
+            period ratio itself. Only meaningful if there are errors.
         fraction_kwargs : dict, optional
             Keyword arguments for the float_to_fraction function.
             If None, no fraction conversion is done.
