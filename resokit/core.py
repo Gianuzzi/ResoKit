@@ -26,10 +26,23 @@ import attrs
 import matplotlib.pyplot as plt
 
 from numpy import isnan, pi, sqrt
+from numpy.random import default_rng
 
 import pandas as pd
 
-from resokit.units import Me2Mj, Mj2Me, Re2Rj, Rj2Re
+from resokit.units import (
+    AU,
+    DEG2RAD,
+    M_JUP,
+    M_SUN,
+    Me2Mj,
+    Mj2Me,
+    Mj2Ms,
+    R_JUP,
+    R_SUN,
+    Re2Rj,
+    Rj2Re,
+)
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.parser import (
     DEFAULT_METADATA,
@@ -38,14 +51,23 @@ from resokit.utils.parser import (
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
+    assert_module_imported,
     parse_to_iter,
 )
 from resokit.utils.utils import (
     calc_a_with_errors,
     calc_hill_radius_with_errors,
     calc_period_with_errors,
+    calc_sum_with_errors,
     float_to_fraction,
 )
+
+try:
+    import rebound
+
+    rebound_imported = True
+except ImportError:
+    rebound_imported = False
 
 # =============================================================================
 # BASE CLASSES
@@ -234,52 +256,6 @@ class ResokitDataFrame:
 
         return html
 
-    def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:
-        """Convert data to pandas data frame.
-
-        This method constructs a data frame with the data inside the
-        data_df attribute.
-
-        Parameters
-        ----------
-        columns : list, optional. Default: None.
-            Specific columns to return.
-            If `None`, return all columns.
-        copy : bool, optional. Default: False.
-            Whether to return a copy of the `DataFrame`, or the original.
-
-        Returns
-        -------
-        df: DataFrame
-            Data frame with the requested columns.
-        """
-        if columns is None:
-            # my_cols = RESO_DTYPES.keys()
-            # # Add columns in this df, but not in the default mapping
-            # my_cols = my_cols | [
-            #     col for col in self.columns_ if col not in my_cols
-            # ]
-            used_cols = list(self.columns_)
-        else:
-            used_cols = [col for col in list(columns) if col in self.columns_]
-
-        df = self.data_df[used_cols]
-
-        return df.copy(deep=True) if copy else df
-
-    def to_dict(self) -> dict:
-        """Convert metadata to a dictionary.
-
-        This method constructs a dictionary with the data inside the
-        metadata attribute.
-
-        Returns
-        -------
-        metadata : dict
-            Dictionary with the metadata.
-        """
-        return dict(self.metadata)
-
     def plot(
         self,
         x: str,
@@ -367,6 +343,52 @@ class ResokitDataFrame:
         )
 
         return ax
+
+    def to_dict(self) -> dict:
+        """Convert metadata to a dictionary.
+
+        This method constructs a dictionary with the data inside the
+        metadata attribute.
+
+        Returns
+        -------
+        metadata : dict
+            Dictionary with the metadata.
+        """
+        return dict(self.metadata)
+
+    def to_dataframe(self, columns=None, copy=False) -> pd.DataFrame:
+        """Convert data to pandas data frame.
+
+        This method constructs a data frame with the data inside the
+        data_df attribute.
+
+        Parameters
+        ----------
+        columns : list, optional. Default: None.
+            Specific columns to return.
+            If `None`, return all columns.
+        copy : bool, optional. Default: False.
+            Whether to return a copy of the `DataFrame`, or the original.
+
+        Returns
+        -------
+        df: DataFrame
+            Data frame with the requested columns.
+        """
+        if columns is None:
+            # my_cols = RESO_DTYPES.keys()
+            # # Add columns in this df, but not in the default mapping
+            # my_cols = my_cols | [
+            #     col for col in self.columns_ if col not in my_cols
+            # ]
+            used_cols = list(self.columns_)
+        else:
+            used_cols = [col for col in list(columns) if col in self.columns_]
+
+        df = self.data_df[used_cols]
+
+        return df.copy(deep=True) if copy else df
 
     def copy(self) -> "ResokitDataFrame":
         """Create and return copy of the :py:class:`ResokitDataFrame`.
@@ -487,6 +509,9 @@ def df_to_resokit(
         metadata = dict(DEFAULT_METADATA)
 
     return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
+
+
+rng = default_rng(seed=42)
 
 
 # =============================================================================
@@ -1090,6 +1115,16 @@ class StaticSystem:
     period_ratios_: Union[float, pd.DataFrame] = attrs.field(init=False)
     __error_ratios__: Union[float, pd.DataFrame] = attrs.field(init=False)
 
+    mass_accum_: pd.Series = attrs.field(init=False)
+
+    @web_page.default
+    def _web_page_default(self):
+        """Set the default value for web_page."""
+        return [
+            self.star.web_page,
+            *[planet.web_page for planet in self.planets],
+        ]
+
     @n_planets_.default
     def _n_planets__default(self):
         """Set the default value for n_planets_."""
@@ -1141,13 +1176,19 @@ class StaticSystem:
 
         return pd.DataFrame()  # Empty mutable DataFrame
 
-    @web_page.default
-    def _web_page_default(self):
-        """Set the default value for web_page."""
-        return [
-            self.star.web_page,
-            *[planet.web_page for planet in self.planets],
-        ]
+    @mass_accum_.default
+    def _mass_accum__default(self):
+        """Set the default value for mass_accum_."""
+        # Calculate the accumulated mass inside each planet orbit
+        # (and the star too), without including that planet.
+        # THe series will have n_planets_ + 1 elements.
+        in_masses = [self.star.mass]
+        for i in range(self.n_planets_):
+            in_masses.append(
+                in_masses[-1] + self.planets[i].mass
+            )  # Accumulated mass
+
+        return pd.Series(in_masses, index=["star"] + self.planet_names_)
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -1364,7 +1405,10 @@ class StaticSystem:
         return df
 
     def estimate_period(
-        self, which: Union[str, int, List[int]] = "all", err_method: int = -1
+        self,
+        which: Union[str, int, List[int]] = "all",
+        err_method: int = -1,
+        jacobi: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the period of selected planets in the system.
 
@@ -1402,6 +1446,10 @@ class StaticSystem:
             *4* : Deviated propagation. Assume each parameters follows a normal
             distribution with sigma = (err_max + err_min) / 2, but the
             mean is at ((val + err_min) + (val + err_max)) / 2.
+        jacobi : bool, optional. Default: False.
+            Whether to use the Jacobi criterion to estimate the period.
+            Involves using the accumulated inner mass (star + inner planets)
+            instead of just the star mass.
 
         Returns
         -------
@@ -1420,13 +1468,41 @@ class StaticSystem:
 
             for i in which:  # Iterate over the planets
                 pl = self.planets[i]
+                if jacobi and err_method > 0:  # Jacobi criterion with errors
+                    # Get the planetary masses
+                    masses_with_errors = self.get_item("mass", error=True)
+                    # Keep only the masses of the planets before the current one
+                    masses_with_errors = masses_with_errors.iloc[:i]
+                    # Convert to Solar Masses
+                    masses_with_errors = masses_with_errors * Mj2Ms
+                    # Create a tuple with the masses and their errors
+                    tup = masses_with_errors.itertuples(index=False, name=None)
+                    # Calculate the inner mass and error
+                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
+                        (
+                            *(
+                                self.star.mass,
+                                self.star.mass_err_min,
+                                self.star.mass_err_max,
+                            ),
+                            *tup,
+                        ),
+                    )
+                elif jacobi:  # Jacobi criterion without errors
+                    in_m = self.mass_accum_.iloc[i]
+                    in_m_err_min = 0.0
+                    in_m_err_max = 0.0
+                else:  # No Jacobi criterion
+                    in_m = self.star.mass
+                    in_m_err_min = self.star.mass_err_min
+                    in_m_err_max = self.star.mass_err_max
                 per, per_err_min, per_err_max = calc_period_with_errors(
                     pl.a,
                     pl.a_err_min if err_method > 0 else 0.0,
                     pl.a_err_max if err_method > 0 else 0.0,
-                    self.star.mass,
-                    self.star.mass_err_min if err_method > 0 else 0.0,
-                    self.star.mass_err_max if err_method > 0 else 0.0,
+                    in_m,
+                    in_m_err_min if err_method > 0 else 0.0,
+                    in_m_err_max if err_method > 0 else 0.0,
                     pl.mass,
                     pl.mass_err_min if err_method > 0 else 0.0,
                     pl.mass_err_max if err_method > 0 else 0.0,
@@ -1443,7 +1519,10 @@ class StaticSystem:
         raise ValueError("Invalid value for 'which'.")
 
     def estimate_semi_major_axis(
-        self, which: Union[str, int, List[int]] = "all", err_method: int = -1
+        self,
+        which: Union[str, int, List[int]] = "all",
+        err_method: int = -1,
+        jacobi: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the semi-major axis of selected planets in the system.
 
@@ -1481,6 +1560,10 @@ class StaticSystem:
             *4* : Deviated propagation. Assume each parameters follows a normal
             distribution with sigma = (err_max + err_min) / 2, but the
             mean is at ((val + err_min) + (val + err_max)) / 2.
+        jacobi : bool, optional. Default: False.
+            Whether to use the Jacobi criterion to estimate the semi-major axis.
+            Involves using the accumulated inner mass (star + inner planets)
+            instead of just the star mass.
 
         Returns
         -------
@@ -1498,13 +1581,43 @@ class StaticSystem:
 
             for i in which:  # Iterate over the planets
                 pl = self.planets[i]
+                if jacobi and err_method > 0:  # Jacobi criterion with errors
+                    # Get the planetary masses
+                    masses_with_errors = self.get_item("mass", error=True)
+                    # Keep only the masses of the planets before the current one
+                    masses_with_errors = masses_with_errors.iloc[:i]
+                    # Convert to Solar Masses
+                    masses_with_errors = masses_with_errors * Mj2Ms
+                    # Create a tuple with the masses and their errors
+                    tup = masses_with_errors.itertuples(index=False, name=None)
+                    # Calculate the inner mass and error
+                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
+                        (
+                            *(
+                                self.star.mass,
+                                self.star.mass_err_min,
+                                self.star.mass_err_max,
+                            ),
+                            *tup,
+                        ),
+                    )
+                elif jacobi:  # Jacobi criterion without errors
+                    in_m = self.mass_accum_.iloc[i]
+                    in_m_err_min = 0.0
+                    in_m_err_max = 0.0
+                else:  # No Jacobi criterion
+                    in_m = self.star.mass
+                    in_m_err_min = self.star.mass_err_min
+                    in_m_err_max = self.star.mass_err_max
+
+                # Calculate the semi-major axis
                 a, a_err_min, a_err_max = calc_a_with_errors(
                     pl.P,
                     pl.P_err_min if err_method > 0 else 0.0,
                     pl.P_err_max if err_method > 0 else 0.0,
-                    self.star.mass,
-                    self.star.mass_err_min if err_method > 0 else 0.0,
-                    self.star.mass_err_max if err_method > 0 else 0.0,
+                    in_m,
+                    in_m_err_min if err_method > 0 else 0.0,
+                    in_m_err_max if err_method > 0 else 0.0,
                     pl.mass,
                     pl.mass_err_min if err_method > 0 else 0.0,
                     pl.mass_err_max if err_method > 0 else 0.0,
@@ -1669,6 +1782,7 @@ class StaticSystem:
         self,
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
+        jacobi: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Calculate the Hill radius of selected planets in the system.
 
@@ -1706,6 +1820,10 @@ class StaticSystem:
             *4* : Deviated propagation. Assume each parameters follows a normal
             distribution with sigma = (err_max + err_min) / 2, but the
             mean is at ((val + err_min) + (val + err_max)) / 2.
+        jacobi : bool, optional. Default: False.
+            Whether to use the Jacobi criterion to estimate the Hill radius.
+            Involves using the accumulated inner mass (star + inner planets)
+            instead of just the star mass.
 
         Returns
         -------
@@ -1723,6 +1841,34 @@ class StaticSystem:
 
             for i in which:  # Iterate over the planets
                 pl = self.planets[i]
+                if jacobi and err_method > 0:  # Jacobi criterion with errors
+                    # Get the planetary masses
+                    masses_with_errors = self.get_item("mass", error=True)
+                    # Keep only the masses of the planets before the current one
+                    masses_with_errors = masses_with_errors.iloc[:i]
+                    # Convert to Solar Masses
+                    masses_with_errors = masses_with_errors * Mj2Ms
+                    # Create a tuple with the masses and their errors
+                    tup = masses_with_errors.itertuples(index=False, name=None)
+                    # Calculate the inner mass and error
+                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
+                        (
+                            *(
+                                self.star.mass,
+                                self.star.mass_err_min,
+                                self.star.mass_err_max,
+                            ),
+                            *tup,
+                        ),
+                    )
+                elif jacobi:  # Jacobi criterion without errors
+                    in_m = self.mass_accum_.iloc[i]
+                    in_m_err_min = 0.0
+                    in_m_err_max = 0.0
+                else:  # No Jacobi criterion
+                    in_m = self.star.mass
+                    in_m_err_min = self.star.mass_err_min
+                    in_m_err_max = self.star.mass_err_max
                 hill, hill_err_min, hill_err_max = (
                     calc_hill_radius_with_errors(
                         pl.a,
@@ -1731,9 +1877,9 @@ class StaticSystem:
                         pl.e,
                         pl.e_err_min if err_method > 0 else 0.0,
                         pl.e_err_max if err_method > 0 else 0.0,
-                        self.star.mass,
-                        self.star.mass_err_min if err_method > 0 else 0.0,
-                        self.star.mass_err_max if err_method > 0 else 0.0,
+                        in_m,
+                        in_m_err_min if err_method > 0 else 0.0,
+                        in_m_err_max if err_method > 0 else 0.0,
                         pl.mass,
                         pl.mass_err_min if err_method > 0 else 0.0,
                         pl.mass_err_max if err_method > 0 else 0.0,
@@ -2340,6 +2486,10 @@ class StaticSystem:
 
         return pair_ratio * sqrt(sigma2)  # Return the error
 
+    def to_dict(self) -> dict:
+        """Return the metadata as a new dictionary."""
+        return dict(self.metadata)
+
     def to_dataframe(
         self, add_star: Union[bool, None] = True, columns: list = None
     ) -> pd.DataFrame:
@@ -2400,9 +2550,122 @@ class StaticSystem:
 
         return df
 
-    def to_dict(self) -> dict:
-        """Return the metadata as a new dictionary."""
-        return dict(self.metadata)
+    def to_rebound(
+        self,
+        sim: rebound.Simulation = None,
+        fillna: bool = True,
+        units: Union[bool, Tuple[float, float]] = True,
+        random_m_angle: bool = False,
+        verbose: bool = True,
+    ) -> "rebound.Simulation":
+        """Return a REBOUND simulation with the system data.
+
+        Note
+        ----
+            The REBOUND simulation is created with the heliocentric orbits.
+
+        Note
+        ----
+            The simulation units are not changed. The user has to ensure the
+            consistency of the units after the simulation is created.
+            (eg. if the user provides the units in [Kg, m], then
+            sim.units = ('kg', 'm', <time_unit>) has to be set after the
+            simulation is created).
+
+        Parameters
+        ----------
+        sim : rebound.Simulation, optional. Default: None.
+            REBOUND simulation to add the system data.
+            If None, create a new simulation.
+        fillna : bool, optional. Default: True.
+            Whether to fill missing data with estimations.
+        units : bool, tuple, optional. Default: True.
+            Whether to use AU, Msun units.
+            If False, use m, Kg units.
+            If tuple, use the given units. The tuple must be
+            (unit_mass, unit_length). The user has to ensure the
+            consistency of the units after the simulation is created.
+        random_m_angle : bool, optional. Default: False.
+            Whether to use random values for the mean anomaly, in
+            case the planets do not have it.
+            If False, use 0.0.
+        verbose : bool, optional. Default: True.
+            Whether to print a message when creating the simulation.
+
+        """
+        # Check if REBOUND is imported
+        assert_module_imported(rebound_imported, "rebound")
+
+        # Create a new simulation if not provided
+        if sim is None:
+            sim = rebound.Simulation()
+            if verbose:
+                print("New REBOUND simulation created.")
+
+        # Define units
+        if isinstance(units, bool):
+            if units:  # AU, Msun
+                units = (M_SUN, AU)
+                if verbose:
+                    print(" Using AU, Msun units.")
+            else:  # m, Kg
+                units = (1.0, 1.0)
+                if verbose:
+                    print(" Using m, Kg units.")
+        elif verbose:
+            print(" Using user-defined units:", units)
+        # If not defined, the user provides (unit_mass, unit_length) in [Kg, m]
+
+        # Add the star at the center
+        sim.add(
+            m=self.star.mass * M_SUN / units[0],
+            r=self.star.radius * R_SUN / units[1],
+            hash=self.star.name,
+        )
+        if verbose:
+            print(f" Star {self.star.name} added.")
+
+        # Add the planets. Loop
+        for planet in self.planets:
+            # Fill mass or radius with estimation if not given
+            pmass = (
+                planet.mass
+                if planet.mass > 0
+                else planet.estimate_mass(err_method=-1) if fillna else 0.0
+            )
+            pradius = (
+                planet.radius
+                if planet.radius > 0
+                else planet.estimate_radius(err_method=-1) if fillna else 0.0
+            )
+            pa = (
+                planet.a
+                if planet.a > 0
+                else (
+                    self.estimate_semi_major_axis(
+                        which=planet.name,
+                        err_method=-1,  # No error for rebound
+                        jacobi=False,  # Heliocentric orbit
+                    )
+                    if fillna
+                    else 0.0
+                )
+            )
+            sim.add(
+                m=pmass * M_JUP / units[0],
+                r=pradius * R_JUP / units[1],
+                a=pa * AU / units[1],
+                e=planet.e,
+                inc=planet.inc * DEG2RAD if planet.inc > 0 else 0.0,
+                omega=planet.w * DEG2RAD if planet.w > 0 else 0.0,
+                M=rng.uniform(0, 2 * pi) if random_m_angle else 0.0,
+                hash=planet.name,
+                primary=sim.particles[self.star.name],  # Star
+            )
+        if verbose:
+            print(f" {self.n_planets_} planets added.")
+
+        return sim
 
     def copy(self) -> "StaticSystem":
         """Return a copy of the :py:class:`StaticSystem`."""

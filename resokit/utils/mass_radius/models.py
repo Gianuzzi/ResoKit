@@ -1156,7 +1156,9 @@ def estimate_radius(
     if err_method == -1:
         return radius
 
-    return np.array([radius, radius_err_min, radius_err_max]).T
+    return np.array(
+        [radius, -radius_err_min, radius_err_max]
+    ).T  # -for consistency
 
 
 def estimate_mass(
@@ -1250,4 +1252,4 @@ def estimate_mass(
     if err_method == -1:
         return mass
 
-    return np.array([mass, mass_err_min, mass_err_max]).T
+    return np.array([mass, -mass_err_min, mass_err_max]).T  # -for consistency
