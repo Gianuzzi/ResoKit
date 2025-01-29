@@ -394,7 +394,6 @@ def df_to_resokit(
     drop: bool = True,
     copy: bool = False,
     sort_by: Union[str, bool] = "P",
-    # add_binary: bool = True,
     return_df: bool = False,
     rename_index: bool = True,
     metadata: dict = None,
@@ -421,14 +420,6 @@ def df_to_resokit(
         Column to sort the data by.
         If `False` or `None`, do not sort the data.
         If `True`, sort by period ("P").
-    add_binary : bool, optional. Default: True.
-        Whether to add the "binary" column to the DataFrame.
-        Assumes the columns "hostname", "star_name" or "star_alternate_names".
-        In this column:
-        -1 means unknown.
-        0 means the planet is not in a binary system.
-        1 means the planet is a circumsingle planet in a binary system.
-        2 means the planet is a circumbinary planet.
     return_df : bool, optional. Default: False.
         Whether to return the a pandas Data frame instead of the
         :py:class:`ResokitDataFrame`.
@@ -470,52 +461,6 @@ def df_to_resokit(
         if "P_err_min" in df.columns and "P_err_max" in df.columns:
             df["n_err_min"] = 2.0 * pi / df["P_err_max"]
             df["n_err_max"] = 2.0 * pi / df["P_err_min"]
-
-    # # Add "binary" column
-    # if add_binary:
-    #     # Check if the star name column is present
-    #     if "star_name" not in df.columns and "hostname" not in df.columns:
-    #         raise ValueError(
-    #             "Cannot add the binary column without the star name column."
-    #         )
-    #     star_name_col = (
-    #         "star_name" if "star_name" in df.columns else "hostname"
-    #     )
-    #     # Initialize the binary column
-    #     if "binary" not in df.columns:
-    #         df["binary"] = -1
-    #     else:
-    #         df["binary"] = df["binary"].fillna(-1)
-
-    #     # Define the binary search function
-    #     def my_binary_search(name):
-    #         bina, circ, _, _ = check_if_binary(name)
-    #         if not bina:
-    #             return 0
-    #         return 2 if circ else 1
-
-    #     # Create the binary column
-    #     df["binary"] = df[star_name_col].apply(my_binary_search)
-    #     # Check if alternative names are present
-    #     if "star_alternate_names" in df.columns:
-    #         # La magia del inline:
-    #         # Tomá la columna, hacela str, dividila por ", ",
-    #         # expandila en filas, aplicale la función, y al final
-    #         # agrupala por el índice original usando el máximo.
-    #         # Así, si hay algún mach entre los varios alternativos,
-    #         # se toma el máximo.
-    #         binalter = (
-    #             df["star_alternate_names"]
-    #             .str.split(", ")
-    #             .explode()
-    #             .apply(my_binary_search)
-    #             .groupby(level=0)
-    #             .max()
-    #         )
-
-    #         # Update the binary column. Get the max between itself
-    #         # and the alternative names
-    #         df["binary"] = df["binary"].combine(binalter, max)
 
     # Define all errors positive
     for col in df.columns:
@@ -726,7 +671,7 @@ class StaticPlanet(ResokitDataFrame):
         r"""Calculate the mass of the planet using a power-law approximation.
 
         Equation:
-            :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
+            :math:`mass = \dfrac{1}{C} \times radius^{1/S}`
 
         Note
         ----
@@ -795,7 +740,7 @@ class StaticPlanet(ResokitDataFrame):
         r"""Calculate the radius of a planet using a power-law approximation.
 
         Equation:
-            :math:`radius = C \\times mass^S`
+            :math:`radius = C \times mass^S`
 
         Note
         ----
@@ -1425,6 +1370,9 @@ class StaticSystem:
 
         Calculate the period of the planet using the third Kepler's law.
 
+        Equation:
+            :math:`P = 2 \pi \sqrt{\dfrac{a^3}{G (m_\star + m_p)}}`
+
         Parameters
         ----------
         which : str, int, list[int], optional. Default: 'all'.
@@ -1498,6 +1446,10 @@ class StaticSystem:
         self, which: Union[str, int, List[int]] = "all", err_method: int = -1
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the semi-major axis of selected planets in the system.
+
+        Equation:
+            :math:`a = \left(\dfrac{G (m_\star + m_p)}
+            {4 \pi^2 P^2}\right)^{1/3}`
 
         Parameters
         ----------
@@ -1577,6 +1529,9 @@ class StaticSystem:
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the mass of selected planets in the system.
 
+        Equation:
+            :math:`mass = \frac{1}{C} \times radius^{1/S}`
+
         Parameters
         ----------
         which : str, int, list[int], optional. Default: 'all'.
@@ -1645,6 +1600,9 @@ class StaticSystem:
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the radius of selected planets in the system.
 
+        Equation:
+            :math:`radius = C \times mass^S`
+
         Parameters
         ----------
         which : str, int, list[int], optional. Default: 'all'.
@@ -1712,7 +1670,11 @@ class StaticSystem:
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
-        """Calculate the Hill radius of selected planets in the system.
+        r"""Calculate the Hill radius of selected planets in the system.
+
+        Equation:
+            :math:`r_H = a (1 - e) \left(\dfrac{m_p}
+            {3 (m_\star + m_p)}\right)^{1/3}`
 
         Parameters
         ----------
@@ -1898,10 +1860,10 @@ class StaticSystem:
         label: Union[str, list, bool] = True,
         **kwargs,
     ) -> plt.Axes:
-        """Plot consecutive triplets of planets in the period ratio space.
+        r"""Plot consecutive triplets of planets in the period ratio space.
 
         Systems triplets are shown in the plane
-        :math:`P_{i+1}/P_i` vs. :math:`P_{i+2}/P_{i+1}`.
+            :math:`P_{i+1}/P_i` vs. :math:`P_{i+2}/P_{i+1}`.
 
         Parameters
         ----------
@@ -2169,7 +2131,7 @@ class StaticSystem:
         error: bool = False,
         **fraction_kwargs: dict,
     ) -> Union[float, pd.DataFrame]:
-        """Return the period ratio of the specified pair of planets.
+        r"""Return the period ratio of the specified pair of planets.
 
         Parameters
         ----------

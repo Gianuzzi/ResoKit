@@ -41,6 +41,9 @@ def mmr3b(
 ) -> Union[float, np.ndarray]:
     """Compute the 3-body mean-motion resonance (MMR) curve.
 
+    Equation
+        :math:`a x + b y + c = 0`
+
     Parameters
     ----------
     x : float or np.ndarray

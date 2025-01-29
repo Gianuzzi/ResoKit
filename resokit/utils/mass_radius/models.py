@@ -36,7 +36,7 @@ from resokit.units import M_EAR, Mj2Me, Ms2Me, R_EAR
 def power_law(x: float, c: float, s: float, x0: float = 1.0) -> float:
     r"""Calculate a power-law.
 
-    Equation: :math:`y = c \\times \\left(\\frac{x}{x}\\right)^s`
+    Equation: :math:`y = c \times \\left(\frac{x}{x}\\right)^s`
 
     Parameters
     ----------
@@ -119,7 +119,7 @@ def chen_kipp_2017_radius(mass: float) -> Tuple[float, tuple, tuple, tuple]:
     r"""Calculate the radius of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
-        :math:`radius = C \\times mass^S`
+        :math:`radius = C \times mass^S`
     Citation:
         Chen, J., & Kipping, D. 2017, ApJ, 834, 17
     For a complete implementation of the method, see:
@@ -174,7 +174,7 @@ def chen_kipp_2017_mass(
     r"""Calculate the mass of a planet using the Chen & Kipping (2017).
 
     Power law approximation:
-        :math:`mass = x_0 \\frac{1}{C} \\times radius^{1/S}`
+        :math:`mass = x_0 \frac{1}{C} \times radius^{1/S}`
     Citation:
         Chen, J., & Kipping, D. 2017, ApJ, 834, 17
     For a complete implementation of the method, see:
@@ -297,7 +297,7 @@ def otegi_2020_radius(
     r"""Calculate the radius of a planet using Otegi et al. (2020).
 
     Power law approximation:
-        :math:`radius = x_0 C \\times mass^S`
+        :math:`radius = x_0 C \times mass^S`
     Citation:
         Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
 
@@ -415,7 +415,7 @@ def otegi_2020_mass(
     r"""Calculate the mass of a planet using Otegi et al. (2020).
 
     Power law approximation:
-        :math:`mass = x_0 \\frac{1}{C} \\times radius^{1/S}`
+        :math:`mass = x_0 \frac{1}{C} \times radius^{1/S}`
     Citation:
         Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
 
@@ -527,7 +527,7 @@ def edmonson_2023_radius(mass: float) -> Tuple[float, tuple, tuple, tuple]:
     r"""Calculate the radius of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
-        :math:`radius = x_0 C \\times mass^S`
+        :math:`radius = x_0 C \times mass^S`
     Citation:
         Edmondson, K., Norris, J., & Kerins, E. 2023, Open J. Astrophysics,
         submitted [arXiv:2310.16733]
@@ -574,7 +574,7 @@ def edmonson_2023_mass(radius: float) -> Tuple[float, tuple, tuple, tuple]:
     r"""Calculate the mass of a planet using the Edmondson et al. (2023).
 
     Power law approximation:
-        :math:`mass = x_0 \\frac{1}{C} \\times radius^{1/S}`
+        :math:`mass = x_0 \frac{1}{C} \times radius^{1/S}`
     Citation:
         Edmondson, K., Norris, J., & Kerins, E. 2023, Open J. Astrophysics,
         submitted [arXiv:2310.16733]
@@ -646,7 +646,7 @@ def muller_2024_radius(mass: float) -> Tuple[float, tuple, tuple, tuple]:
     r"""Calculate the radius of a planet using the Müller et al. (2024).
 
     Power law approximation:
-        :math:`radius = x_0 C \\times mass^S`
+        :math:`radius = x_0 C \times mass^S`
     Citation:
         Müller S., Baron J., Helled R., Bouchy F. & Parc L. 2024, A&A, 686, A296
 
@@ -694,7 +694,7 @@ def muller_2024_mass(
     r"""Calculate the mass of a planet using the Müller et al. (2024).
 
     Power law approximation:
-        :math:`mass = x_0 \\frac{1}{C} \\times radius^{1/S}`
+        :math:`mass = x_0 \frac{1}{C} \times radius^{1/S}`
     Citation:
         Müller S., Baron J., Helled R., Bouchy F. & Parc L. 2024, A&A, 686, A296
 
@@ -802,7 +802,7 @@ def estimate_mass_single(
     r"""Calculate the mass of a planet using a power-law approximation.
 
     Equation:
-        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
+        :math:`mass = \frac{1}{C} \times radius^{1/S}`
 
     Parameters
     ----------
@@ -915,7 +915,7 @@ def estimate_radius_single(
     r"""Calculate the radius of a planet using the power-law approximation.
 
     Equation:
-        :math:`radius = C \\times mass^S`
+        :math:`radius = C \times mass^S`
 
     Parameters
     ----------
@@ -1083,7 +1083,7 @@ def estimate_radius(
     r"""Calculate the radius of a planet using the power-law approximation.
 
     Equation:
-        :math:`radius = C \\times mass^S`
+        :math:`radius = C \times mass^S`
 
     Parameters
     ----------
@@ -1172,7 +1172,7 @@ def estimate_mass(
     r"""Calculate the mass of a planet using a power-law approximation.
 
     Equation:
-        :math:`mass = \\frac{1}{C} \\times radius^{1/S}`
+        :math:`mass = \frac{1}{C} \times radius^{1/S}`
 
     Parameters
     ----------

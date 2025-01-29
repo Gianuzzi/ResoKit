@@ -196,7 +196,10 @@ def float_to_fraction(
 
 
 def calc_period(a: float, m_star: float, m_planet) -> float:
-    """Calculate the orbital period of a planet.
+    r"""Calculate the orbital period of a planet.
+
+    Equation:
+        :math:`P = 2 \pi \sqrt{\dfrac{a^3}{G (m_\star + m_p)}}`
 
     Parameters
     ----------
@@ -324,7 +327,10 @@ def calc_period_with_errors(
 
 
 def calc_a(period: float, m_star: float, m_planet: float) -> float:
-    """Calculate the semi-major axis of a planet.
+    r"""Calculate the semi-major axis of a planet.
+
+    Equation:
+        :math:`a = \left(\dfrac{G (m_\star + m_p)}{4 \pi^2 P^2}\right)^{1/3}`
 
     Parameters
     ----------
@@ -456,7 +462,11 @@ def calc_a_with_errors(
 def calc_hill_radius(
     a: float, e: float, m_star: float, m_planet: float
 ) -> float:
-    """Calculate the Hill radius of a planet.
+    r"""Calculate the Hill radius of a planet.
+
+    Equation:
+        :math:`r_H = a (1 - e) \left(\dfrac{m_p}
+        {3 (m_\star + m_p)}\right)^{1/3}`
 
     Parameters
     ----------
