@@ -32,6 +32,7 @@ from resokit.core import (
 )
 from resokit.datasets.databases import load_binary, load_full
 from resokit.utils.parser import DEFAULT_METADATA, find_best_match
+from resokit.utils.utils import calc_period
 
 # =============================================================================
 # FUNCTIONS
@@ -563,6 +564,7 @@ def load_from_binary(
     exact_match: bool = True,
     as_pandas: bool = False,
     soft: bool = True,
+    add_period: bool = True,
     verbose: bool = True,
 ) -> StaticBinaryStar:
     """Load a binary star system from the dataset.
@@ -579,6 +581,9 @@ def load_from_binary(
     soft : bool, optional. Default is True.
         If True, return None if the star is not found.
         If False, raise an error if the star is not found.
+    add_period : bool, optional. Default is True.
+        If True, add the period of the binary system.
+        Only available if `as_pandas=True`.
     verbose : bool, optional. Default is True.
         If True, print messages.
 
@@ -604,6 +609,10 @@ def load_from_binary(
         rename_columns=True,
         verbose=False,
     ).loc[idx]
+
+    # Add the period
+    if add_period and as_pandas:
+        row["P"] = calc_period(row["a"], row["star1_mass"], row["star2_mass"])
 
     # Return as a pandas DataFrame if requested
     if as_pandas:
