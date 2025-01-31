@@ -52,6 +52,7 @@ from resokit.utils.parser import (
     RESO_PL_TYPES,
     RESO_SR_TYPES,
     assert_module_imported,
+    parse_name,
     parse_to_iter,
 )
 from resokit.utils.utils import (
@@ -563,7 +564,8 @@ class StaticPlanet(ResokitDataFrame):
         aux = self.data_df["name"].split(" ")[-1]
         if len(aux) == 1:
             return aux
-        return aux[-1]
+        # No suffix
+        return ""
 
     @web_page.default
     def _web_page_default(self):
@@ -629,7 +631,7 @@ class StaticPlanet(ResokitDataFrame):
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        text = f"StaticPlanet [{self.name}]"
+        text = f"StaticPlanet '{self.name}'"
         if not self.user_defined_:
             text += f" from {self.source} data source"
         else:
@@ -640,7 +642,7 @@ class StaticPlanet(ResokitDataFrame):
     def _repr_html_(self):
         """Return a HTML representation of the StaticPlanet."""
         ad_id = id(self)
-        prefoot = f"StaticPlanet [{self.name}]"
+        prefoot = f"StaticPlanet '{self.name}''"
         if not self.user_defined_:
             prefoot += f" from {self.source} data source"
         else:
@@ -914,6 +916,7 @@ class StaticStar(ResokitDataFrame):
 
     name: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
+    suffix_: str = attrs.field(init=False)  # For possible binary stars
     web_page: str = attrs.field(init=False)
 
     @name.default
@@ -928,6 +931,15 @@ class StaticStar(ResokitDataFrame):
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
         return self.source not in ["eu", "nasa", "binary"]
+
+    @suffix_.default
+    def _suffix__default(self):
+        """Set the default value for suffix_."""
+        aux = self.name.split(" ")[-1]
+        if len(aux) == 1:
+            return aux
+        # No suffix
+        return ""
 
     @web_page.default
     def _web_page_default(self):
@@ -983,7 +995,7 @@ class StaticStar(ResokitDataFrame):
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        text = f"StaticStar [{self.name}]"
+        text = f"StaticStar '{self.name}'"
         if not self.user_defined_:
             text += f" from {self.source} data source"
         else:
@@ -994,7 +1006,7 @@ class StaticStar(ResokitDataFrame):
     def _repr_html_(self):
         """Return a HTML representation of the StaticStar."""
         ad_id = id(self)
-        prefoot = f"StaticStar [{self.name}]"
+        prefoot = f"StaticStar '{self.name}'"
         if not self.user_defined_:
             prefoot += f" from {self.source} data source"
         else:
@@ -1060,6 +1072,30 @@ class StaticStar(ResokitDataFrame):
         )
 
 
+# -------------------------- Converter function -------------------------------
+
+
+def _convert_planets(
+    planets: Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet],
+) -> List[StaticPlanet]:
+    if isinstance(planets, StaticPlanet):
+        return [planets]
+    if not isinstance(planets, (list, tuple)) or not hasattr(
+        planets, "__iter__"
+    ):
+        raise ValueError(f"A list or tuple was expected. Got {type(planets)}.")
+    for i, planet in enumerate(planets):
+        if not isinstance(planet, StaticPlanet):
+            raise ValueError(
+                f"A StaticPlanet was expected at position {i}. "
+                + f"Got {type(planet)}."
+            )
+    return list(planets)
+
+
+# -----------------------------------------------------------------------------
+
+
 @attrs.define(repr=False, frozen=True, slots=True)
 class StaticSystem:
     """StaticSystem class representing a static system.
@@ -1096,9 +1132,7 @@ class StaticSystem:
             validator=attrs.validators.instance_of(
                 (list, tuple, StaticPlanet)
             ),
-            converter=lambda x: (
-                [x] if isinstance(x, StaticPlanet) else list(x)
-            ),
+            converter=_convert_planets,
         )
     )
     name: str = attrs.field(
@@ -1111,11 +1145,13 @@ class StaticSystem:
     source_: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
     planet_names_: list = attrs.field(init=False)
+    suffixes_: list = attrs.field(init=False)
 
     period_ratios_: Union[float, pd.DataFrame] = attrs.field(init=False)
     __error_ratios__: Union[float, pd.DataFrame] = attrs.field(init=False)
 
     mass_accum_: pd.Series = attrs.field(init=False)
+    total_mass_: float = attrs.field(init=False)
 
     @web_page.default
     def _web_page_default(self):
@@ -1144,12 +1180,19 @@ class StaticSystem:
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
-        return self.source_ not in ["eu", "nasa", "binary"]
+        return self.source_ not in ["eu", "nasa"]
 
     @planet_names_.default
     def _planet_names__default(self):
         """Set the default value for planet_names_."""
         return [planet.name for planet in self.planets]
+
+    @suffixes_.default
+    def _suffixes__default(self):
+        """Set the default value for suffixes_."""
+        return [self.star.suffix_] + [
+            planet.suffix_ for planet in self.planets
+        ]
 
     @period_ratios_.default
     def _period_ratios__default(self):
@@ -1159,7 +1202,7 @@ class StaticSystem:
         elif self.n_planets_ == 2:
             return self.planets[1].P / self.planets[0].P
 
-        return pd.DataFrame()  # Empty mutable DataFrame
+        return self.pair_ratio(verbose=False)
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
@@ -1190,19 +1233,17 @@ class StaticSystem:
 
         return pd.Series(in_masses, index=["star"] + self.planet_names_)
 
+    @total_mass_.default
+    def _total_mass__default(self):
+        """Set the default value for total_mass_."""
+        return self.mass_accum_.iloc[-1]
+
     def __attrs_post_init__(self):
         """Post-initialization hook."""
         star_name = self.star.name
 
-        # Check if all planets are StaticPlanet instances
-        # and if they have the same star name
+        # Check if all planets have the same star name
         for planet in self.planets:
-            if not isinstance(planet, StaticPlanet):
-                raise TypeError(
-                    " planets must be a StaticPlanet instance,"
-                    + " or a list|tuple of StaticPlanet instances."
-                    + f" Got: {type(planet)} instead"
-                )
             if planet.star_name != star_name:
                 warnings.warn(
                     f"Planet({planet.name}) star name({planet.star_name})"
@@ -1228,7 +1269,7 @@ class StaticSystem:
         )
 
         return (
-            "StaticSystem: "
+            f"StaticSystem: '{self.name}'"
             + f"{star_msg} "
             + f"{planets_msg}"
             + "\n"
@@ -1265,13 +1306,94 @@ class StaticSystem:
         """len(x) <=> x.__len__()."""
         return self.n_planets_ + 1
 
-    def planet(self, indices: Union[int, Iterable[int]]) -> StaticPlanet:
-        """Slice the planets by given indices.
+    def __iter__(self):
+        """Iterate over the star and planets."""
+        return iter([self.star] + self.planets)
+
+    def body(
+        self, indices: Union[int, str, Iterable[Union[int, str]]]
+    ) -> Union[
+        StaticStar, StaticPlanet, List[Union[StaticStar, StaticPlanet]]
+    ]:
+        """Return the star and/or planets by given indices.
+
+        For this function, the star is index 0, and the planets start from 1.
 
         Parameters
         ----------
-        indices : int, Iterable[int]
+        indices : int, Iterable[int], Iterable[str], str
+            Indices for slicing star and planets.
+            If "all", return all bodies.
+            Instead of index numbers, the bodies names can be used.
+
+        Returns
+        -------
+        bodies : StaticStar or StaticPlanet or list[StaticPlanet | StaticPlanet]
+            A copy of a system's star :py:class:`StaticStar` or
+            planet :py:class:`StaticPlanet` or list of a :py:class:`StaticStar`
+            and :py:class:`StaticPlanet` objects.
+        """
+        # Check if indices is an integer
+        if isinstance(indices, int):
+            if not 0 <= indices < self.n_planets_ + 1:
+                raise IndexError(
+                    "Index out of range. "
+                    + f"Expected: 0 to {self.n_planets_}. Got: {indices}."
+                )
+            return self.star if indices == 0 else self.planet(indices - 1)
+        # Check if indices is a string
+        elif isinstance(indices, str):
+            if indices == "all":  # All bodies
+                return [self.star] + self.planets
+            if indices == "star" or indices == self.star.name:  # Star
+                return self.star
+            if indices in self.planet_names_:  # Planet name
+                return self.planets[self.planet_names_.index(indices) + 1]
+            if len(indices) == 1:  # Check suffixes
+                # Assert no repeated suffixes
+                if len(self.suffixes_) != len(set(self.suffixes_)):
+                    raise ValueError(
+                        "Cannot slice by suffix. "
+                        + "Star and Planets have repeated suffixes."
+                    )
+                if indices not in self.suffixes_:  # Not in suffixes
+                    raise ValueError(
+                        f"Suffix '{indices}' not found in star or planets."
+                    )
+                # Get planet from int index from suffix
+                return self.planets[self.suffixes_.index(indices) + 1]
+            raise ValueError(
+                "Invalid index. "
+                + "Expected: 'all', 'star', or planet name. "
+                + f"Got: {indices}."
+            )
+
+        # Parse indices to list
+        indices = parse_to_iter(indices)
+
+        # Check if indices are integers
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.body(i) for i in indices]
+
+    def planet(
+        self, indices: Union[int, str, Iterable[Union[int, str]]]
+    ) -> Union[StaticPlanet, List[StaticPlanet]]:
+        """Slice the planets by given indices.
+
+        The planets are indexed from 0 to n_planets - 1.
+
+        Parameters
+        ----------
+        indices : int, Iterable[int], Iterable[str], str
             Indices for slicing planets.
+            If "all", return all planets.
+            Instead of index numbers, the planets names can be used.
 
         Returns
         -------
@@ -1279,15 +1401,53 @@ class StaticSystem:
             A copy of a system's planet :py:class:`StaticPlanet`
             or list of :py:class:`StaticPlanet` objects.
         """
-        indices = parse_to_iter(indices, to=list)
+        # Check if indices is an integer
+        if isinstance(indices, int):
+            if not 0 <= indices <= self.n_planets_ - 1:
+                raise IndexError(
+                    "Index out of range. "
+                    + f"Expected: 0 to {self.n_planets_ - 1}. Got: {indices}."
+                )
+            return self.planets[indices]
+        # Check if indices is a str
+        elif isinstance(indices, str):
+            if indices == "all":  # All planets
+                return self.planets
+            elif indices in self.planet_names_:  # Planet name
+                return self.planets[self.planet_names_.index(indices)]
+            elif len(indices) == 1:  # Planet suffix
+                # Get Suffixes
+                if len(self.suffixes_) != len(
+                    set(self.suffixes_)
+                ):  # Check if duplicates
+                    raise ValueError(
+                        "Cannot slice by suffix. "
+                        + "Planets have repeated suffixes."
+                    )
+                if (
+                    indices not in self.suffixes_
+                ):  # Check if suffix is in planets
+                    raise ValueError(
+                        f"Suffix '{indices}' not found in planets."
+                    )
+                # Get planet from int index from suffix
+                return self.planets[self.suffixes_.index(indices)]
 
-        if not all(isinstance(i, int) for i in indices):
-            raise TypeError("Indices must be integers.")
+            raise ValueError(
+                "Invalid index. "
+                + f"Expected: 'all' or planet name. Got: {indices}."
+            )
 
-        if len(indices) == 1:
-            return self.planets[indices[0]].copy()
+        indices = parse_to_iter(indices)
 
-        return [self.planets[i].copy() for i in indices]
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.planet(i) for i in indices]
 
     def _get_planets_items(
         self, items: Union[str, List[str]], return_values: bool = True
@@ -1316,6 +1476,20 @@ class StaticSystem:
 
         return [item for item in data]
 
+    def _get_single_item(self, item: str):
+        """Handle retrieval when a single item is requested."""
+        if item.startswith("star_"):
+            return self.star[item.replace("star_", "")]
+
+        if self.n_planets_ > 1:
+            return pd.Series(
+                self._get_planets_items(item),
+                index=self.planet_names_,
+                name=item,
+            )
+
+        return self.planets[0][item]
+
     def get_item(
         self, items: Union[str, List[str]], error: bool = False
     ) -> Union[pd.Series, pd.DataFrame]:
@@ -1334,8 +1508,10 @@ class StaticSystem:
         data : pandas series or pandas dataframe
             Pandas Series or DataFrame with the requested items.
         """
+        # Parse items to list
         items = parse_to_iter(items)
 
+        # Check if error is requested
         if error:
             items_with_error = [
                 item
@@ -1346,69 +1522,224 @@ class StaticSystem:
                 item for item in items_with_error if item in RESO_DTYPES.keys()
             ]
 
+        # Get single item
         if len(items) == 1:
             return self._get_single_item(items[0])
 
-        if self.n_planets_ == 1:
-            return self._get_single_planet_items(items)
+        # Retrieve attributes when there are multiple items
+        dicc = {}  # Dictionary to store the items and their values
+        for item in items:
+            dicc[item] = self._get_single_item(item)
 
-        return self._get_multiple_planet_items(items)
+        # Create DataFrame
+        df = pd.DataFrame(dicc)
 
-    def _get_single_item(self, item: str):
-        """Handle retrieval when a single item is requested."""
-        if item.startswith("star_"):
-            return self.star[item.replace("star_", "")]
+        # Return Series if only one column
+        return df.squeeze() if len(df.columns) == 1 else df
 
-        if self.n_planets_ > 1:
-            return pd.Series(
-                self._get_planets_items(item),
-                index=self.planet_names_,
-                name=item,
+    def __estimate_period_or_a(
+        self,
+        is_period: bool,
+        which: Union[str, int, List[int]] = "all",
+        err_method: int = -1,
+        jacobi: bool = False,
+        deep_estimate: bool = False,
+        force: bool = False,
+    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+        r"""Estimate the 'period' or 'a' of selected planets in the system.
+
+        Calculate the period or semimajor axis of the planet using the
+        third Kepler's law.
+
+        Equations:
+            :math:`P = 2 \pi \sqrt{\dfrac{a^3}{G (m_\star + m_p)}}`
+            :math:`a = \left(\dfrac{G (m_\star + m_p)}
+            {4 \pi^2 P^2}\right)^{1/3}`
+
+        Parameters
+        ----------
+        is_period : bool
+            Whether to estimate the period or the semi-major axis.
+        which : str, int, list[int], optional. Default: 'all'.
+            Which planets to estimate the parameter.
+            If 'all', estimate all planets parameter.
+            If an :py:class:`int`, estimate the parameter of the planet
+            with the given index.
+            For example:
+            *0* will estimate the parameter of the first planet;
+            *1* will estimate the parameter of the second planet.
+            If a list of integers, estimate the parameter of the planets with
+            the given indices.
+            If str, estimate the parameter of the planet with the given
+            name or given suffix.
+        err_method : int, optional. Default: -1.
+            Method to estimate the error.
+            See py:func:`resokit.utils.calc_period_with_errors` or
+            py:func:`resokit.utils.calc_a_with_errors` for more
+            details. The planet must have "a"|"period" and "mass" errors"
+            columns, and the star must have "mass" errors columns.
+            The options are:
+            *-1*: Nothing. Do not estimate the error.
+            *0* : No propagation. Return both errors as 0.0.
+            *1* : Extremes. Estimate the parameter at the extreme values of
+            each parameter and retrieve the errors from the difference.
+            *2* : Extended propagation. Assume each parameters follows a normal
+            distribution with sigma = err_max.
+            *3* : Centred propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_min + err_max) / 2.
+            *4* : Deviated propagation. Assume each parameters follows a normal
+            distribution with sigma = (err_max + err_min) / 2, but the
+            mean is at ((val + err_min) + (val + err_max)) / 2.
+        jacobi : bool, optional. Default: False.
+            Whether to use the Jacobi criterion to estimate the parameter.
+            Involves using the accumulated inner mass (star + inner planets)
+            instead of just the star mass. Doesn't involve considering the
+            semi-major axis of the planets from another reference frame.
+        deep_estimate : bool, optional. Default: False.
+            Whether to estimate the missing parameters (masses) to calculate
+            the parameter.
+        force : bool, optional. Default: False.
+            Whether to force the estimation of the parameter, even if it
+            already exists.
+            If `False`, return the existing parameter if it exists.
+
+        Returns
+        -------
+        parameter, parameter_err_min, parameter_err_max : tuple or DataFrame
+            Estimated parameter, and its minimum and maximum errors,
+            in days.
+
+        """
+        # Which parameter
+        if is_period:
+            param = "P"
+            func = calc_period_with_errors
+            anti_param = "a"
+        else:
+            param = "a"
+            func = calc_a_with_errors
+            anti_param = "P"
+
+        # Get a list of the planets to use
+        planets = parse_to_iter(self.planet(which))
+
+        # Create an empty DataFrame
+        df = pd.DataFrame()
+
+        # A simple aux to see if working just with the first planet
+        only_first = len(planets) == 1 and planets[0] == self.planets[0]
+        # Redefine if there is only one planet, or if only the first
+        jacobi = jacobi and self.n_planets_ > 1 and not only_first
+
+        # If deep_estimate is requested, estimate the missing parameters
+        if deep_estimate:
+            used_mass_table = self.estimate_mass(
+                which="all",
+                force=False,  # Do not force the estimation
+                err_method=err_method,
             )
+        else:
+            used_mass_table = self.get_item("mass", error=err_method > 0)
 
-        return self.planets[0][item]
+        # Iterate over the planets
+        for pl in planets:
+            i = self.planet_names_.index(pl.name)
 
-    def _get_single_planet_items(self, items: List[str]):
-        """Retrieve attributes when there's only one planet."""
-        return pd.Series(
-            {
-                item: (
-                    self.star[item.replace("star_", "")]
-                    if item.startswith("star_")
-                    else self.planets[0][item]
+            # Parameter already exists
+            if not isnan(pl[param]) and not force:
+                df[f"{pl.name}"] = pl.get_item(param, error=True)
+                continue
+
+            # Define the used (this) planet masses
+            if err_method > 0:
+                pl_mass = used_mass_table.iloc[i, 0]
+                pl_mass_err_min = used_mass_table.iloc[i, 1]
+                pl_mass_err_max = used_mass_table.iloc[i, 2]
+            else:
+                pl_mass = used_mass_table.iloc[i]
+                pl_mass_err_min = 0
+                pl_mass_err_max = 0
+
+            # Jacobi criterion with errors
+            if jacobi and err_method > 0:
+                # Check if the first planet
+                if i == 0:
+                    in_m = self.star.mass
+                    in_m_err_min = self.star.mass_err_min
+                    in_m_err_max = self.star.mass_err_max
+                else:
+                    # Keep only the masses of the planets before this one
+                    used_mass_table = used_mass_table.iloc[: i - 1]
+                    # Create a tuple with the masses and their errors. Also,
+                    # convert to solar masses for total mass sumamtion
+                    tup = (used_mass_table * Mj2Ms).itertuples(
+                        index=False, name=None
+                    )
+                    # Calculate the inner mass and error
+                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
+                        (
+                            *(
+                                self.star.mass,
+                                self.star.mass_err_min,
+                                self.star.mass_err_max,
+                            ),
+                            *tup,
+                        ),
+                    )
+            # Jacobi criterion without errors
+            elif jacobi:
+                # in_m will be the star mass, plus the inner planets mass
+                # up to the previous planet
+                if i == 0:
+                    in_m = self.star.mass
+                else:
+                    in_m = (
+                        self.star.mass + used_mass_table.cumsum().iloc[i - 1]
+                    )
+                in_m_err_min = 0.0
+                in_m_err_max = 0.0
+            # No Jacobi criterion. Heliocentric
+            else:
+                in_m = self.star.mass
+                in_m_err_min = (
+                    self.star.mass_err_min if err_method > 0 else 0.0
                 )
-                for item in items
-            },
-            name=self.name,
-        )
-
-    def _get_multiple_planet_items(self, items: List[str]):
-        """Retrieve attributes when there are multiple planets."""
-        # Create a DataFrame with the requested items
-        df = pd.DataFrame(
-            {
-                item: (
-                    self._get_planets_items(item)
-                    if not item.startswith("star_")
-                    else [None] * self.n_planets_
+                in_m_err_max = (
+                    self.star.mass_err_max if err_method > 0 else 0.0
                 )
-                for item in items
-            },
-            index=self.planet_names_,
-        )
 
-        # Add star attributes
-        for col in df.columns:
-            if col.startswith("star_"):
-                df[col] = self.star[col.replace("star_", "")]
+            # Calculate the param and its errors
+            # We use the anti_param to get the other parameter
+            antip, antip_err_min, antip_err_max = pl.get_item(
+                anti_param, error=True
+            )
+            par, par_err_min, par_err_max = func(
+                antip,
+                antip_err_min if err_method > 0 else 0.0,
+                antip_err_max if err_method > 0 else 0.0,
+                in_m,
+                in_m_err_min,
+                in_m_err_max,
+                pl_mass,
+                pl_mass_err_min,
+                pl_mass_err_max,
+                err_method,
+            )
+            df[f"{pl.name}"] = [par, par_err_min, par_err_max]
+        df.index = [param, f"{param}_err_min", f"{param}_err_max"]
 
-        return df
+        if err_method == -1:  # No error requested
+            return df.loc[param]  # Return only the parameter
+
+        return df.T  # Return the DataFrame
 
     def estimate_period(
         self,
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
         jacobi: bool = False,
+        deep_estimate: bool = False,
+        force: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the period of selected planets in the system.
 
@@ -1420,7 +1751,7 @@ class StaticSystem:
         Parameters
         ----------
         which : str, int, list[int], optional. Default: 'all'.
-            Which planets to estimate the period. Union[float, pd.Series]:
+            Which planets to estimate the period.
             If 'all', estimate all planets period.
             If an :py:class:`int`, estimate the period of the planet with the
             given index.
@@ -1429,6 +1760,8 @@ class StaticSystem:
             *1* will estimate the period of the second planet.
             If a list of integers, estimate the period of the planets with the
             given indices.
+            If str, estimate the period of the planet with the given name or
+            given suffix.
         err_method : int, optional. Default: -1.
             Method to estimate the error.
             See py:func:`resokit.utils.calc_period_with_errors` for more
@@ -1449,7 +1782,15 @@ class StaticSystem:
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the period.
             Involves using the accumulated inner mass (star + inner planets)
-            instead of just the star mass.
+            instead of just the star mass. Doesn't involve considering the
+            semi-major axis of the planets from another reference frame.
+        deep_estimate : bool, optional. Default: False.
+            Whether to estimate the missing parameters (masses) to calculate
+            the period.
+        force : bool, optional. Default: False.
+            Whether to force the estimation of the period, even if it already
+            exists.
+            If `False`, return the existing period if it exists.
 
         Returns
         -------
@@ -1458,71 +1799,22 @@ class StaticSystem:
             in days.
 
         """
-        if which == "all":
-            which = list(range(self.n_planets_))
-        else:
-            which = parse_to_iter(which)
-
-        if all(isinstance(i, int) for i in which):
-            df = pd.DataFrame()  # Create an empty DataFrame
-
-            for i in which:  # Iterate over the planets
-                pl = self.planets[i]
-                if jacobi and err_method > 0:  # Jacobi criterion with errors
-                    # Get the planetary masses
-                    masses_with_errors = self.get_item("mass", error=True)
-                    # Keep only the masses of the planets before the current one
-                    masses_with_errors = masses_with_errors.iloc[:i]
-                    # Convert to Solar Masses
-                    masses_with_errors = masses_with_errors * Mj2Ms
-                    # Create a tuple with the masses and their errors
-                    tup = masses_with_errors.itertuples(index=False, name=None)
-                    # Calculate the inner mass and error
-                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
-                        (
-                            *(
-                                self.star.mass,
-                                self.star.mass_err_min,
-                                self.star.mass_err_max,
-                            ),
-                            *tup,
-                        ),
-                    )
-                elif jacobi:  # Jacobi criterion without errors
-                    in_m = self.mass_accum_.iloc[i]
-                    in_m_err_min = 0.0
-                    in_m_err_max = 0.0
-                else:  # No Jacobi criterion
-                    in_m = self.star.mass
-                    in_m_err_min = self.star.mass_err_min
-                    in_m_err_max = self.star.mass_err_max
-                per, per_err_min, per_err_max = calc_period_with_errors(
-                    pl.a,
-                    pl.a_err_min if err_method > 0 else 0.0,
-                    pl.a_err_max if err_method > 0 else 0.0,
-                    in_m,
-                    in_m_err_min if err_method > 0 else 0.0,
-                    in_m_err_max if err_method > 0 else 0.0,
-                    pl.mass,
-                    pl.mass_err_min if err_method > 0 else 0.0,
-                    pl.mass_err_max if err_method > 0 else 0.0,
-                    err_method,
-                )
-                df[f"{pl.name}"] = [per, per_err_min, per_err_max]
-            df.index = ["P", "P_err_min", "P_err_max"]
-
-            if err_method == -1:  # No error requested
-                return df.loc["P"]  # Return only the period
-
-            return df.T  # Return the DataFrame
-
-        raise ValueError("Invalid value for 'which'.")
+        return self.__estimate_period_or_a(
+            is_period=True,
+            which=which,
+            err_method=err_method,
+            jacobi=jacobi,
+            deep_estimate=deep_estimate,
+            force=force,
+        )
 
     def estimate_semi_major_axis(
         self,
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
         jacobi: bool = False,
+        deep_estimate: bool = False,
+        force: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the semi-major axis of selected planets in the system.
 
@@ -1542,6 +1834,8 @@ class StaticSystem:
             *1* will estimate the semi-major axis of the second planet.
             If a list of integers, estimate the semi-major axis of the planets
             with the given indices.
+            If str, estimate the semi-major axis of the planet with the given
+            name or given suffix.
         err_method : int, optional. Default: -1.
             Method to estimate the error.
             See py:func:`resokit.utils.calc_semi_major_axis_with_errors` for
@@ -1563,7 +1857,15 @@ class StaticSystem:
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the semi-major axis.
             Involves using the accumulated inner mass (star + inner planets)
-            instead of just the star mass.
+            instead of just the star mass. Doesn't involve considering the
+            semi-major axis of the planets from another reference frame.
+        deep_estimate : bool, optional. Default: False.
+            Whether to estimate the missing parameters (masses) to calculate
+            the semi-major axis.
+        force : bool, optional. Default: False.
+            Whether to force the estimation of the semi-major axis, even if it
+            already exists.
+            If `False`, return the existing semi-major axis if it exists.
 
         Returns
         -------
@@ -1571,74 +1873,20 @@ class StaticSystem:
             Estimated semi-major axis, and its minimum and maximum errors,
             in AU.
         """
-        if which == "all":
-            which = list(range(self.n_planets_))
-        else:
-            which = parse_to_iter(which)
-
-        if all(isinstance(i, int) for i in which):
-            df = pd.DataFrame()  # Create an empty DataFrame
-
-            for i in which:  # Iterate over the planets
-                pl = self.planets[i]
-                if jacobi and err_method > 0:  # Jacobi criterion with errors
-                    # Get the planetary masses
-                    masses_with_errors = self.get_item("mass", error=True)
-                    # Keep only the masses of the planets before the current one
-                    masses_with_errors = masses_with_errors.iloc[:i]
-                    # Convert to Solar Masses
-                    masses_with_errors = masses_with_errors * Mj2Ms
-                    # Create a tuple with the masses and their errors
-                    tup = masses_with_errors.itertuples(index=False, name=None)
-                    # Calculate the inner mass and error
-                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
-                        (
-                            *(
-                                self.star.mass,
-                                self.star.mass_err_min,
-                                self.star.mass_err_max,
-                            ),
-                            *tup,
-                        ),
-                    )
-                elif jacobi:  # Jacobi criterion without errors
-                    in_m = self.mass_accum_.iloc[i]
-                    in_m_err_min = 0.0
-                    in_m_err_max = 0.0
-                else:  # No Jacobi criterion
-                    in_m = self.star.mass
-                    in_m_err_min = self.star.mass_err_min
-                    in_m_err_max = self.star.mass_err_max
-
-                # Calculate the semi-major axis
-                a, a_err_min, a_err_max = calc_a_with_errors(
-                    pl.P,
-                    pl.P_err_min if err_method > 0 else 0.0,
-                    pl.P_err_max if err_method > 0 else 0.0,
-                    in_m,
-                    in_m_err_min if err_method > 0 else 0.0,
-                    in_m_err_max if err_method > 0 else 0.0,
-                    pl.mass,
-                    pl.mass_err_min if err_method > 0 else 0.0,
-                    pl.mass_err_max if err_method > 0 else 0.0,
-                    err_method,
-                )
-                df[f"{pl.name}"] = [
-                    a,
-                    a_err_min,
-                    a_err_max,
-                ]
-            df.index = ["a", "a_err_min", "a_err_max"]
-
-            if err_method == -1:  # No error requested
-                return df.loc["a"]  # Return only the semi-major axis
-
-            return df.T  # Return the DataFrame
-
-        raise ValueError("Invalid value for 'which'.")
+        return self.__estimate_period_or_a(
+            is_period=False,
+            which=which,
+            err_method=err_method,
+            jacobi=jacobi,
+            deep_estimate=deep_estimate,
+            force=force,
+        )
 
     def estimate_mass(
-        self, which: Union[str, int, List[int]] = "all", **kwargs
+        self,
+        which: Union[str, int, List[int]] = "all",
+        force: bool = False,
+        **kwargs,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the mass of selected planets in the system.
 
@@ -1656,6 +1904,12 @@ class StaticSystem:
             *1* will estimate the mass of the second planet.
             If a list of integers, estimate the mass of the planets with the
             given indices.
+            If str, estimate the mass of the planet with the given name or
+            given suffix.
+        force : bool, optional. Default: False.
+            Whether to force the estimation of the mass, even if it already
+            exists.
+            If `False`, return the existing mass if it exists.
         **kwargs : dict
             Additional keyword arguments for the
             :py:func:`resokit.utils.mass_radius.estimate_mass` function.
@@ -1676,40 +1930,42 @@ class StaticSystem:
             Estimated mass, and its minimum and maximum errors,
             in Jupiter masses.
         """
-        if which == "all":  # Estimate all planets
-            which = list(range(self.n_planets_))
-        else:
-            which = parse_to_iter(which)  # Ensure it's an iterable
+        # Get a list of the planets to use
+        planets = parse_to_iter(self.planet(which))
 
-        if all(isinstance(i, int) for i in which):
-            df = pd.DataFrame()  # Create an empty DataFrame
+        # Create an empty DataFrame
+        df = pd.DataFrame()  # Create an empty DataFrame
 
-            # Define the error method
-            ret_err = True
-            if kwargs.get("err_method", -1) == -1:
-                kwargs["err_method"] = 0  # Set to 0 for the function
-                ret_err = False
+        # Define the error method
+        ret_err = True
+        if kwargs.get("err_method", -1) == -1:
+            kwargs["err_method"] = 0  # Set to 0 for the function
+            ret_err = False
 
-            for i in which:  # Iterate over the planets
-                mass, mass_err_min, mass_err_max = self.planets[
-                    i
-                ].estimate_mass(**kwargs)
-                df[f"{self.planets[i].name}"] = [
-                    mass,
-                    mass_err_min,
-                    mass_err_max,
-                ]
-            df.index = ["mass", "mass_err_min", "mass_err_max"]
+        # Iterate over the planets
+        for pl in planets:
+            # Check if the mass already exists
+            if not isnan(pl.mass) and not force:
+                df[f"{pl.name}"] = [pl.mass, pl.mass_err_min, pl.mass_err_max]
+                continue
+            mass, mass_err_min, mass_err_max = pl.estimate_mass(**kwargs)
+            df[f"{pl.name}"] = [
+                mass,
+                mass_err_min,
+                mass_err_max,
+            ]
+        df.index = ["mass", "mass_err_min", "mass_err_max"]
 
-            if not ret_err:  # No error requested
-                return df.loc["mass"]  # Return only the mass
+        if not ret_err:  # No error requested
+            return df.loc["mass"]  # Return only the mass
 
-            return df.T  # Return the DataFrame
-
-        raise ValueError("Invalid value for 'which'.")
+        return df.T  # Return the DataFrame
 
     def estimate_radius(
-        self, which: Union[str, int, List[int]] = "all", **kwargs
+        self,
+        which: Union[str, int, List[int]] = "all",
+        force: bool = False,
+        **kwargs,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the radius of selected planets in the system.
 
@@ -1727,9 +1983,15 @@ class StaticSystem:
             *1* will estimate the radius of the second planet.
             If a list of integers, estimate the radius of the planets with the
             given indices.
+            If str, estimate the radius of the planet with the given name or
+            given suffix.
+        force : bool, optional. Default: False.
+            Whether to force the estimation of the radius, even if it already
+            exists.
+            If `False`, return the existing radius if it exists.
         **kwargs : dict
             Additional keyword arguments for the
-            :py:func:`resokit.utils.mass_radius.estimate_radius` function.
+            :py:func:`resokit.utils.radius_radius.estimate_radius` function.
 
         Note
         ----
@@ -1738,51 +2000,58 @@ class StaticSystem:
 
         Note
         ----
-        To use the errors, the planet must have "mass" error columns.
+        To use the errors, the planet must have "radius" error columns.
+
 
         Returns
         -------
         radius, radius_err_min, radius_err_max : tuple or DataFrame
             Estimated radius, and its minimum and maximum errors,
-            in Earth radii.
+            in Jupiter radii.
         """
-        if which == "all":  # Estimate all planets
-            which = list(range(self.n_planets_))
-        else:
-            which = parse_to_iter(which)  # Ensure it's an iterable
+        # Get a list of the planets to use
+        planets = parse_to_iter(self.planet(which))
 
-        if all(isinstance(i, int) for i in which):
-            df = pd.DataFrame()  # Create an empty DataFrame
+        # Create an empty DataFrame
+        df = pd.DataFrame()
 
-            # Define the error method
-            ret_err = True
-            if kwargs.get("err_method", -1) == -1:
-                kwargs["err_method"] = 0
-                ret_err = False
+        # Define the error method
+        ret_err = True
+        if kwargs.get("err_method", -1) == -1:
+            kwargs["err_method"] = 0
+            ret_err = False
 
-            for i in which:
-                radius, radius_err_min, radius_err_max = self.planets[
-                    i
-                ].estimate_radius(**kwargs)
-                df[f"{self.planets[i].name}"] = [
-                    radius,
-                    radius_err_min,
-                    radius_err_max,
+        # Iterate over the planets
+        for pl in planets:
+            # Check if the radius already exists
+            if not isnan(pl.radius) and not force:
+                df[f"{pl.name}"] = [
+                    pl.radius,
+                    pl.radius_err_min,
+                    pl.radius_err_max,
                 ]
-            df.index = ["radius", "radius_err_min", "radius_err_max"]
+                continue
+            radius, radius_err_min, radius_err_max = pl.estimate_radius(
+                **kwargs
+            )
+            df[f"{pl.name}"] = [
+                radius,
+                radius_err_min,
+                radius_err_max,
+            ]
+        df.index = ["radius", "radius_err_min", "radius_err_max"]
 
-            if not ret_err:  # No error requested
-                return df.loc["radius"]  # Return only the radius
+        if not ret_err:  # No error requested
+            return df.loc["radius"]  # Return only the radius
 
-            return df.T  # Return the DataFrame
+        return df.T  # Return the DataFrame
 
-        raise ValueError("Invalid value for 'which'.")
-
-    def estimate_calc_hill_radius(
+    def estimate_hill_radius(
         self,
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
         jacobi: bool = False,
+        deep_estimate: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Calculate the Hill radius of selected planets in the system.
 
@@ -1802,6 +2071,8 @@ class StaticSystem:
             *1* will calculate the Hill radius of the second planet.
             If a list of integers, calculate the Hill radius of the planets
             with the given indices.
+            If str, estimate the period of the planet with the given name or
+            given suffix.
         err_method : int, optional. Default: -1.
             Method to estimate the error.
             See py:func:`resokit.utils.hill_radius.calc_hill_radius_with_errors`
@@ -1823,7 +2094,13 @@ class StaticSystem:
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the Hill radius.
             Involves using the accumulated inner mass (star + inner planets)
-            instead of just the star mass.
+            instead of just the star mass. Doesn't involve considering the
+            semi-major axis of the planets from another reference frame.
+        deep_estimate : bool, optional. Default: False.
+            Whether to estimate the missing parameters (masses and semi-major
+            axis) to calculate the Hill radius.
+            If the mass and semi-major axis are missing, they will be estimated;
+            otherwise, the existing values will be used.
 
         Returns
         -------
@@ -1831,74 +2108,68 @@ class StaticSystem:
             Hill radius, and its minimum and maximum errors,
             in AU.
         """
-        if which == "all":
-            which = list(range(self.n_planets_))
-        else:
-            which = parse_to_iter(which)
+        # Get a list of the planets to use
+        planets = parse_to_iter(self.planet(which))
 
-        if all(isinstance(i, int) for i in which):
-            df = pd.DataFrame()  # Create an empty DataFrame
+        df = pd.DataFrame()  # Create an empty DataFrame
 
-            for i in which:  # Iterate over the planets
-                pl = self.planets[i]
-                if jacobi and err_method > 0:  # Jacobi criterion with errors
-                    # Get the planetary masses
-                    masses_with_errors = self.get_item("mass", error=True)
-                    # Keep only the masses of the planets before the current one
-                    masses_with_errors = masses_with_errors.iloc[:i]
-                    # Convert to Solar Masses
-                    masses_with_errors = masses_with_errors * Mj2Ms
-                    # Create a tuple with the masses and their errors
-                    tup = masses_with_errors.itertuples(index=False, name=None)
-                    # Calculate the inner mass and error
-                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
-                        (
-                            *(
-                                self.star.mass,
-                                self.star.mass_err_min,
-                                self.star.mass_err_max,
-                            ),
-                            *tup,
+        # Iterate over the planets
+        for pl in planets:
+            i = self.planet_names_.index(pl.name)
+            if jacobi and err_method > 0:  # Jacobi criterion with errors
+                # Get the planetary masses
+                masses_with_errors = self.get_item("mass", error=True)
+                # Keep only the masses of the planets before the current one
+                masses_with_errors = masses_with_errors.iloc[:i]
+                # Convert to Solar Masses
+                masses_with_errors = masses_with_errors * Mj2Ms
+                # Create a tuple with the masses and their errors
+                tup = masses_with_errors.itertuples(index=False, name=None)
+                # Calculate the inner mass and error
+                in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
+                    (
+                        *(
+                            self.star.mass,
+                            self.star.mass_err_min,
+                            self.star.mass_err_max,
                         ),
-                    )
-                elif jacobi:  # Jacobi criterion without errors
-                    in_m = self.mass_accum_.iloc[i]
-                    in_m_err_min = 0.0
-                    in_m_err_max = 0.0
-                else:  # No Jacobi criterion
-                    in_m = self.star.mass
-                    in_m_err_min = self.star.mass_err_min
-                    in_m_err_max = self.star.mass_err_max
-                hill, hill_err_min, hill_err_max = (
-                    calc_hill_radius_with_errors(
-                        pl.a,
-                        pl.a_err_min if err_method > 0 else 0.0,
-                        pl.a_err_max if err_method > 0 else 0.0,
-                        pl.e,
-                        pl.e_err_min if err_method > 0 else 0.0,
-                        pl.e_err_max if err_method > 0 else 0.0,
-                        in_m,
-                        in_m_err_min if err_method > 0 else 0.0,
-                        in_m_err_max if err_method > 0 else 0.0,
-                        pl.mass,
-                        pl.mass_err_min if err_method > 0 else 0.0,
-                        pl.mass_err_max if err_method > 0 else 0.0,
-                        err_method,
-                    )
+                        *tup,
+                    ),
                 )
-                df[f"{pl.name}"] = [
-                    hill,
-                    hill_err_min,
-                    hill_err_max,
-                ]
-            df.index = ["hill", "hill_err_min", "hill_err_max"]
+            elif jacobi:  # Jacobi criterion without errors
+                in_m = self.mass_accum_.iloc[i]
+                in_m_err_min = 0.0
+                in_m_err_max = 0.0
+            else:  # No Jacobi criterion
+                in_m = self.star.mass
+                in_m_err_min = self.star.mass_err_min
+                in_m_err_max = self.star.mass_err_max
+            hill, hill_err_min, hill_err_max = calc_hill_radius_with_errors(
+                pl.a,
+                pl.a_err_min if err_method > 0 else 0.0,
+                pl.a_err_max if err_method > 0 else 0.0,
+                pl.e,
+                pl.e_err_min if err_method > 0 else 0.0,
+                pl.e_err_max if err_method > 0 else 0.0,
+                in_m,
+                in_m_err_min if err_method > 0 else 0.0,
+                in_m_err_max if err_method > 0 else 0.0,
+                pl.mass,
+                pl.mass_err_min if err_method > 0 else 0.0,
+                pl.mass_err_max if err_method > 0 else 0.0,
+                err_method,
+            )
+            df[f"{pl.name}"] = [
+                hill,
+                hill_err_min,
+                hill_err_max,
+            ]
+        df.index = ["hill", "hill_err_min", "hill_err_max"]
 
-            if err_method == -1:  # No error
-                return df.loc["hill"]  # Return only the mass
+        if err_method == -1:  # No error
+            return df.loc["hill"]  # Return only the mass
 
-            return df.T  # Return the DataFrame
-
-        raise ValueError("Invalid value for 'which'.")
+        return df.T  # Return the DataFrame
 
     def plot(
         self,
@@ -2043,9 +2314,6 @@ class StaticSystem:
         if self.n_planets_ < 3:
             raise ValueError("There must be at least 3 planets to compare.")
 
-        # Get (all) period ratios
-        period_ratios = self.period_ratios
-
         # Get (all) error ratios if needed
         if error:
             error_ratios = self.pair_ratio(error=True, verbose=False)
@@ -2102,8 +2370,8 @@ class StaticSystem:
                 )
             elif label:
                 label_aux = label[trip]
-            x = period_ratios.iloc[i, j]
-            y = period_ratios.iloc[j, k]
+            x = self.period_ratios_.iloc[i, j]
+            y = self.period_ratios_.iloc[j, k]
             err_x = error_ratios.iloc[i, j] if error else None
             err_y = error_ratios.iloc[j, k] if error else None
             ax.errorbar(
@@ -2247,29 +2515,6 @@ class StaticSystem:
 
         return ss
 
-    @property
-    def period_ratios(self) -> Union[float, pd.DataFrame]:
-        """Calculate and return the period ratios of all the planets.
-
-        Created after calling the period_ratios method.
-
-        Returns
-        -------
-        float, pd.DataFrame
-            Float with period ratio of the pair of planets, or DataFrame
-            with all the period ratios.
-        """
-        if self.n_planets_ < 2:
-            raise ValueError("There must be at least 2 planets to compare.")
-
-        if self.n_planets_ == 2:
-            return self.period_ratios_
-
-        if not self.period_ratios_.empty:
-            return self.period_ratios_
-
-        return self.pair_ratio()
-
     def pair_ratio(
         self,
         *pair: Union[list, tuple, str],
@@ -2339,30 +2584,25 @@ class StaticSystem:
                     )
                 return self.period_ratios_  # Already calculated
 
-            if self.period_ratios_.empty:  # Calculate all the period ratios
-                # Create a DataFrame with all the period ratios
-                periods = self.get_item("P")
-                df = pd.DataFrame(
-                    [[p2 / p1 for p2 in periods] for p1 in periods],
-                    index=periods.index,
-                    columns=periods.index,
-                )
-
-                # Store the DataFrame
-                self.period_ratios_[df.columns] = df
+            # Create a DataFrame with all the period ratios
+            periods = self.get_item("P")
+            df = pd.DataFrame(
+                [[p2 / p1 for p2 in periods] for p1 in periods],
+                index=periods.index,
+                columns=periods.index,
+            )
 
             if fraction_kwargs:
-                return self.period_ratios_.map(
+                return df.map(
                     lambda x: float_to_fraction(
                         x,
                         **fraction_kwargs,
                     )
                 )
 
-            return self.period_ratios_
+            return df
 
         # This is sigle pair
-
         idxs = []  # Indexes of the pair
         for idx in pair:
 
@@ -2379,7 +2619,7 @@ class StaticSystem:
                 raise ValueError("Invalid pair value.")
 
         # Calculate the ratio
-        if not self.period_ratios_.empty:
+        if self.n_planets_ <= 2:  # Already calculated
             ratio = self.period_ratios_.iloc[idxs[1], idxs[0]]
         else:
             ratio = self.planets[idxs[1]].P / self.planets[idxs[0]].P
@@ -2688,9 +2928,9 @@ class StaticBinaryStar:
 
     Attributes
     ----------
-    star1 : StaticStar
+    star0 : StaticStar
         StaticStar instance for the primary star.
-    star2 : StaticStar
+    star1 : StaticStar
         StaticStar instance for the secondary star.
     name : str, optional. Default: 'unnamed'.
         Name of the binary system.
@@ -2714,10 +2954,10 @@ class StaticBinaryStar:
         Metadata of the dataset.
     """
 
-    star1: StaticStar = attrs.field(
+    star0: StaticStar = attrs.field(
         validator=attrs.validators.instance_of(StaticStar)
     )
-    star2: StaticStar = attrs.field(
+    star1: StaticStar = attrs.field(
         validator=attrs.validators.instance_of(StaticStar)
     )
     binary_df: Union[pd.DataFrame, pd.Series] = attrs.field(
@@ -2729,20 +2969,27 @@ class StaticBinaryStar:
     )
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
 
+    total_mass_: float = attrs.field(init=False)
+
     source_: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
 
     @source_.default
     def _source__default(self):
         """Set the default value for source_."""
-        main_source = self.star1.source
+        main_source = self.star0.source
 
-        return main_source if main_source == self.star2.source else "user"
+        return main_source if main_source == self.star1.source else "user"
 
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
         return self.source_ != "binary"
+
+    @total_mass_.default
+    def _total_mass__default(self):
+        """Set the default value for total_mass_."""
+        return self.star0.mass + self.star1.mass
 
     def __attrs_post_init__(self):
         """Post-init method."""
@@ -2766,13 +3013,13 @@ class StaticBinaryStar:
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        star1 = "\n Star 1:\n  " + f"{self.star1.name}"
-        star2 = "\n Star 2:\n  " + f"{self.star2.name}"
+        star0 = f"\n Star 1:\n  {self.star0.name}"
+        star1 = f"\n Star 2:\n  {self.star1.name}"
 
         return (
-            "StaticBinaryStar: "
-            + f"{star1} "
-            + f"{star2}"
+            f"StaticBinaryStar: '{self.name}'"
+            + f"{star0} "
+            + f"{star1}"
             + "\n"
             + " from binary data source."
             if not self.user_defined_
@@ -2786,8 +3033,10 @@ class StaticBinaryStar:
 
         ad_id = id(self)
 
-        header = f" StaticBinaryStar: {self.name}"
-        +f"[{self.star1.name} - {self.star2.name}]"
+        header = (
+            f" StaticBinaryStar: '{self.name}'"
+            + f"[{self.star0.name} - {self.star1.name}]"
+        )
         footer = "Binary data"
         if not self.user_defined_:
             footer += " from binary data source."
@@ -2807,6 +3056,61 @@ class StaticBinaryStar:
 
         return html
 
+    def __iter__(self):
+        """Iterate over the stars."""
+        return iter([self.star0, self.star1])
+
+    def star(
+        self, indices: Union[int, str, List[Union[int, str]]]
+    ) -> StaticStar:
+        """Return the star(s) of the binary system, by given index or name.
+
+        Parameters
+        ----------
+        indices : int, str, list
+            Which star(s) to return.
+            If 'all', return both stars.
+            If an :py:class:`int`, return the star with the given index.
+            If a :py:class:`str`, return the star with the given name.
+            If a list, return the stars with the given indexes or names.
+
+        Returns
+        -------
+        star : StaticStar, list
+            StaticStar instance for the star, or list of stars.
+        """
+        # Check if indices is int
+        if isinstance(indices, int):
+            if indices == 0:
+                return self.star0
+            if indices == 1:
+                return self.star1
+            raise ValueError(
+                "Invalid int value for 'indices'. Must be 0 or 1."
+            )
+        # Check if indices is str
+        elif isinstance(indices, str):
+            if indices == "all":
+                return [self.star0, self.star1]
+            elif indices == self.star0.name:
+                return self.star0
+            elif indices == self.star1.name:
+                return self.star1
+            raise ValueError("Invalid str value for 'indices'.")
+
+        # Parse indices to list
+        indices = parse_to_iter(indices)
+
+        # Check if indices are int or str
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.star(idx) for idx in indices]
+
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
         return dict(self.metadata)
@@ -2818,8 +3122,8 @@ class StaticBinaryStar:
     def copy(self) -> "StaticBinaryStar":
         """Return a copy of the :py:class:`StaticBinaryStar`."""
         return StaticBinaryStar(
+            star0=self.star0.copy(),
             star1=self.star1.copy(),
-            star2=self.star2.copy(),
             binary_df=self.binary_df.copy(deep=True),
             name=self.name,
             metadata=self.metadata,
@@ -2849,7 +3153,8 @@ class StaticBinarySystem:
     planets: List[StaticPlanet] = attrs.field(
         validator=attrs.validators.deep_iterable(
             member_validator=attrs.validators.instance_of(StaticPlanet)
-        )
+        ),
+        converter=_convert_planets,
     )
     circumbinary: bool = attrs.field(
         validator=attrs.validators.instance_of(bool)
@@ -2859,18 +3164,486 @@ class StaticBinarySystem:
     )
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
 
+    web_page: list = attrs.field(init=False)
+
+    star_names_: list = attrs.field(init=False)
+
+    n_planets_: int = attrs.field(init=False)
+    source_: str = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
+    planet_names_: list = attrs.field(init=False)
+
+    suffixes_: list = attrs.field(init=False)
+
+    period_ratios_: Union[float, pd.DataFrame] = attrs.field(init=False)
+    __error_ratios__: Union[float, pd.DataFrame] = attrs.field(init=False)
+
+    mass_accum_: pd.Series = attrs.field(init=False)
+    total_mass_: float = attrs.field(init=False)
+
+    @web_page.default
+    def _web_page_default(self):
+        """Set the default value for web_page."""
+        return [
+            self.binary_star.star0.web_page,
+            self.binary_star.star1.web_page,
+            *[planet.web_page for planet in self.planets],
+        ]
+
+    @star_names_.default
+    def _star_names__default(self):
+        """Set the default value for star_names_."""
+        return [self.binary_star.star0.name, self.binary_star.star1.name]
+
+    @n_planets_.default
+    def _n_planets__default(self):
+        """Set the default value for n_planets_."""
+        return len(self.planets)
+
+    @source_.default
+    def _source__default(self):
+        """Set the default value for source_."""
+        main_source = self.binary_star.source_
+        planet0_source = self.planets[0].source
+        same = all(
+            [planet.source == planet0_source for planet in self.planets]
+        )
+
+        return planet0_source if main_source == "binary" and same else "user"
+
+    @user_defined_.default
+    def _user_defined__default(self):
+        """Set the default value for user_defined_."""
+        return self.source_ not in ["eu", "nasa"]
+
+    @planet_names_.default
+    def _planet_names__default(self):
+        """Set the default value for planet_names_."""
+        return [planet.name for planet in self.planets]
+
+    @suffixes_.default
+    def _suffixes__default(self):
+        """Set the default value for suffixes_."""
+        st_sfx = [
+            star.suffix_
+            for star in [self.binary_star.star0, self.binary_star.star1]
+        ]
+        pl_sfx = [planet.suffix_ for planet in self.planets]
+        if self.circumbinary:
+            return st_sfx + pl_sfx
+        return st_sfx[0] + pl_sfx + st_sfx[1]
+
+    @period_ratios_.default
+    def _period_ratios__default(self):
+        """Set the default value for period_ratios_."""
+        if self.n_planets_ == 1:
+            # Outer / Inner
+            if self.circumbinary:
+                return self.planets[0].P / self.binary_star.P
+            return self.binary_star.P / self.planets[0].P
+
+        return pd.DataFrame()  # Empty mutable DataFrame
+
+    @__error_ratios__.default
+    def ___error_ratios__default(self):
+        """Set the default value for __error_ratios__."""
+        if self.n_planets_ == 1:  # Only planet error available
+            per_err = max(self.planets[0].P_err_min, self.planets[0].P_err_max)
+            if self.circumbinary:
+                return per_err / self.binary_star.P
+            return self.period_ratios_ * per_err / self.planets[0].P
+
+        return pd.DataFrame()  # Empty mutable DataFrame
+
+    @mass_accum_.default
+    def _mass_accum__default(self):
+        """Set the default value for mass_accum_."""
+        # Calculate the accumulated mass inside each planet orbit
+        # (and the stars too), without including that planet.
+        # THe series will have n_planets_ + 2 elements.
+        in_masses = [self.binary_star.star0.mass, self.binary_star.total_mass_]
+        for i in range(self.n_planets_):
+            in_masses.append(
+                in_masses[-1] + self.planets[i].mass
+            )  # Accumulated mass
+
+        return pd.Series(
+            in_masses, index=["star0", "star1"] + self.planet_names_
+        )
+
+    @total_mass_.default
+    def _total_mass__default(self):
+        """Set the default value for total_mass_."""
+        return self.mass_accum_.iloc[-1]
+
     def __attrs_post_init__(self):
-        """Post-init method."""
-        pass
+        """Post-initialization hook."""
+        binary_name = self.binary_star.name
+        parsed_star_name = parse_name(binary_name)
+
+        # Check if all planets they have the same star name
+        for planet in self.planets:
+            if parse_name(planet.star_name) != parsed_star_name:
+                warnings.warn(
+                    f"Planet({planet.name}) parsed "
+                    + f"star name({planet.star_name})"
+                    + f" is different from parsed Star({binary_name}).",
+                    stacklevel=2,
+                )
+
+        # Check if all planets have unique names
+        if self.n_planets_ != len(set(self.planet_names_)):
+            warnings.warn("Planets must have unique names.", stacklevel=2)
+
+        return
 
     def __repr__(self):
-        """Return a string representation of the StaticBinarySystem."""
-        return (
-            f"StaticBinarySystem(binary_star={self.binary_star}, "
-            + f"planets={self.planets}, "
-            + f"name='{self.name}', "
-            + f"metadata={self.metadata})"
+        """repr(x) <=> x.__repr__()."""
+        stars_msg = (
+            "\n"
+            + " Stars:"
+            + f"\n  {self.binary_star.star0.name}"
+            + f"\n  {self.binary_star.star1.name}"
         )
+        planets_msg = (
+            "\n"
+            + f" Planet{'s' if self.n_planets_ > 1 else ''}:"
+            + "\n  "
+            + "\n  ".join(self.planet_names_)
+        )
+        binarity_msg = "\n" + f" Circumbinary: {self.circumbinary}"
+        return (
+            f"StaticBinarySystem: '{self.binary_star.name}'"
+            + f"{stars_msg}"
+            + f"{planets_msg}"
+            + "\n"
+            + f" from '{self.source_}' data source."
+            if not self.user_defined_
+            else "" + f"{binarity_msg}"
+        )
+
+    def __getitem__(self, key: Union[int, str]):
+        """x[y] <==> x.__getitem__(y).
+
+        Parameters
+        ----------
+        key : int, str
+            Integer or list of integers to slice planets,
+            or strings for attributes.
+
+        Returns
+        -------
+        A sliced planet object or specific items of the system.
+        """
+        key = parse_to_iter(key)
+
+        if all(isinstance(i, int) for i in key):
+            return self.planet(key)
+        elif any(isinstance(i, int) for i in key):
+            raise NotImplementedError(
+                "Mixed integer and string indexing not supported."
+            )
+
+        return self.get_item(key)
+
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return self.n_planets_ + 1
+
+    def __iter__(self):
+        """Iterate over the stars and planets."""
+        if self.circumbinary:
+            return iter(
+                [self.binary_star.star0, self.binary_star.star1] + self.planets
+            )
+        return iter(
+            [self.binary_star.star0] + self.planets + [self.binary_star.star1]
+        )
+
+    def body(self, indices: Union[int, str, List[Union[str, int]]]) -> Union[
+        StaticStar,
+        StaticPlanet,
+        List[Union[StaticStar, StaticPlanet]],
+    ]:
+        """Return the bodies by given indices or name.
+
+        The inner star is 0. If a circumbinary, then the outer star is 1,
+        and the planets start from 2. If not a circumbinary, then planets
+        start from 1, and the outer star is n_planets + 1.
+
+        Parameters
+        ----------
+        indices : int or Iterable[int] or str or
+            Indices of the bodies to return.
+            If "all" (the only str possible), all individual bodies
+            are returned.
+
+        Returns
+        -------
+        bodies : StaticBinaryStar or StaticPlanet or list
+            Star and/or planet or list the objects requested.
+        """
+        # Check if indices is an integer
+        if isinstance(indices, int):
+            if not 0 <= indices < self.n_planets_ + 2:
+                raise ValueError("Index must be between 0 and n_planets + 1.")
+            if indices == 0:  # Inner star
+                return self.binary_star.star0
+            if self.circumbinary:  # Circumbinary
+                if indices == 1:  # Outer star
+                    return self.binary_star.star1
+                return self.planets[indices - 2]  # Planets
+            # Not circumbinary
+            if indices == self.n_planets_ + 1:  # Outer star
+                return self.binary_star.star1
+            return self.planets[indices - 1]
+        # Check if indices is a string
+        elif isinstance(indices, str):
+            if indices == "all":  # All bodies
+                if self.circumbinary:
+                    return [
+                        self.binary_star.star0,
+                        self.binary_star.star1,
+                    ] + self.planets
+                return (
+                    [self.binary_star.star0]
+                    + self.planets
+                    + [self.binary_star.star1]
+                )
+            if indices in self.planet_names_:  # Planet name
+                return self.planets[self.planet_names_.index(indices)]
+            if indices in self.star_names_:  # Star name
+                return [self.binary_star.star0, self.binary_star.star1][
+                    self.star_names_.index(indices)
+                ]
+            if indices == self.binary_star.name:  # Binary name
+                return self.binary_star
+            if len(indices) == 1:  # Seach by suffix
+                # Check suffixes not duplicated
+                if len(set(self.suffixes_)) != len(self.suffixes_):
+                    raise ValueError("Suffixes must be unique.")
+                if indices not in self.suffixes_:
+                    raise ValueError("Invalid suffix value for 'indices'.")
+                return self.body(self.suffixes_.index(indices))
+            raise ValueError(
+                "Invalid value for 'indices."
+                + "Must be 'all', or (list of) int or str."
+            )
+
+        # Parse indices to list
+        indices = parse_to_iter(indices)
+
+        # Check if indices are int or str
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.body(i) for i in indices]
+
+    def star(
+        self, indices: Union[int, Iterable[int]]
+    ) -> Union[StaticBinaryStar, List[StaticBinaryStar]]:
+        """Slice the stars by given indices or name.
+
+        The inner star is 0, and the secondary star is 1.
+
+        Parameters
+        ----------
+        indices : int, Iterable[int]
+            Indices for slicing stars.
+
+        Returns
+        -------
+        star : StaticBinaryStar or list[StaticBinaryStar]
+            A copy of a system's star :py:class:`StaticBinaryStar`
+            or list of :py:class:`StaticBinaryStar` objects.
+        """
+        # Check if indices is an integer
+        if isinstance(indices, int):
+            if not 0 <= indices < 2:
+                raise ValueError("Index must be 0 or 1.")
+
+            return (
+                self.binary_star.star0
+                if indices == 0
+                else self.binary_star.star1
+            )
+        # Check if indices are str
+        if isinstance(indices, str):
+            if indices in self.star_names_:
+                return self.star(self.star_names_.index(indices))
+            if indices == "all":
+                return [self.binary_star.star0, self.binary_star.star1]
+            if len(indices) == 1:
+                # Check suffixes not duplicated
+                if len(set(self.suffixes_)) != len(self.suffixes_):
+                    raise ValueError("Suffixes must be unique.")
+                if indices not in self.suffixes_:
+                    raise ValueError("Invalid suffix value for 'indices'.")
+                return self.star(self.suffixes_.index(indices))
+            raise ValueError("Invalid str value for 'indices'.")
+
+        # Parse indices to list
+        indices = parse_to_iter(indices)
+
+        # Check if indices are int or str
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.star(i) for i in indices]
+
+    def planet(
+        self, indices: Union[int, str, Iterable[int]]
+    ) -> Union[StaticPlanet, List[StaticPlanet]]:
+        """Slice the planets by given indices.
+
+        Parameters
+        ----------
+        indices : int, str, Iterable[int]
+            Indices for slicing planets.
+            If "all", return all planets.
+
+        Returns
+        -------
+        planet : StaticPlanet or list[StaticPlanet]
+            A copy of a system's planet :py:class:`StaticPlanet`
+            or list of :py:class:`StaticPlanet` objects.
+        """
+        # Check if indices is an integer
+        if isinstance(indices, int):
+            if not 0 <= indices < self.n_planets_:
+                raise ValueError("Index must be between 0 and n_planets - 1.")
+            return self.planets[indices]
+        # Check if indices is a string
+        elif isinstance(indices, str):
+            if indices == "all":  # All planets
+                return self.planets
+            if indices in self.planet_names_:  # Planet name
+                return self.planets[self.planet_names_.index(indices)]
+            if len(indices) == 1:  # Seach by suffix
+                # Check suffixes not duplicated
+                if len(set(self.suffixes_)) != len(self.suffixes_):
+                    raise ValueError("Suffixes must be unique.")
+                if indices not in self.suffixes_:
+                    raise ValueError("Invalid suffix value for 'indices'.")
+                return self.planet(self.suffixes_.index(indices))
+            raise ValueError("Invalid str value for 'indices'.")
+
+        # Check if indices are int or str
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.planet(i) for i in indices]
+
+    def _get_planets_items(
+        self, items: Union[str, List[str]], return_values: bool = True
+    ) -> Union[str, List[str]]:
+        """Retrieve specific attributes of planets.
+
+        Parameters
+        ----------
+        items : str, list[str]
+            Names of planet attributes.
+        return_values : bool, default=True
+            Whether to return values or full objects.
+
+        Returns
+        -------
+        items : list
+            Values or full objects of the specified planet attributes.
+        """
+        data = [planet[items] for planet in self.planets]
+
+        if return_values:
+            try:
+                return [item.values[0] for item in data]
+            except AttributeError:
+                pass  # Fall back to full objects
+
+        return [item for item in data]
+
+    def _get_single_item(self, item: str):
+        """Handle retrieval when a single item is requested."""
+        # Retrieve star attributes
+        if item.startswith("star"):
+            if item[4] == "0":
+                return self.star(0)[item.replace("star0_", "")]
+            if item[4] == "1":
+                return self.star(1)[item.replace("star1_", "")]
+            if item[4] == "_":
+                return self.binary_star[item]
+            return self.star[item.replace("star", "")]
+
+        # Retrieve planets attributes
+        if self.n_planets_ > 1:
+            return pd.Series(
+                self._get_planets_items(item),
+                index=self.planet_names_,
+                name=item,
+            )
+
+        # Only one planet
+        return self.planets[0][item]
+
+    def get_item(
+        self, items: Union[str, List[str]], error: bool = False
+    ) -> Union[pd.Series, pd.DataFrame]:
+        """Retrieve specific attributes of the system (stars and/or planets).
+
+        Parameters
+        ----------
+        items : str, list[str]
+            Names of the desired attributes.
+        error : bool, optional. Default: False.
+            Whether to return the error columns.
+            Only available for standard ResokitDataFrame objects.
+
+        Returns
+        -------
+        items : pd.Series, pd.DataFrame
+            Pandas Series or DataFrame with the requested items.
+        """
+        # Parse items to list
+        items = parse_to_iter(items)
+
+        # Check if error is requested
+        if error:
+            items_with_error = [
+                item
+                for item in items
+                for item in (item, f"{item}_err_min", f"{item}_err_max")
+            ]
+            items = [  # Keep only the items with errors in RESO_DTYPES
+                item for item in items_with_error if item in RESO_DTYPES.keys()
+            ]
+
+        # Retrieve attributes when there's only one item
+        if len(items) == 1:
+            return self._get_single_item(items[0])
+
+        # Retrieve attributes when there are multiple items
+        dicc = {}  # Dictionary to store the items and their values
+        for item in items:
+            dicc[item] = self._get_single_item(item)
+
+        # Create DataFrame
+        df = pd.DataFrame(dicc)
+
+        # Return Series if only one column
+        return df.squeeze() if len(df.columns) == 1 else df
+
+    # FALTA AGREGAR LAS FUNCIONES DE AQUÍ
 
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
@@ -2982,8 +3755,8 @@ def _create_static_system(
 
 
 def _create_static_binary_star_from_binaries(
+    star0: StaticStar,
     star1: StaticStar,
-    star2: StaticStar,
     binary_row: pd.Series,
     name: str,
     metadata=None,
@@ -2992,9 +3765,9 @@ def _create_static_binary_star_from_binaries(
 
     Parameters
     ----------
-    star1 : StaticStar
+    star0 : StaticStar
         StaticStar instance for the primary star.
-    star2 : StaticStar
+    star1 : StaticStar
         StaticStar instance for the secondary star.
     binary_row : pd.Series
         Pandas Series with the binary data.
@@ -3013,8 +3786,8 @@ def _create_static_binary_star_from_binaries(
 
     # Create the StaticBinaryStar instance
     return StaticBinaryStar(
+        star0=star0,
         star1=star1,
-        star2=star2,
         binary_df=binary_row.to_frame(name=name).T,
         name=name,
         metadata=metadata,
@@ -3150,49 +3923,49 @@ def binary_row_to_binary_star(
         :py:class:`StaticBinaryStar` instance.
     """
     # Get the systems name
-    name = binary_row["star1_name"]
-    star1_name = name + " A"
-    star2_name = name + " B"
+    name = binary_row["star0_name"]
+    star0_name = name + " A"
+    star1_name = name + " B"
 
     # Create the necessary series for the StaticStar instances
     # First, the shared parameters we usually get in a StaticStar
     shared_resokit = binary_row[["star_dist", "disc_method"]].copy()
     # Then, the parameters for each star
+    star0_resokit = pd.Series(
+        {
+            "star_name": star0_name,
+            "star_mass": binary_row["star0_mass"],
+        }
+    )
     star1_resokit = pd.Series(
         {
             "star_name": star1_name,
             "star_mass": binary_row["star1_mass"],
         }
     )
-    star2_resokit = pd.Series(
-        {
-            "star_name": star2_name,
-            "star_mass": binary_row["star2_mass"],
-        }
-    )
 
     # Create the StaticStar dfs
-    star1_df = pd.concat([shared_resokit, star1_resokit], axis=0)
-    star2_df = pd.concat([shared_resokit, star2_resokit], axis=0)
+    star0_df = pd.concat([shared_resokit.squeeze(), star0_resokit], axis=0)
+    star1_df = pd.concat([shared_resokit.squeeze(), star1_resokit], axis=0)
 
     # Rename the columns. If the column starts with "star_" we remove it.
+    star0_df.rename(lambda x: str(x).replace("star_", ""), inplace=True)
     star1_df.rename(lambda x: str(x).replace("star_", ""), inplace=True)
-    star2_df.rename(lambda x: str(x).replace("star_", ""), inplace=True)
 
     # Set the dataframe names
+    star0_df.name = star0_name
     star1_df.name = star1_name
-    star2_df.name = star2_name
 
     # Create the StaticStar instances
+    star0 = _create_static_star(star0_df, source=source, metadata=metadata)
     star1 = _create_static_star(star1_df, source=source, metadata=metadata)
-    star2 = _create_static_star(star2_df, source=source, metadata=metadata)
 
     # Add the total binary mass to binary_row
-    binary_row["mass"] = binary_row["star1_mass"] + binary_row["star2_mass"]
+    binary_row["mass"] = binary_row["star0_mass"] + binary_row["star1_mass"]
 
     return _create_static_binary_star_from_binaries(
+        star0=star0,
         star1=star1,
-        star2=star2,
         binary_row=binary_row,
         name=name,
         metadata=metadata,
