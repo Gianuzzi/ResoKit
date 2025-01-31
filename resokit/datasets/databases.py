@@ -73,10 +73,10 @@ _BINARIES_FILENAMES = {"p": "plan_circ.txt", "s": "plan_bin500au.txt"}
 
 # Columns of the binaries datasets
 _BINARIES_COLUMNS = [
-    "star1_name",
+    "star0_name",
     "alternate_name",
+    "star0_mass",
     "star1_mass",
-    "star2_mass",
     "star_dist",
     "disc_method",
     "a",
