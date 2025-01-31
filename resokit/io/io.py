@@ -583,7 +583,6 @@ def load_from_binary(
         If False, raise an error if the star is not found.
     add_period : bool, optional. Default is True.
         If True, add the period of the binary system.
-        Only available if `as_pandas=True`.
     verbose : bool, optional. Default is True.
         If True, print messages.
 
@@ -611,8 +610,8 @@ def load_from_binary(
     ).loc[idx]
 
     # Add the period
-    if add_period and as_pandas:
-        row["P"] = calc_period(row["a"], row["star1_mass"], row["star2_mass"])
+    if add_period:
+        row["P"] = calc_period(row["a"], row["star0_mass"], row["star1_mass"])
 
     # Return as a pandas DataFrame if requested
     if as_pandas:
@@ -621,6 +620,13 @@ def load_from_binary(
     # Add metadata
     metadata = dict(DEFAULT_METADATA)
     metadata["circumbinary"] = circumbinary
+
+    # To create the binary star system, we need a Series
+    row = row.squeeze()
+
+    # Be sure that is a pandas Series
+    if not isinstance(row, pd.Series):
+        raise ValueError("A problem occurred while loading the binary system.")
 
     # Define the star system
     binary = binary_row_to_binary_star(row, source="binary", metadata=metadata)
@@ -663,7 +669,7 @@ def check_if_binary(
             Ratio of the match.
     """
     for circumbinary, col in product([True, False], [0, 1]):
-        # 0: star1_name, 1: alternate_name
+        # 0: star0_name, 1: alternate_name
         series = load_binary(
             circumbinary=circumbinary,
             from_memory=True,
