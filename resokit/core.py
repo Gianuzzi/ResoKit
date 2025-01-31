@@ -564,6 +564,9 @@ class StaticPlanet(ResokitDataFrame):
         aux = self.data_df["name"].split(" ")[-1]
         if len(aux) == 1:
             return aux
+        aux = self.data_df["name"].split(")")[-1]
+        if len(aux) == 1:
+            return aux
         # No suffix
         return ""
 
@@ -1537,14 +1540,15 @@ class StaticSystem:
         # Return Series if only one column
         return df.squeeze() if len(df.columns) == 1 else df
 
-    def __estimate_period_or_a(
+    def __estimate_period_or_a_or_hill(
         self,
-        is_period: bool,
+        p_a_h: int,
         which: Union[str, int, List[int]] = "all",
         err_method: int = -1,
         jacobi: bool = False,
         deep_estimate: bool = False,
         force: bool = False,
+        circular: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the 'period' or 'a' of selected planets in the system.
 
@@ -1558,8 +1562,8 @@ class StaticSystem:
 
         Parameters
         ----------
-        is_period : bool
-            Whether to estimate the period or the semi-major axis.
+        p_a_h : int
+            0 for period, 1 for semimajor axis, 2 for Hill radius.
         which : str, int, list[int], optional. Default: 'all'.
             Which planets to estimate the parameter.
             If 'all', estimate all planets parameter.
@@ -1602,6 +1606,9 @@ class StaticSystem:
             Whether to force the estimation of the parameter, even if it
             already exists.
             If `False`, return the existing parameter if it exists.
+        circular : bool, optional. Default: False.
+            Whether to assume the unknown eccentricities are 0.0.
+            Only available for Hill radius estimation.
 
         Returns
         -------
@@ -1610,12 +1617,22 @@ class StaticSystem:
             in days.
 
         """
-        # Which parameter
-        if is_period:
+        # Check which
+        if p_a_h not in [0, 1, 2]:
+            raise ValueError("Invalid parameter. Expected 0, 1, or 2.")
+        is_period = p_a_h == 0
+        is_hill = p_a_h == 2
+
+        # Define parameters
+        if is_period:  # Period
             param = "P"
             func = calc_period_with_errors
             anti_param = "a"
-        else:
+        elif is_hill:  # Hill radius
+            param = "hill"
+            func = calc_hill_radius_with_errors
+            anti_param = "P"
+        else:  # Semimajor axis
             param = "a"
             func = calc_a_with_errors
             anti_param = "P"
@@ -1646,7 +1663,7 @@ class StaticSystem:
             i = self.planet_names_.index(pl.name)
 
             # Parameter already exists
-            if not isnan(pl[param]) and not force:
+            if not is_hill and not isnan(pl[param]) and not force:
                 df[f"{pl.name}"] = pl.get_item(param, error=True)
                 continue
 
@@ -1701,33 +1718,99 @@ class StaticSystem:
             # No Jacobi criterion. Heliocentric
             else:
                 in_m = self.star.mass
-                in_m_err_min = (
-                    self.star.mass_err_min if err_method > 0 else 0.0
+                in_m_err_min = self.star.mass_err_min  # func handles the rest
+                in_m_err_max = self.star.mass_err_max  # func handles the rest
+
+            # Calculate the param and its errors if not hill radius
+            if not is_hill:
+                # Calculate the param and its errors
+                # We use the anti_param to get the other parameter
+                antipar, antipar_err_min, antipar_err_max = pl.get_item(
+                    anti_param, error=True
                 )
-                in_m_err_max = (
-                    self.star.mass_err_max if err_method > 0 else 0.0
+                par, par_err_min, par_err_max = func(
+                    antipar,
+                    antipar_err_min,
+                    antipar_err_max,
+                    in_m,
+                    in_m_err_min,
+                    in_m_err_max,
+                    pl_mass,
+                    pl_mass_err_min,
+                    pl_mass_err_max,
+                    err_method,
+                )
+            # Calculate the Hill radius and its errors
+            else:
+                # The little trick here, is that if the semi-major axis is
+                # not available, we use the period to calculate it, in case
+                # deep_estimate is requested
+                # First we get the a values
+                pl_a, pl_a_err_min, pl_a_err_max = pl.get_item("a", error=True)
+                # If the semi-major axis is not available, we use the period
+                if isnan(pl_a) and deep_estimate:  # force = False implícito
+                    pl_a, pl_a_err_min, pl_a_err_max = calc_a_with_errors(
+                        pl.P,
+                        pl.P_err_min,
+                        pl.P_err_max,
+                        in_m,
+                        in_m_err_min,
+                        in_m_err_max,
+                        pl_mass,
+                        pl_mass_err_min,
+                        pl_mass_err_max,
+                        err_method,
+                    )
+                # Check if the eccentricities can be assumed to be 0.0
+                if isnan(pl.e) and circular:
+                    pl_e = 0.0
+                    pl_e_err_min = 0.0
+                    pl_e_err_max = 0.0
+                else:
+                    pl_e = pl.e
+                    pl_e_err_min = pl.e_err_min
+                    pl_e_err_max = pl.e_err_max
+
+                # Calculate the Hill radius and its errors
+                par, par_err_min, par_err_max = func(
+                    pl_a,
+                    pl_a_err_min,
+                    pl_a_err_max,
+                    pl_e,
+                    pl_e_err_min,
+                    pl_e_err_max,
+                    in_m,
+                    in_m_err_min,
+                    in_m_err_max,
+                    pl_mass,
+                    pl_mass_err_min,
+                    pl_mass_err_max,
+                    err_method,
+                )
+                print(
+                    "Params:",
+                    pl_a,
+                    pl_a_err_min,
+                    pl_a_err_max,
+                    pl_e,
+                    pl_e_err_min,
+                    pl_e_err_max,
+                    in_m,
+                    in_m_err_min,
+                    in_m_err_max,
+                    pl_mass,
+                    pl_mass_err_min,
+                    pl_mass_err_max,
+                    err_method,
                 )
 
-            # Calculate the param and its errors
-            # We use the anti_param to get the other parameter
-            antip, antip_err_min, antip_err_max = pl.get_item(
-                anti_param, error=True
-            )
-            par, par_err_min, par_err_max = func(
-                antip,
-                antip_err_min if err_method > 0 else 0.0,
-                antip_err_max if err_method > 0 else 0.0,
-                in_m,
-                in_m_err_min,
-                in_m_err_max,
-                pl_mass,
-                pl_mass_err_min,
-                pl_mass_err_max,
-                err_method,
-            )
+            # Fill the DataFrame
             df[f"{pl.name}"] = [par, par_err_min, par_err_max]
+
+        # Set the index
         df.index = [param, f"{param}_err_min", f"{param}_err_max"]
 
+        # Check if no error requested
         if err_method == -1:  # No error requested
             return df.loc[param]  # Return only the parameter
 
@@ -1799,8 +1882,8 @@ class StaticSystem:
             in days.
 
         """
-        return self.__estimate_period_or_a(
-            is_period=True,
+        return self.__estimate_period_or_a_or_hill(
+            p_a_h=0,
             which=which,
             err_method=err_method,
             jacobi=jacobi,
@@ -1873,8 +1956,8 @@ class StaticSystem:
             Estimated semi-major axis, and its minimum and maximum errors,
             in AU.
         """
-        return self.__estimate_period_or_a(
-            is_period=False,
+        return self.__estimate_period_or_a_or_hill(
+            p_a_h=1,
             which=which,
             err_method=err_method,
             jacobi=jacobi,
@@ -2052,6 +2135,7 @@ class StaticSystem:
         err_method: int = -1,
         jacobi: bool = False,
         deep_estimate: bool = False,
+        circular: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Calculate the Hill radius of selected planets in the system.
 
@@ -2101,6 +2185,8 @@ class StaticSystem:
             axis) to calculate the Hill radius.
             If the mass and semi-major axis are missing, they will be estimated;
             otherwise, the existing values will be used.
+        circular : bool, optional. Default: False.
+            Whether to assume the unknown eccentricities are 0.0.
 
         Returns
         -------
@@ -2108,68 +2194,14 @@ class StaticSystem:
             Hill radius, and its minimum and maximum errors,
             in AU.
         """
-        # Get a list of the planets to use
-        planets = parse_to_iter(self.planet(which))
-
-        df = pd.DataFrame()  # Create an empty DataFrame
-
-        # Iterate over the planets
-        for pl in planets:
-            i = self.planet_names_.index(pl.name)
-            if jacobi and err_method > 0:  # Jacobi criterion with errors
-                # Get the planetary masses
-                masses_with_errors = self.get_item("mass", error=True)
-                # Keep only the masses of the planets before the current one
-                masses_with_errors = masses_with_errors.iloc[:i]
-                # Convert to Solar Masses
-                masses_with_errors = masses_with_errors * Mj2Ms
-                # Create a tuple with the masses and their errors
-                tup = masses_with_errors.itertuples(index=False, name=None)
-                # Calculate the inner mass and error
-                in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
-                    (
-                        *(
-                            self.star.mass,
-                            self.star.mass_err_min,
-                            self.star.mass_err_max,
-                        ),
-                        *tup,
-                    ),
-                )
-            elif jacobi:  # Jacobi criterion without errors
-                in_m = self.mass_accum_.iloc[i]
-                in_m_err_min = 0.0
-                in_m_err_max = 0.0
-            else:  # No Jacobi criterion
-                in_m = self.star.mass
-                in_m_err_min = self.star.mass_err_min
-                in_m_err_max = self.star.mass_err_max
-            hill, hill_err_min, hill_err_max = calc_hill_radius_with_errors(
-                pl.a,
-                pl.a_err_min if err_method > 0 else 0.0,
-                pl.a_err_max if err_method > 0 else 0.0,
-                pl.e,
-                pl.e_err_min if err_method > 0 else 0.0,
-                pl.e_err_max if err_method > 0 else 0.0,
-                in_m,
-                in_m_err_min if err_method > 0 else 0.0,
-                in_m_err_max if err_method > 0 else 0.0,
-                pl.mass,
-                pl.mass_err_min if err_method > 0 else 0.0,
-                pl.mass_err_max if err_method > 0 else 0.0,
-                err_method,
-            )
-            df[f"{pl.name}"] = [
-                hill,
-                hill_err_min,
-                hill_err_max,
-            ]
-        df.index = ["hill", "hill_err_min", "hill_err_max"]
-
-        if err_method == -1:  # No error
-            return df.loc["hill"]  # Return only the mass
-
-        return df.T  # Return the DataFrame
+        return self.__estimate_period_or_a_or_hill(
+            p_a_h=2,
+            which=which,
+            err_method=err_method,
+            jacobi=jacobi,
+            deep_estimate=deep_estimate,
+            circular=circular,
+        )
 
     def plot(
         self,
