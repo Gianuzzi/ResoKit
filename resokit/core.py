@@ -120,7 +120,7 @@ class ResokitDataFrame:
 
     Parameters
     ----------
-    data_df : pd.DataFrame or pd.Series
+    data : pd.DataFrame or pd.Series
         DataFrame containing the data.
     source : str
         Source of the dataset. Either 'eu' or 'nasa' or 'binary' or 'user'.
@@ -128,7 +128,7 @@ class ResokitDataFrame:
         Metadata of the dataset.
     """
 
-    data_df: Union[pd.DataFrame, pd.Series] = attrs.field(
+    data: Union[pd.DataFrame, pd.Series] = attrs.field(
         validator=attrs.validators.instance_of((pd.DataFrame, pd.Series)),
         converter=lambda df: df.squeeze(),  # Convert to Series if possible
     )
@@ -146,9 +146,9 @@ class ResokitDataFrame:
     def _columns__default(self) -> list:
         """Set the default value for columns_."""
         return (
-            self.data_df.index
-            if isinstance(self.data_df, pd.Series)
-            else self.data_df.columns
+            self.data.index
+            if isinstance(self.data, pd.Series)
+            else self.data.columns
         ).to_list()
 
     @n_columns_.default
@@ -159,15 +159,11 @@ class ResokitDataFrame:
     @n_objects_.default
     def _n_objects__default(self) -> int:
         """Set the default value for n_objects_."""
-        return (
-            self.data_df.shape[0]
-            if isinstance(self.data_df, pd.DataFrame)
-            else 1
-        )
+        return self.data.shape[0] if isinstance(self.data, pd.DataFrame) else 1
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-        if self.data_df.empty:
+        if self.data.empty:
             warnings.warn("Empty DataFrame.", stacklevel=2)
 
         if "name" not in self.columns_:
@@ -176,9 +172,9 @@ class ResokitDataFrame:
                 stacklevel=2,
             )
 
-        if self.n_objects_ == 1 and not isinstance(self.data_df, pd.Series):
+        if self.n_objects_ == 1 and not isinstance(self.data, pd.Series):
             raise TypeError(
-                "With only one object, data_df must be a Series "
+                "With only one object, data must be a Series "
                 + "(not a DataFrame)"
             )
 
@@ -192,28 +188,28 @@ class ResokitDataFrame:
         """x[y] <==> x.__getitem__(y)."""
         if self.n_objects_ == 1:
             if isinstance(key, int):
-                return self.data_df.iloc[key]
+                return self.data.iloc[key]
 
             if isinstance(key, list):
                 if all(isinstance(i, int) for i in key):
-                    return self.data_df.iloc[key]
+                    return self.data.iloc[key]
 
-            return self.data_df[key]
+            return self.data[key]
 
-        return self.data_df.__getitem__(key)
+        return self.data.__getitem__(key)
 
     def __dir__(self):
         """dir(pdf) <==> pdf.__dir__()."""
-        return super().__dir__() + dir(self.data_df)
+        return super().__dir__() + dir(self.data)
 
     def __getattr__(self, a):
         """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
-        return getattr(self.data_df, a)
+        return getattr(self.data, a)
 
     def __repr__(self, prefoot=None):
         """repr(x) <=> x.__repr__()."""
         with pd.option_context("display.show_dimensions", False):
-            df_body = repr(self.data_df).splitlines()
+            df_body = repr(self.data).splitlines()
 
         rows = f"{self.n_objects_} row{'s' if self.n_objects_ > 1 else ''}"
         columns = f"{self.n_columns_} columns"
@@ -242,9 +238,9 @@ class ResokitDataFrame:
 
         with pd.option_context("display.show_dimensions", False):
             if self.n_objects_ > 1:  # It is a DataFrame
-                df_html = self.data_df._repr_html_()
+                df_html = self.data._repr_html_()
             else:  # It is a Series
-                df_html = self.data_df.to_frame()._repr_html_()
+                df_html = self.data.to_frame()._repr_html_()
 
         parts = [
             f'<div class="resokit-data-container" id={ad_id}>',
@@ -362,7 +358,7 @@ class ResokitDataFrame:
         """Convert data to pandas data frame.
 
         This method constructs a data frame with the data inside the
-        data_df attribute.
+        data attribute.
 
         Parameters
         ----------
@@ -387,7 +383,7 @@ class ResokitDataFrame:
         else:
             used_cols = [col for col in list(columns) if col in self.columns_]
 
-        df = self.data_df[used_cols]
+        df = self.data[used_cols]
 
         return df.copy(deep=True) if copy else df
 
@@ -400,7 +396,7 @@ class ResokitDataFrame:
             Copy of the ResokitDataFrame.
         """
         return ResokitDataFrame(
-            data_df=self.data_df.copy(),
+            data=self.data.copy(),
             source=self.source,
             metadata=self.metadata,
         )
@@ -509,7 +505,7 @@ def df_to_resokit(
     if metadata is None:
         metadata = dict(DEFAULT_METADATA)
 
-    return ResokitDataFrame(data_df=df, source=source, metadata=metadata)
+    return ResokitDataFrame(data=df, source=source, metadata=metadata)
 
 
 rng = default_rng(seed=42)
@@ -521,59 +517,72 @@ rng = default_rng(seed=42)
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
-class StaticPlanet(ResokitDataFrame):
-    """StaticPlanet class representing a static planet.
+class StaticBody(ResokitDataFrame):
+    """StaticBody class.
+
+    This class defines the basic object structure; for
+    a star or a planet.
 
     Attributes
     ----------
-    data_df : pd.Series
-        Pandas Series containing the data.
+    data : pd.Series
+        Series containing the data.
+        Inherited from ResokitDataFrame.
     source : str
         Source of the dataset.
-        Either 'eu' or 'nasa' or 'user'.
+        Either 'eu' or 'nasa' or 'binary' or 'user'.
+        Inherited from ResokitDataFrame.
     metadata : dict
         Metadata of the dataset.
+        Inherited from ResokitDataFrame.
     name : str
-        Name of the planet.
+        Name of the object.
     user_defined_ : bool
-        Flag indicating if the planet is user-defined.
-    suffix_ : str
-        Suffix for the planet name.
+        Flag indicating if the object is user-defined.
     web_page : str
-        Web page of the planet.
+        Web page of the object.
+    is_star : bool
+        Flag indicating if the object is a star.
     """
 
     name: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
     suffix_: str = attrs.field(init=False)
     web_page: str = attrs.field(init=False)
+    is_star: bool = attrs.field(init=False)
 
     @name.default
     def _name_default(self):
         """Set the default value for name."""
-        return self.data_df["name"]  # ["name"] because .name is a df method
+        if self.is_star and "star_name" in self.data.index:
+            return self.data["star_name"]
+        return self.data["name"]  # ["name"] because .name is a df method
 
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
-        return self.source not in ["eu", "nasa"]
+        return self.source not in ["eu", "nasa"] or (
+            self.is_star and self.source != "binary"
+        )
 
     @suffix_.default
     def _suffix__default(self):
         """Set the default value for suffix_."""
-        aux = self.data_df["name"].split(" ")[-1]
+        aux = self.data["name"].split(" ")[-1]
         if len(aux) == 1:
             return aux
-        aux = self.data_df["name"].split(")")[-1]
+        if self.is_star:  # No suffix if star then
+            return ""
+        aux = self.data["name"].split(")")[-1]
         if len(aux) == 1:
             return aux
-        # No suffix
+        # No suffix at all
         return ""
 
     @web_page.default
     def _web_page_default(self):
         """Set the default value for web_page."""
-        if self.source == "eu":
+        if not self.is_star and self.source == "eu":
             aux = (
                 str(self.name).replace(" ", "_").lower()
                 + "--"
@@ -591,16 +600,42 @@ class StaticPlanet(ResokitDataFrame):
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-        # Assert data_series is a Series and not DataFrame
-        if not isinstance(self.data_df, pd.Series):
+        # Assert data is a Series
+        if not isinstance(self.data, pd.Series):
             raise TypeError(
-                "StaticPlanet must have a pd.Series. "
-                + f"Got: {type(self.data_df)} instead."
+                "StaticBody must have a pd.Series. "
+                + f"Got: {type(self.data)} instead."
             )
 
+
+@attrs.define(repr=False, frozen=True, slots=True)
+class StaticPlanet(StaticBody):
+    """StaticPlanet class representing a static planet.
+
+    Attributes
+    ----------
+    data : pd.Series
+        Pandas Series containing the data.
+    source : str
+        Source of the dataset.
+        Either 'eu' or 'nasa' or 'user'.
+    metadata : dict
+        Metadata of the dataset.
+    name : str
+        Name of the planet.
+    user_defined_ : bool
+        Flag indicating if the planet is user-defined.
+    suffix_ : str
+        Suffix for the planet name.
+    web_page : str
+        Web page of the planet.
+    """
+
+    def __attrs_post_init__(self):
+        """Post-initialization hook."""
         # Check if all columns are in the default mapping
         if not self.user_defined_:
-            for col in self.data_df.index:
+            for col in self.data.index:
                 if col not in RESO_PL_TYPES.keys() | RESO_OB_TYPES.keys() | {
                     "star_name",
                     "n",
@@ -628,9 +663,9 @@ class StaticPlanet(ResokitDataFrame):
             )
 
         if len(key) == 1:
-            return self.data_df[key[0]]
+            return self.data[key[0]]
 
-        return self.data_df[key]
+        return self.data[key]
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
@@ -891,19 +926,19 @@ class StaticPlanet(ResokitDataFrame):
     def copy(self) -> "StaticPlanet":
         """Return a copy of the StaticPlanet."""
         return StaticPlanet(
-            data_df=self.data_df.copy(),
+            data=self.data.copy(),
             source=self.source,
             metadata=self.metadata,
         )
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
-class StaticStar(ResokitDataFrame):
+class StaticStar(StaticBody):
     """StaticStar class representing a static star.
 
     Attributes
     ----------
-    data_df : pd.Series
+    data : pd.Series
         Series containing the data.
     source : str
         Source of the dataset. Either 'eu' or 'nasa' or 'binary' or 'user'.
@@ -917,60 +952,14 @@ class StaticStar(ResokitDataFrame):
         Web page of the star.
     """
 
-    name: str = attrs.field(init=False)
-    user_defined_: bool = attrs.field(init=False)
-    suffix_: str = attrs.field(init=False)  # For possible binary stars
-    web_page: str = attrs.field(init=False)
-
-    @name.default
-    def _name_default(self):
-        """Set the default value for name."""
-        if "star_name" in self.data_df.index:
-            return self.data_df["star_name"]
-
-        return self.data_df["name"]  # ["name"] because .name is a df method
-
-    @user_defined_.default
-    def _user_defined__default(self):
-        """Set the default value for user_defined_."""
-        return self.source not in ["eu", "nasa", "binary"]
-
-    @suffix_.default
-    def _suffix__default(self):
-        """Set the default value for suffix_."""
-        aux = self.name.split(" ")[-1]
-        if len(aux) == 1:
-            return aux
-        # No suffix
-        return ""
-
-    @web_page.default
-    def _web_page_default(self):
-        """Set the default value for web_page."""
-        if self.source == "nasa":
-            aux = str(self.name).replace(" ", "%20")
-            return (
-                "https://exoplanetarchive.ipac.caltech.edu/overview/"
-                + aux
-                + "/"
-            )
-        return ""
-
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-        # Assert data_series is a Series
-        if not isinstance(self.data_df, pd.Series):
-            raise TypeError(
-                "StaticStar must have a pd.Series. "
-                + f"Got: {type(self.data_df)} instead."
-            )
-
         # Check if all columns are in the default mapping
         if not self.user_defined_:
             aux_cols = {
                 col.replace("star_", "") for col in RESO_SR_TYPES.keys()
             }
-            for col in self.data_df.index:
+            for col in self.data.index:
                 if (
                     col not in aux_cols | RESO_OB_TYPES.keys()
                     and self.source != "binary"
@@ -992,9 +981,9 @@ class StaticStar(ResokitDataFrame):
             )
 
         if len(key) == 1:
-            return self.data_df[key[0]]
+            return self.data[key[0]]
 
-        return self.data_df[key]
+        return self.data[key]
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
@@ -1069,7 +1058,7 @@ class StaticStar(ResokitDataFrame):
     def copy(self) -> "StaticStar":
         """Return a copy of the StaticStar."""
         return StaticStar(
-            data_df=self.data_df.copy(),
+            data=self.data.copy(),
             source=self.source,
             metadata=self.metadata,
         )
@@ -1081,6 +1070,7 @@ class StaticStar(ResokitDataFrame):
 def _convert_planets(
     planets: Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet],
 ) -> List[StaticPlanet]:
+    """Convert planets to a list of StaticPlanet instances."""
     if isinstance(planets, StaticPlanet):
         return [planets]
     if not isinstance(planets, (list, tuple)) or not hasattr(
@@ -1096,7 +1086,94 @@ def _convert_planets(
     return list(planets)
 
 
-# -----------------------------------------------------------------------------
+# --------------------------- System of objects--------------------------------
+
+
+@attrs.define(repr=False, frozen=True, slots=True)
+class StaticBodiesSystem:
+    """StaticBodiesSystem class representing a system of static objects.
+
+    Attributes
+    ----------
+    objects : list[StaticBody]
+        List of StaticBody instances.
+    name : str
+        Name of the system.
+    metadata : dict
+        Metadata of the sysyem.
+    web_page : list[str]
+        Web page(s) of the system.
+    n_objects_ : int
+        Number of objects in this static system.
+    source_ : str
+        Source of the data.
+    user_defined_ : bool
+        Flag indicating if the system is user-defined.
+    object_names_ : list[str]
+        List of object names.
+    suffixes_ : list[str]
+        List of suffixes for the object names.
+    """
+
+    objects: List[StaticBody] = attrs.field(
+        validator=attrs.validators.instance_of(list),
+        converter=parse_to_iter,
+    )
+    name: str = attrs.field(
+        validator=attrs.validators.instance_of(str), default="unnamed"
+    )
+    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+    web_page: list = attrs.field(init=False)
+
+    n_objects_: int = attrs.field(init=False)
+    source_: str = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
+    object_names_: list = attrs.field(init=False)
+    suffixes_: list = attrs.field(init=False)
+
+    def __attrs_post_init__(self):
+        """Post-initialization hook."""
+        star_name = self.objects[0].name
+
+        # Check if all objects are from the same source
+        if not all([obj.source == star_name.source for obj in self.objects]):
+            raise ValueError("All objects must be from the same source.")
+
+    @web_page.default
+    def _web_page_default(self):
+        """Set the default value for web_page."""
+        return [obj.web_page for obj in self.objects]
+
+    @n_objects_.default
+    def _n_objects__default(self):
+        """Set the default value for n_objects_."""
+        return len(self.objects)
+
+    @source_.default
+    def _source__default(self):
+        """Set the default value for source_."""
+        main_source = self.objects[0].source
+
+        return (
+            main_source
+            if all([obj.source == main_source for obj in self.objects])
+            else "user"
+        )
+
+    @user_defined_.default
+    def _user_defined__default(self):
+        """Set the default value for user_defined_."""
+        return self.source_ not in ["eu", "nasa"]
+
+    @object_names_.default
+    def _object_names__default(self):
+        """Set the default value for object_names_."""
+        return [obj.name for obj in self.objects]
+
+    @suffixes_.default
+    def _suffixes__default(self):
+        """Set the default value for suffixes_."""
+        return [obj.suffix_ for obj in self.objects]
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
@@ -1135,7 +1212,7 @@ class StaticSystem:
             validator=attrs.validators.instance_of(
                 (list, tuple, StaticPlanet)
             ),
-            converter=_convert_planets,
+            converter=parse_to_iter,
         )
     )
     name: str = attrs.field(
@@ -2785,7 +2862,7 @@ class StaticSystem:
         """
         # Create a DataFrame with the planets data
         df = pd.DataFrame(
-            {planet.name: planet.data_df for planet in self.planets}
+            {planet.name: planet.data for planet in self.planets}
         )
 
         if add_star is None:
@@ -2795,7 +2872,7 @@ class StaticSystem:
             return df.T
 
         # Generate star data
-        star_df = pd.Series(self.star.data_df).to_frame(self.star.name)
+        star_df = pd.Series(self.star.data).to_frame(self.star.name)
 
         # Drop RESO_OB_TYPES columns, as they are already in the planets
         drop2 = [col for col in RESO_OB_TYPES.keys() if col in star_df.index]
@@ -3186,7 +3263,7 @@ class StaticBinarySystem:
         validator=attrs.validators.deep_iterable(
             member_validator=attrs.validators.instance_of(StaticPlanet)
         ),
-        converter=_convert_planets,
+        converter=parse_to_iter,
     )
     circumbinary: bool = attrs.field(
         validator=attrs.validators.instance_of(bool)
@@ -3721,7 +3798,7 @@ def _create_static_planet(
     if metadata is None:
         metadata = {}
 
-    return StaticPlanet(data_df=planet_data, source=source, metadata=metadata)
+    return StaticPlanet(data=planet_data, source=source, metadata=metadata)
 
 
 def _create_static_star(
@@ -3748,7 +3825,7 @@ def _create_static_star(
     if metadata is None:
         metadata = {}
 
-    return StaticStar(data_df=star_data, source=source, metadata=metadata)
+    return StaticStar(data=star_data, source=source, metadata=metadata)
 
 
 def _create_static_system(
