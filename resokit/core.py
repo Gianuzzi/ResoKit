@@ -64,11 +64,12 @@ from resokit.utils.utils import (
 )
 
 try:
-    import rebound
+    from rebound import Simulation
 
     rebound_imported = True
 except ImportError:
     rebound_imported = False
+    Simulation = None
 
 # =============================================================================
 # BASE CLASSES
@@ -114,7 +115,7 @@ class MetaData(Mapping):
         return self[a]
 
 
-@attrs.define(frozen=True, slots=True, repr=False)
+@attrs.define(on_setattr=attrs.setters.frozen, slots=True, repr=False)
 class ResokitDataFrame:
     """Initialize a ResoKit DataFrame class.
 
@@ -161,6 +162,10 @@ class ResokitDataFrame:
         """Set the default value for n_objects_."""
         return self.data.shape[0] if isinstance(self.data, pd.DataFrame) else 1
 
+    def __attrs_pre_init__(self):
+        """Pre-initialization hook."""
+        pass
+
     def __attrs_post_init__(self):
         """Post-initialization hook."""
         if self.data.empty:
@@ -204,7 +209,7 @@ class ResokitDataFrame:
 
     def __getattr__(self, a):
         """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
-        return getattr(self.data, a)
+        return getattr(self.data, a)  # Get attribute from data
 
     def __repr__(self, prefoot=None):
         """repr(x) <=> x.__repr__()."""
@@ -512,16 +517,41 @@ rng = default_rng(seed=42)
 
 
 # =============================================================================
+# VALIDATORS
+# =============================================================================
+
+
+def static_binary_star_data_validator(
+    instance, attribute, data: Union[pd.Series, pd.DataFrame]
+):
+    """Validate the data for a StaticBinaryStar."""
+    # Must be Series or Dataframe
+    if not isinstance(data, (pd.Series, pd.DataFrame)):
+        raise TypeError(
+            "StaticBinaryStar must have a pd.Series or pd.DataFrame. "
+            + f"Got: {type(data)} instead."
+        )
+
+    # Must have a, e, and P
+    if not all(col in data.index for col in ["a", "e", "P"]):
+        raise ValueError(
+            "StaticBinaryStar must have 'a', 'e', and 'P' columns."
+        )
+    return True
+
+
+# =============================================================================
 # STATIC CLASSES
 # =============================================================================
 
 
-@attrs.define(repr=False, frozen=True, slots=True)
+@attrs.define(repr=False, on_setattr=attrs.setters.frozen, slots=True)
 class StaticBody(ResokitDataFrame):
     """StaticBody class.
 
     This class defines the basic object structure; for
-    a star or a planet.
+    a star or a planet. This class should not be instantiated
+    directly.
 
     Attributes
     ----------
@@ -535,21 +565,23 @@ class StaticBody(ResokitDataFrame):
     metadata : dict
         Metadata of the dataset.
         Inherited from ResokitDataFrame.
-    name : str
-        Name of the object.
-    user_defined_ : bool
-        Flag indicating if the object is user-defined.
-    web_page : str
-        Web page of the object.
     is_star : bool
         Flag indicating if the object is a star.
+    name : str
+        Name of the object.
+    web_page : str
+        Web page of the object.
     """
 
+    is_star: bool = attrs.field(
+        init=True,
+        kw_only=True,
+    )  # Must be set in the subclass
+
     name: str = attrs.field(init=False)
-    user_defined_: bool = attrs.field(init=False)
     suffix_: str = attrs.field(init=False)
     web_page: str = attrs.field(init=False)
-    is_star: bool = attrs.field(init=False)
+    user_defined_: bool = attrs.field(init=False)
 
     @name.default
     def _name_default(self):
@@ -558,25 +590,20 @@ class StaticBody(ResokitDataFrame):
             return self.data["star_name"]
         return self.data["name"]  # ["name"] because .name is a df method
 
-    @user_defined_.default
-    def _user_defined__default(self):
-        """Set the default value for user_defined_."""
-        return self.source not in ["eu", "nasa"] or (
-            self.is_star and self.source != "binary"
-        )
-
     @suffix_.default
-    def _suffix__default(self):
+    def _suffix_default(self):
         """Set the default value for suffix_."""
         aux = self.data["name"].split(" ")[-1]
         if len(aux) == 1:
             return aux
+        elif len(aux) == 2 and aux[0] in ["A", "B"]:
+            return aux[1]
         if self.is_star:  # No suffix if star then
             return ""
         aux = self.data["name"].split(")")[-1]
+        # Check if the suffix is a letter
         if len(aux) == 1:
             return aux
-        # No suffix at all
         return ""
 
     @web_page.default
@@ -598,6 +625,15 @@ class StaticBody(ResokitDataFrame):
             )
         return ""
 
+    @user_defined_.default
+    def _user_defined_default(self):
+        """Set the default value for user_defined_."""
+        return self.source not in ["eu", "nasa"]
+
+    def __attrs_pre_init__(self):
+        """Pre-initialization hook."""
+        pass
+
     def __attrs_post_init__(self):
         """Post-initialization hook."""
         # Assert data is a Series
@@ -608,7 +644,7 @@ class StaticBody(ResokitDataFrame):
             )
 
 
-@attrs.define(repr=False, frozen=True, slots=True)
+@attrs.define(repr=False, on_setattr=attrs.setters.frozen, slots=True)
 class StaticPlanet(StaticBody):
     """StaticPlanet class representing a static planet.
 
@@ -623,13 +659,20 @@ class StaticPlanet(StaticBody):
         Metadata of the dataset.
     name : str
         Name of the planet.
+    web_page : str
+        Web page of the planet.
     user_defined_ : bool
         Flag indicating if the planet is user-defined.
     suffix_ : str
         Suffix for the planet name.
-    web_page : str
-        Web page of the planet.
     """
+
+    is_star: bool = attrs.field(init=False, on_setattr=attrs.setters.NO_OP)
+
+    def __attrs_pre_init__(self):
+        """Pre-initialization hook."""
+        # Set is_star to False
+        self.is_star = False
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -932,7 +975,7 @@ class StaticPlanet(StaticBody):
         )
 
 
-@attrs.define(repr=False, frozen=True, slots=True)
+@attrs.define(repr=False, on_setattr=attrs.setters.frozen, slots=True)
 class StaticStar(StaticBody):
     """StaticStar class representing a static star.
 
@@ -946,11 +989,18 @@ class StaticStar(StaticBody):
         Metadata of the dataset.
     name : str
         Name of the star.
-    user_defined_ : bool
-        Flag indicating if the star is user-defined.
     web_page : str
         Web page of the star.
+    user_defined_ : bool
+        Flag indicating if the star is user-defined.
     """
+
+    is_star: bool = attrs.field(init=False, on_setattr=attrs.setters.NO_OP)
+
+    def __attrs_pre_init__(self):
+        """Pre-initialization hook."""
+        # Set is_star to True
+        self.is_star = True
 
     def __attrs_post_init__(self):
         """Post-initialization hook."""
@@ -1064,116 +1114,255 @@ class StaticStar(StaticBody):
         )
 
 
-# -------------------------- Converter function -------------------------------
+# --------------------------- System of bodies --------------------------------
 
 
-def _convert_planets(
-    planets: Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet],
-) -> List[StaticPlanet]:
-    """Convert planets to a list of StaticPlanet instances."""
-    if isinstance(planets, StaticPlanet):
-        return [planets]
-    if not isinstance(planets, (list, tuple)) or not hasattr(
-        planets, "__iter__"
-    ):
-        raise ValueError(f"A list or tuple was expected. Got {type(planets)}.")
-    for i, planet in enumerate(planets):
-        if not isinstance(planet, StaticPlanet):
-            raise ValueError(
-                f"A StaticPlanet was expected at position {i}. "
-                + f"Got {type(planet)}."
-            )
-    return list(planets)
-
-
-# --------------------------- System of objects--------------------------------
-
-
-@attrs.define(repr=False, frozen=True, slots=True)
-class StaticBodiesSystem:
-    """StaticBodiesSystem class representing a system of static objects.
+@attrs.define(repr=False, on_setattr=attrs.setters.frozen, slots=True)
+class StaticBinaryStar:
+    """StaticBinaryStar class.
 
     Attributes
     ----------
-    objects : list[StaticBody]
-        List of StaticBody instances.
-    name : str
-        Name of the system.
-    metadata : dict
-        Metadata of the sysyem.
-    web_page : list[str]
-        Web page(s) of the system.
-    n_objects_ : int
-        Number of objects in this static system.
-    source_ : str
-        Source of the data.
-    user_defined_ : bool
-        Flag indicating if the system is user-defined.
-    object_names_ : list[str]
-        List of object names.
-    suffixes_ : list[str]
-        List of suffixes for the object names.
+    star0 : StaticStar. Mandatory.
+        StaticStar instance for the primary star.
+    star1 : StaticStar. Mandatory.
+        StaticStar instance for the secondary star.
+    data : Union[pd.DataFrame, pd.Series]. Mandatory.
+        Data of the binary system.
+    name : str, optional. Default: 'unnamed'.
+        Name of the binary system.
+    metadata : dict, optional. Default: {}.
+        Metadata of the dataset.
+    web_page : str
+        Web page of the binary system.
+    suffix_ : str
+        Suffix for the binary system name.
+    alternate_name : str
+        Alternative name of the binary system.
+    disc_method : str
+        Detection method of the binary system.
+    dist : float
+        Distance to the binary system, in parsecs.
+    a : float
+        Semi-major axis of the binary system, in AU.
+    e : float
+        Eccentricity of the binary system.
+    imut : float
+        Inclination of the mutual orbit, in degrees.
+    nplanets : int
+        Number of planets in the binary system.
+    planet_HW_crit : float
+        Hill-Waterworth criterion for the binary system.
+    total_mass_ : float
+        Total mass of the binary system, in solar masses.
+    known_orbit_ : bool
+        Whether the orbit is known.
     """
 
-    objects: List[StaticBody] = attrs.field(
-        validator=attrs.validators.instance_of(list),
-        converter=parse_to_iter,
+    star0: StaticStar = attrs.field(
+        validator=attrs.validators.instance_of(StaticStar)
     )
+    star1: StaticStar = attrs.field(
+        validator=attrs.validators.instance_of(StaticStar)
+    )
+    data: Union[pd.DataFrame, pd.Series] = attrs.field(
+        validator=static_binary_star_data_validator,
+        converter=lambda df: df.squeeze(),  # Convert to Series if possible
+    )
+
     name: str = attrs.field(
         validator=attrs.validators.instance_of(str), default="unnamed"
     )
-    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
-    web_page: list = attrs.field(init=False)
 
-    n_objects_: int = attrs.field(init=False)
+    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    web_page: str = attrs.field(init=False)
+
     source_: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
-    object_names_: list = attrs.field(init=False)
-    suffixes_: list = attrs.field(init=False)
 
-    def __attrs_post_init__(self):
-        """Post-initialization hook."""
-        star_name = self.objects[0].name
+    suffix_: str = attrs.field(init=False)
 
-        # Check if all objects are from the same source
-        if not all([obj.source == star_name.source for obj in self.objects]):
-            raise ValueError("All objects must be from the same source.")
+    is_star: bool = attrs.field(init=False, on_setattr=attrs.setters.NO_OP)
+
+    total_mass_: float = attrs.field(init=False)
+
+    known_orbit_: bool = attrs.field(init=False)
 
     @web_page.default
     def _web_page_default(self):
         """Set the default value for web_page."""
-        return [obj.web_page for obj in self.objects]
-
-    @n_objects_.default
-    def _n_objects__default(self):
-        """Set the default value for n_objects_."""
-        return len(self.objects)
+        return [self.star0.web_page, self.star1.web_page]
 
     @source_.default
     def _source__default(self):
         """Set the default value for source_."""
-        main_source = self.objects[0].source
+        main_source = self.star0.source
 
-        return (
-            main_source
-            if all([obj.source == main_source for obj in self.objects])
-            else "user"
-        )
+        return main_source if main_source == self.star1.source else "user"
 
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
-        return self.source_ not in ["eu", "nasa"]
+        return self.source_ != "binary"
 
-    @object_names_.default
-    def _object_names__default(self):
-        """Set the default value for object_names_."""
-        return [obj.name for obj in self.objects]
+    @suffix_.default
+    def _suffix__default(self):
+        """Set the default value for suffix_."""
+        return [self.star0.suffix_, self.star1.suffix_]
 
-    @suffixes_.default
-    def _suffixes__default(self):
-        """Set the default value for suffixes_."""
-        return [obj.suffix_ for obj in self.objects]
+    @total_mass_.default
+    def _total_mass__default(self):
+        """Set the default value for total_mass_."""
+        return self.star0.mass + self.star1.mass
+
+    @known_orbit_.default
+    def _known_orbit__default(self):
+        """Set the default value for known_orbit_."""
+        return self.data["e"] < 1.0
+
+    def __attrs_pre_init__(self):
+        """Pre-init method."""
+        # Set is_star to True
+        self.is_star = True
+
+    def __attrs_post_init__(self):
+        """Post-init method."""
+        pass
+
+    def __len__(self):
+        """len(x) <=> x.__len__()."""
+        return 2
+
+    def __getitem__(self, key):
+        """x[y] <==> x.__getitem__(y)."""
+        return self.data.__getitem__(key)
+
+    def __dir__(self):
+        """dir(pdf) <==> pdf.__dir__()."""
+        return super().__dir__() + dir(self.data)
+
+    def __getattr__(self, a):
+        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
+        return getattr(self.data, a)
+
+    def __repr__(self):
+        """repr(x) <=> x.__repr__()."""
+        star0 = f"\n Star 1:\n  {self.star0.name}"
+        star1 = f"\n Star 2:\n  {self.star1.name}"
+
+        return (
+            f"StaticBinaryStar: '{self.name}'"
+            + f"{star0} "
+            + f"{star1}"
+            + "\n"
+            + " from binary data source."
+            if not self.user_defined_
+            else ""
+        )
+
+    def _repr_html_(self):
+        """Return a HTML representation of the DataFrame."""
+        if self.data.empty:
+            return self.__repr__()
+
+        ad_id = id(self)
+
+        header = (
+            f" StaticBinaryStar: '{self.name}'"
+            + f"[{self.star0.name} - {self.star1.name}]"
+        )
+        footer = "Binary data"
+        if not self.user_defined_:
+            footer += " from binary data source."
+
+        with pd.option_context("display.show_dimensions", False):
+            df_html = self.data.to_frame()._repr_html_()
+
+        parts = [
+            f'<div class="resokit-data-container" id={ad_id}>',
+            header,
+            df_html,
+            footer,
+            "</div>",
+        ]
+
+        html = "".join(parts)
+
+        return html
+
+    def __iter__(self):
+        """Iterate over the stars."""
+        return iter([self.star0, self.star1])
+
+    def star(
+        self, indices: Union[int, str, List[Union[int, str]]]
+    ) -> StaticStar:
+        """Return the star(s) of the binary system, by given index or name.
+
+        Parameters
+        ----------
+        indices : int, str, list
+            Which star(s) to return.
+            If 'all', return both stars.
+            If an :py:class:`int`, return the star with the given index.
+            If a :py:class:`str`, return the star with the given name.
+            If a list, return the stars with the given indexes or names.
+
+        Returns
+        -------
+        star : StaticStar, list
+            StaticStar instance for the star, or list of stars.
+        """
+        # Check if indices is int
+        if isinstance(indices, int):
+            if indices == 0:
+                return self.star0
+            if indices == 1:
+                return self.star1
+            raise ValueError(
+                "Invalid int value for 'indices'. Must be 0 or 1."
+            )
+        # Check if indices is str
+        elif isinstance(indices, str):
+            if indices == "all":
+                return [self.star0, self.star1]
+            elif indices == self.star0.name:
+                return self.star0
+            elif indices == self.star1.name:
+                return self.star1
+            raise ValueError("Invalid str value for 'indices'.")
+
+        # Parse indices to list
+        indices = parse_to_iter(indices)
+
+        # Check if indices are int or str
+        if not all(isinstance(i, (int, str)) for i in indices):
+            raise TypeError("Indices must be integers or strings.")
+
+        # Check not "all" inside
+        if "all" in indices:
+            raise ValueError("Cannot mix 'all' with other indices.")
+
+        return [self.star(idx) for idx in indices]
+
+    def to_dict(self) -> dict:
+        """Return the metadata as a new dictionary."""
+        return dict(self.metadata)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Return the binary data as a new DataFrame."""
+        return self.data.to_frame(name=self.name)
+
+    def copy(self) -> "StaticBinaryStar":
+        """Return a copy of the :py:class:`StaticBinaryStar`."""
+        return StaticBinaryStar(
+            star0=self.star0.copy(),
+            star1=self.star1.copy(),
+            data=self.data.copy(deep=True),
+            name=self.name,
+            metadata=self.metadata,
+        )
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
@@ -1204,8 +1393,8 @@ class StaticSystem:
         List of planet names.
     """
 
-    star: StaticStar = attrs.field(
-        validator=attrs.validators.instance_of(StaticStar),
+    star: Union[StaticStar, StaticBinaryStar] = attrs.field(
+        validator=attrs.validators.instance_of((StaticStar, StaticBinaryStar))
     )
     planets: Union[List[StaticPlanet], Tuple[StaticPlanet], StaticPlanet] = (
         attrs.field(
@@ -1215,15 +1404,30 @@ class StaticSystem:
             converter=parse_to_iter,
         )
     )
+
     name: str = attrs.field(
         validator=attrs.validators.instance_of(str), default="unnamed"
     )
+
     metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
+
+    is_circumbinary: bool = attrs.field(
+        validator=attrs.validators.instance_of(bool), default=False
+    )  # This is for the user
+
+    is_binary_: bool = attrs.field(init=False)  # This is for the code
+
+    bodies_: List[Union[StaticStar, StaticPlanet]] = attrs.field(init=False)
+
     web_page: list = attrs.field(init=False)
 
+    n_stars_: int = attrs.field(init=False)
     n_planets_: int = attrs.field(init=False)
+
     source_: str = attrs.field(init=False)
     user_defined_: bool = attrs.field(init=False)
+
+    star_names_: list = attrs.field(init=False)
     planet_names_: list = attrs.field(init=False)
     suffixes_: list = attrs.field(init=False)
 
@@ -1233,13 +1437,29 @@ class StaticSystem:
     mass_accum_: pd.Series = attrs.field(init=False)
     total_mass_: float = attrs.field(init=False)
 
+    @is_binary_.default
+    def _is_binary__default(self):
+        """Set the default value for is_binary_."""
+        return isinstance(self.star, StaticBinaryStar)
+
+    @bodies_.default
+    def _bodies__default(self):
+        """Set the default value for bodies_."""
+        if not self.is_binary_:
+            return [self.star, *self.planets]
+        if self.is_circumbinary:
+            return [self.star.star0, self.star.star1, *self.planets]
+        return [self.star.star0, *self.planets, self.star.star1]
+
     @web_page.default
     def _web_page_default(self):
         """Set the default value for web_page."""
-        return [
-            self.star.web_page,
-            *[planet.web_page for planet in self.planets],
-        ]
+        return [body.web_page for body in self.bodies_]
+
+    @n_stars_.default
+    def _n_stars__default(self):
+        """Set the default value for n_stars_."""
+        return 2 if self.is_binary_ else 1
 
     @n_planets_.default
     def _n_planets__default(self):
@@ -1249,7 +1469,14 @@ class StaticSystem:
     @source_.default
     def _source__default(self):
         """Set the default value for source_."""
-        main_source = self.star.source
+        # Check if not binary
+        if not self.is_binary_:
+            main_source = self.star.source
+        else:
+            if self.star.star0.source == self.star.star1.source == "binary":
+                main_source = "eu"
+            else:
+                main_source = "user"
 
         return (
             main_source
@@ -1262,6 +1489,13 @@ class StaticSystem:
         """Set the default value for user_defined_."""
         return self.source_ not in ["eu", "nasa"]
 
+    @star_names_.default
+    def _star_names__default(self):
+        """Set the default value for star_names_."""
+        if not self.is_binary_:
+            return self.star.name
+        return [self.star.star0.name, self.star.star1.name]
+
     @planet_names_.default
     def _planet_names__default(self):
         """Set the default value for planet_names_."""
@@ -1270,26 +1504,42 @@ class StaticSystem:
     @suffixes_.default
     def _suffixes__default(self):
         """Set the default value for suffixes_."""
-        return [self.star.suffix_] + [
-            planet.suffix_ for planet in self.planets
-        ]
+        return [body.suffix_ for body in self.bodies_]
 
     @period_ratios_.default
     def _period_ratios__default(self):
         """Set the default value for period_ratios_."""
-        if self.n_planets_ == 1:
+        # If binary system...
+        if self.is_binary_:
+            bin_per = self.star.data.P
+            if self.n_planets_ == 1 and self.is_circumbinary:  # Circumbinary
+                return self.planets[0].P / bin_per
+            elif self.n_planets_ == 1 and not self.is_circumbinary:
+                return bin_per / self.planets[0].P
+            return self.pair_ratio(verbose=False, use_binary=True)
+
+        # If not a binary system...
+        if self.n_planets_ == 1:  # Single planet
             return None
-        elif self.n_planets_ == 2:
+        elif self.n_planets_ == 2:  # Two planets
             return self.planets[1].P / self.planets[0].P
 
-        return self.pair_ratio(verbose=False)
+        return self.pair_ratio(verbose=False)  # More than two planets
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
         """Set the default value for __error_ratios__."""
-        if self.n_planets_ == 1:
+        # If binary system...
+        if self.is_binary_:
+            # Binary has no error
+            if self.n_planets_ == 1:  # Return None
+                return None
+            return pd.DataFrame()  # Empty mutable DataFrame
+
+        # If not a binary system...
+        if self.n_planets_ == 1:  # Single planet
             return None
-        elif self.n_planets_ == 2:
+        elif self.n_planets_ == 2:  # Two planets
             error_0 = max(self.planets[0].P_err_min, self.planets[0].P_err_max)
             error_1 = max(self.planets[1].P_err_min, self.planets[1].P_err_max)
             return self.period_ratios_ * sqrt(
@@ -1303,31 +1553,41 @@ class StaticSystem:
     def _mass_accum__default(self):
         """Set the default value for mass_accum_."""
         # Calculate the accumulated mass inside each planet orbit
-        # (and the star too), without including that planet.
-        # THe series will have n_planets_ + 1 elements.
-        in_masses = [self.star.mass]
-        for i in range(self.n_planets_):
-            in_masses.append(
-                in_masses[-1] + self.planets[i].mass
-            )  # Accumulated mass
+        # (and the star(s) too).
+        # The series will have n_stars_ + n_planets_ elements.
+        in_masses = [self.bodies_[0].mass]
+        for i in range(1, self.n_stars_ + self.n_planets_):
+            in_masses.append(in_masses[i - 1] + self.bodies_[i].mass)
 
-        return pd.Series(in_masses, index=["star"] + self.planet_names_)
+        return pd.Series(
+            in_masses,
+            index=[body.name for body in self.bodies_],
+            name="mass_accum",
+        )
 
     @total_mass_.default
     def _total_mass__default(self):
         """Set the default value for total_mass_."""
         return self.mass_accum_.iloc[-1]
 
+    def __attrs_pre_init__(self):
+        """Pre-initialization hook."""
+        pass
+
     def __attrs_post_init__(self):
         """Post-initialization hook."""
-        star_name = self.star.name
+        parsed_star_names = [parse_name(self.star.name)]
+        # Check if not binary system
+        if self.is_binary_:
+            parsed_star_names += [parse_name(star.name) for star in self.star]
 
         # Check if all planets have the same star name
         for planet in self.planets:
-            if planet.star_name != star_name:
+            if parse_name(planet.star_name) not in parsed_star_names:
                 warnings.warn(
-                    f"Planet({planet.name}) star name({planet.star_name})"
-                    + f" is different from Star({star_name}).",
+                    f"Planet({planet.name}) parsed "
+                    + f"star name({planet.star_name})"
+                    + f" is not in the parsed star names({parsed_star_names}).",
                     stacklevel=2,
                 )
 
@@ -1339,8 +1599,7 @@ class StaticSystem:
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        star_msg = "\n Star:\n  " + f"{self.star.name}"
-
+        # Planets message
         planets_msg = (
             "\n"
             + f" Planet{'s' if self.n_planets_ > 1 else ''}:"
@@ -1348,14 +1607,32 @@ class StaticSystem:
             + "\n  ".join(self.planet_names_)
         )
 
+        # Star message
+        if not self.is_binary_:  # Single star
+            star_msg1 = "\n Star:\n  " + f"{self.star.name}"
+            star_msg2 = ""
+        else:  # Binary star
+            star_msg1 = "\n Star 1:\n  " + f"{self.star.star0.name}"
+            if self.is_circumbinary:  # Circumbinary
+                star_msg1 += "\n Star 2:\n  " + f"{self.star.star1.name}"
+                star_msg2 = "\n [circumbinary system]"
+            else:  # Normal binary
+                star_msg2 = (
+                    "\n Star 2:\n  "
+                    + f"{self.star.star1.name}"
+                    + "\n [binary system]"
+                )
+
         return (
             f"StaticSystem: '{self.name}'"
-            + f"{star_msg} "
+            + f"{star_msg1} "
             + f"{planets_msg}"
-            + "\n"
-            + f" from '{self.source_}' data source."
-            if not self.user_defined_
-            else ""
+            + f"{star_msg2}"
+            + (
+                f"\nfrom '{self.source_}' data source."
+                if not self.user_defined_
+                else ""
+            )
         )
 
     def __getitem__(self, key: Union[int, str]):
@@ -1384,20 +1661,42 @@ class StaticSystem:
 
     def __len__(self):
         """len(x) <=> x.__len__()."""
-        return self.n_planets_ + 1
+        return self.n_stars_ + self.n_planets_
 
     def __iter__(self):
-        """Iterate over the star and planets."""
-        return iter([self.star] + self.planets)
+        """Iterate over the stars and planets."""
+        return iter(self.bodies_)
+
+    def __contains__(self, item: Union[str, StaticStar, StaticPlanet]) -> bool:
+        """Check if the item is in the system."""
+        # Check by name
+        if isinstance(item, str):
+            if self.is_binary_ and item == self.star.name:  # If binary
+                return True
+            return item in self.star_names_ or item in self.planet_names_
+        # Check by object (star)
+        if isinstance(item, StaticStar) and not self.is_binary_:
+            return item == self.star
+        # Check by object (binary star)
+        if isinstance(item, StaticBinaryStar) and self.is_binary_:
+            return item == self.star
+        # Check by object (planet)
+        if isinstance(item, StaticPlanet):
+            return item in self.planets
+        return False
 
     def body(
         self, indices: Union[int, str, Iterable[Union[int, str]]]
     ) -> Union[
-        StaticStar, StaticPlanet, List[Union[StaticStar, StaticPlanet]]
+        StaticStar,
+        StaticPlanet,
+        StaticBinaryStar,
+        List[Union[StaticStar, StaticPlanet, StaticBinaryStar]],
     ]:
-        """Return the star and/or planets by given indices.
+        """Return the star (or binary) and/or planets by given indices.
 
-        For this function, the star is index 0, and the planets start from 1.
+        For this function, the star (or binary) is index 0,
+        and the planets starts from 1.
 
         Parameters
         ----------
@@ -1408,10 +1707,10 @@ class StaticSystem:
 
         Returns
         -------
-        bodies : StaticStar or StaticPlanet or list[StaticPlanet | StaticPlanet]
+        bodies : StaticStar or StaticPlanet or StaticBinaryStar or list
             A copy of a system's star :py:class:`StaticStar` or
-            planet :py:class:`StaticPlanet` or list of a :py:class:`StaticStar`
-            and :py:class:`StaticPlanet` objects.
+            planet :py:class:`StaticPlanet` or
+            binary star :py:class:`StaticBinaryStar` or list of them.
         """
         # Check if indices is an integer
         if isinstance(indices, int):
@@ -1558,8 +1857,25 @@ class StaticSystem:
 
     def _get_single_item(self, item: str):
         """Handle retrieval when a single item is requested."""
-        if item.startswith("star_"):
-            return self.star[item.replace("star_", "")]
+        if item.startswith("star_") or item.startswith("binary_"):
+            try:
+                # If binary, attempt for a binary attribute
+                return self.star[
+                    item.replace("star_", "").replace("binary_", "")
+                ]
+            except KeyError:
+                raise KeyError(f"Attribute '{item}' not found in binary star.")
+
+        # If binary and star0 or star1
+        if (
+            self.is_binary_
+            and item.startswith("star0_")
+            or item.startswith("star1_")
+        ):
+            if item.startswith("star0_"):
+                return self.star.star0[item.replace("star0_", "")]
+            if item.startswith("star1_"):
+                return self.star.star1[item.replace("star1_", "")]
 
         if self.n_planets_ > 1:
             return pd.Series(
@@ -1573,7 +1889,7 @@ class StaticSystem:
     def get_item(
         self, items: Union[str, List[str]], error: bool = False
     ) -> Union[pd.Series, pd.DataFrame]:
-        """Retrieve specific attributes of the system (star and/or planets).
+        """Retrieve specific attributes of the system (star(s) and/or planets).
 
         Parameters
         ----------
@@ -1611,6 +1927,9 @@ class StaticSystem:
         for item in items:
             dicc[item] = self._get_single_item(item)
 
+        # Check if all scalar values
+        if all(isinstance(val, (int, float, str)) for val in dicc.values()):
+            return pd.Series(dicc)
         # Create DataFrame
         df = pd.DataFrame(dicc)
 
@@ -1721,7 +2040,7 @@ class StaticSystem:
         df = pd.DataFrame()
 
         # A simple aux to see if working just with the first planet
-        only_first = len(planets) == 1 and planets[0] == self.planets[0]
+        only_first = len(planets) == 1 and planets[0] in [self.planets[0]]
         # Redefine if there is only one planet, or if only the first
         jacobi = jacobi and self.n_planets_ > 1 and not only_first
 
@@ -1754,14 +2073,25 @@ class StaticSystem:
                 pl_mass_err_min = 0
                 pl_mass_err_max = 0
 
+            # Check if binary star
+            if self.is_binary_:
+                # Check if circumbinary
+                if self.is_circumbinary:
+                    in_m = self.star.total_mass_
+                else:  # Normal binary
+                    in_m = self.star.star0.mass
+                # No errors
+                in_m_err_min = 0.0
+                in_m_err_max = 0.0
+            else:  # Single star
+                in_m = self.star.mass
+                in_m_err_min = self.star.mass_err_min
+                in_m_err_max = self.star.mass_err_max
+
             # Jacobi criterion with errors
             if jacobi and err_method > 0:
-                # Check if the first planet
-                if i == 0:
-                    in_m = self.star.mass
-                    in_m_err_min = self.star.mass_err_min
-                    in_m_err_max = self.star.mass_err_max
-                else:
+                # Check if not the first planet
+                if i > 0:
                     # Keep only the masses of the planets before this one
                     used_mass_table = used_mass_table.iloc[: i - 1]
                     # Create a tuple with the masses and their errors. Also,
@@ -1769,13 +2099,13 @@ class StaticSystem:
                     tup = (used_mass_table * Mj2Ms).itertuples(
                         index=False, name=None
                     )
-                    # Calculate the inner mass and error
+                    # Re Calculate the inner mass and error
                     in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
                         (
                             *(
-                                self.star.mass,
-                                self.star.mass_err_min,
-                                self.star.mass_err_max,
+                                in_m,
+                                in_m_err_min,
+                                in_m_err_max,
                             ),
                             *tup,
                         ),
@@ -1784,19 +2114,13 @@ class StaticSystem:
             elif jacobi:
                 # in_m will be the star mass, plus the inner planets mass
                 # up to the previous planet
-                if i == 0:
-                    in_m = self.star.mass
-                else:
-                    in_m = (
-                        self.star.mass + used_mass_table.cumsum().iloc[i - 1]
-                    )
-                in_m_err_min = 0.0
-                in_m_err_max = 0.0
+                # Check if not the first planet
+                if i > 0:
+                    in_m = in_m + used_mass_table.cumsum().iloc[i - 1]
             # No Jacobi criterion. Heliocentric
             else:
-                in_m = self.star.mass
-                in_m_err_min = self.star.mass_err_min  # func handles the rest
-                in_m_err_max = self.star.mass_err_max  # func handles the rest
+                # Already defined
+                pass
 
             # Calculate the param and its errors if not hill radius
             if not is_hill:
@@ -1850,22 +2174,6 @@ class StaticSystem:
 
                 # Calculate the Hill radius and its errors
                 par, par_err_min, par_err_max = func(
-                    pl_a,
-                    pl_a_err_min,
-                    pl_a_err_max,
-                    pl_e,
-                    pl_e_err_min,
-                    pl_e_err_max,
-                    in_m,
-                    in_m_err_min,
-                    in_m_err_max,
-                    pl_mass,
-                    pl_mass_err_min,
-                    pl_mass_err_max,
-                    err_method,
-                )
-                print(
-                    "Params:",
                     pl_a,
                     pl_a_err_min,
                     pl_a_err_max,
@@ -2296,7 +2604,7 @@ class StaticSystem:
 
         Note
         ----
-        Crossed attributes (e.g., x='star_mass', y='mass') are allowed.
+        Crossed attributes (e.g., x='star_mass', y='mass') are not allowed yet.
 
         Note
         ----
@@ -2335,7 +2643,10 @@ class StaticSystem:
         if x.startswith("star_") and y.startswith("star_"):
             star_plot = True
         elif x.startswith("star_") or y.startswith("star_"):
-            raise ValueError("Both x and y must be star or planet attributes.")
+            raise NotImplementedError(
+                "Crossed attributes are not allowed. "
+                + "Use either both star attributes or both planet attributes."
+            )
         else:
             star_plot = False
 
@@ -2373,6 +2684,13 @@ class StaticSystem:
             return ax
 
         # Star plot
+        if self.is_binary_:
+            raise NotImplementedError(
+                "Binary stars are not supported yet. "
+                + "Use the planets instead."
+            )
+
+        # Remove the 'star_' prefix
         x = x.replace("star_", "")
         y = y.replace("star_", "")
 
@@ -2390,6 +2708,10 @@ class StaticSystem:
 
         Systems triplets are shown in the plane
             :math:`P_{i+1}/P_i` vs. :math:`P_{i+2}/P_{i+1}`.
+
+        Note
+        ----
+        Only available for planets yet.
 
         Parameters
         ----------
@@ -2425,7 +2747,9 @@ class StaticSystem:
 
         # Get (all) error ratios if needed
         if error:
-            error_ratios = self.pair_ratio(error=True, verbose=False)
+            error_ratios = self.pair_ratio(
+                error=True, verbose=False, use_binary=False
+            )
 
         # Check which triplets to plot. Remember they are consecutive.
         if which == "all":
@@ -2479,8 +2803,8 @@ class StaticSystem:
                 )
             elif label:
                 label_aux = label[trip]
-            x = self.period_ratios_.iloc[i, j]
-            y = self.period_ratios_.iloc[j, k]
+            x = self.pair_ratio(j, i, verbose=False, use_binary=False)
+            y = self.pair_ratio(k, j, verbose=False, use_binary=False)
             err_x = error_ratios.iloc[i, j] if error else None
             err_y = error_ratios.iloc[j, k] if error else None
             ax.errorbar(
@@ -2554,6 +2878,7 @@ class StaticSystem:
             planets=new_planets,
             name=self.name,
             metadata=new_meta,
+            is_circumbinary=self.is_circumbinary,
         )
 
         # Print message
@@ -2616,6 +2941,7 @@ class StaticSystem:
             planets=new_planets,
             name=self.name,
             metadata=new_meta,
+            is_circumbinary=self.is_circumbinary,
         )
 
         # Print message
@@ -2626,16 +2952,17 @@ class StaticSystem:
 
     def pair_ratio(
         self,
-        *pair: Union[list, tuple, str],
+        *pair: Union[int, list, tuple, str],
         verbose: bool = True,
         error: bool = False,
+        use_binary: bool = True,
         **fraction_kwargs: dict,
     ) -> Union[float, pd.DataFrame]:
         r"""Return the period ratio of the specified pair of planets.
 
         Parameters
         ----------
-        pair : list, tuple, str, optional. Default: 'all'.
+        pair : int, list, tuple, str, optional. Default: 'all'.
             Which pair of planets to consider.
             Either 'all' or a list/tuple of planet names/indexes.
             If *pair=(i,j)*, then the period ratio is :math:`P_j/P_i`, and
@@ -2646,6 +2973,9 @@ class StaticSystem:
         error : bool, optional. Default: False.
             Whether to return the error of the period ratio, instead of the
             period ratio itself. Only meaningful if there are errors.
+        use_binary : bool, optional. Default: True.
+            Whether to use the binary period ratio (include the star).
+            If False, only the planets are considered.
         fraction_kwargs : dict, optional
             Keyword arguments for the float_to_fraction function.
             If None, no fraction conversion is done.
@@ -2657,9 +2987,12 @@ class StaticSystem:
             Float with period ratio of the pair of planets, or pandas Data frame
             with all the period ratios.
         """
-        # Check if there are at least 2 planets
-        if self.n_planets_ < 2:
-            raise ValueError("There must be at least 2 planets to compare.")
+        # Redefine use_binary if needed
+        if not self.is_binary_:
+            use_binary = False
+        # Check if there are at least 3 bodies
+        if self.n_planets_ + (2 if use_binary else 1) < 3:
+            raise ValueError("There must be at least 3 bodies to compare.")
 
         # Extract pair
         if not pair or pair == ("all",):
@@ -2668,33 +3001,57 @@ class StaticSystem:
             raise ValueError("Pair must have 2 elements.")
         elif len(pair) == 1:
             pair = pair[0]
+            if isinstance(pair, int):
+                return self.pair_ratio(
+                    pair,
+                    pair + 1,
+                    verbose=verbose,
+                    error=error,
+                    use_binary=use_binary,
+                    **fraction_kwargs,
+                )
             if not isinstance(pair, Iterable) or len(pair) != 2:
                 raise ValueError("Pair must have 2 elements.")
-
-        # If error is True, return the error of the period ratio
-        if error:
-            return self._pair_ratio_error(pair)
 
         # Add verbose to fraction_kwargs, if fraction_kwargs is not empty
         if fraction_kwargs:
             fraction_kwargs["verbose"] = verbose
 
         # This calculates all the period ratios
-        if isinstance(pair, str):
+        if isinstance(pair, str) and not error:
 
             if not pair == "all":  # Check if it's 'all'
                 raise ValueError("Invalid pair value.")
 
-            if self.n_planets_ == 2:  # Only 2 planets
-                if fraction_kwargs:  # Convert to fraction
+            if (self.n_planets_ == 2 and not use_binary) or (
+                self.n_planets_ == 1 and use_binary
+            ):  # Only 3 bodies
+                # Already calculated!
+                if fraction_kwargs:  # Convert to fraction if needed
                     return float_to_fraction(
                         self.period_ratios_,
                         **fraction_kwargs,
                     )
-                return self.period_ratios_  # Already calculated
+                return self.period_ratios_
 
-            # Create a DataFrame with all the period ratios
+            # Get all the period ratios
             periods = self.get_item("P")
+            # Create a Series in case a single object is returned
+            if self.n_planets_ == 1:
+                periods = pd.Series(periods, index=self.planet_names)
+            # Check if the star has to be included
+            if use_binary:
+                if not self.is_circumbinary:  # Add at the end
+                    periods.loc[self.star_names_[1]] = self.star.P
+                else:  # Add at the beginning
+                    periods = pd.concat(
+                        [
+                            pd.Series(
+                                self.star.P, index=[self.star_names_[1]]
+                            ),
+                            periods,
+                        ]
+                    )
             df = pd.DataFrame(
                 [[p2 / p1 for p2 in periods] for p1 in periods],
                 index=periods.index,
@@ -2711,27 +3068,51 @@ class StaticSystem:
 
             return df
 
-        # This is sigle pair
-        idxs = []  # Indexes of the pair
-        for idx in pair:
-
-            if isinstance(idx, str):
-                if len(idx) == 1:  # Suffix
-                    idxs.append(
-                        [planet.suffix_ for planet in self.planets].index(idx)
-                    )
-                else:  # Name
-                    idxs.append(self.planet_names_.index(idx))
-            elif isinstance(idx, int):  # Index
+        # If pair is a single pair
+        if not pair == "all":
+            idxs = []  # Indexes of the pair
+            for idx in pair:
+                # If using integer
+                if not isinstance(idx, int):
+                    pl = self.planet(idx)
+                    idx = self.planet_names_.index(pl.name)
+                if not use_binary and self.is_circumbinary:
+                    idx += 1
                 idxs.append(idx)
-            else:
-                raise ValueError("Invalid pair value.")
-
-        # Calculate the ratio
-        if self.n_planets_ <= 2:  # Already calculated
-            ratio = self.period_ratios_.iloc[idxs[1], idxs[0]]
+        elif error:
+            idxs = "all"
         else:
-            ratio = self.planets[idxs[1]].P / self.planets[idxs[0]].P
+            raise ValueError("Invalid pair value.")
+
+        # If error is True, return the error of the period ratio
+        if error:
+            err_df = self._pair_ratio_error(idxs)
+            # Check if remove binary
+            if idxs == "all" and not use_binary and self.is_binary_:
+                if self.is_circumbinary:
+                    err_df = err_df.iloc[1:, 1:]
+                else:
+                    err_df = err_df.iloc[:-1, :-1]
+            return err_df
+
+        # This is sigle pair
+        if (self.n_planets_ == 2 and not use_binary) or (
+            self.n_planets_ == 1 and use_binary
+        ):  # Only 3 bodies
+            # Already calculated!
+            if not (idxs == [0, 1] or idxs == [1, 0]):
+                raise ValueError("Invalid pair value. Must be 0, 1.")
+            # Return the ratio
+            if fraction_kwargs:
+                return float_to_fraction(
+                    self.period_ratios_,
+                    **fraction_kwargs,
+                )
+
+            return self.period_ratios_
+
+        # Obtain the ratio
+        ratio = self.period_ratios_.iloc[idxs[1], idxs[0]]
 
         # Return the ratio
         if fraction_kwargs:
@@ -2756,15 +3137,17 @@ class StaticSystem:
             Float with period ratio error of the pair of planets, or DataFrame
             with all the period ratio errors.
         """
-        if self.n_planets_ <= 2:  # No error for 1 planet.
-            return self.__error_ratios__  # Already calculated for 2 planets.
+        if (
+            self.n_planets_ + (2 if self.is_binary_ else 1) <= 3
+        ):  # No error for 2 bodies
+            return self.__error_ratios__  # Already calculated for 3 bodies
 
         # Extract pair ratio
-        pair_ratio = self.pair_ratio(*pair, error=False)
+        pair_ratio = self.pair_ratio(*pair, error=False, use_binary=False)
 
         # Formula: sqrt((err1/P1)^2 + (err2/P2)^2) * ratio
 
-        # If pair is all
+        # If pair is all. First call will be this one
         if isinstance(pair_ratio, pd.DataFrame):
             # Return the DataFrame if it's already calculated
             if not self.__error_ratios__.empty:
@@ -2799,41 +3182,35 @@ class StaticSystem:
             # Calculate the error
             df = pair_ratio * sqrt(sigma2)
 
+            # Add None Error to binary if needed
+            if self.is_binary_:
+                df[self.star_names_[1]] = None
+                df.loc[self.star_names_[1]] = None
+                if (
+                    self.is_circumbinary
+                ):  # Reorder to get the star at the beginning
+                    df = df[[self.star_names_[1]] + self.planet_names_]
+                    df = df.reindex([self.star_names_[1]] + self.planet_names_)
+
             # Store the DataFrame
             self.__error_ratios__[df.columns] = df
 
             return df
 
-        # If pair is a single pair
+        # Be sure that self.__error_ratios__ is not empty
+        if self.__error_ratios__.empty:
+            self.pair_ratio("all", error=True)
 
-        idxs = []  # Indexes of the pair
-        for idx in pair:
+        # If pair is a single pair. Assume already parsed by pair_ratio
+        # If pair is something like ([i,j],), then pair[0] is the pair
+        if len(pair) == 1:
+            pair = pair[0]
 
-            if isinstance(idx, str):
-                if len(idx) == 1:  # Suffix
-                    idxs.append(
-                        [planet.suffix_ for planet in self.planets].index(idx)
-                    )
-                else:  # Name
-                    idxs.append(self.planet_names_.index(idx))
-            elif isinstance(idx, int):  # Index
-                idxs.append(idx)
-            else:
-                raise ValueError("Invalid pair value.")
+        # Get the indexes
+        i, j = pair
 
-        # Extract the indexes
-        i, j = idxs
-
-        # Calculate sigma2
-        sigma2 = (
-            max(self.planets[i].P_err_min, self.planets[i].P_err_max)
-            / self.planets[i].P
-        ) ** 2 + (
-            max(self.planets[j].P_err_min, self.planets[j].P_err_max)
-            / self.planets[j].P
-        ) ** 2
-
-        return pair_ratio * sqrt(sigma2)  # Return the error
+        # Get the error from calculated data
+        return self.__error_ratios__.iloc[j, i]
 
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
@@ -2869,10 +3246,21 @@ class StaticSystem:
             if columns is not None:
                 used_cols = [col for col in columns if col in df.columns]
                 df = df[used_cols]
-            return df.T
+            return df
 
         # Generate star data
-        star_df = pd.Series(self.star.data).to_frame(self.star.name)
+        # Check if binary
+        if self.is_binary_:  # Binary
+            star0_df = pd.Series(self.star.star0.data).to_frame(
+                self.star.star0.name
+            )
+            star1_df = pd.Series(self.star.star1.data).to_frame(
+                self.star.star1.name
+            )
+            star_df = pd.concat([star0_df, star1_df], axis=1)
+        # Single star
+        else:
+            star_df = pd.Series(self.star.data).to_frame(self.star.name)
 
         # Drop RESO_OB_TYPES columns, as they are already in the planets
         drop2 = [col for col in RESO_OB_TYPES.keys() if col in star_df.index]
@@ -2883,7 +3271,15 @@ class StaticSystem:
 
         if add_star:
             # Concatenate star data
-            df = pd.concat([star_df, df], axis=0)
+            # Check if not simple binary
+            if not self.is_binary_ or self.is_circumbinary:
+                df = pd.concat([star_df, df], axis=0)
+            else:  # Simple binary
+                # Add the planets data between the stars data
+                # So: Star1, Planet1, Planet2, ..., Star2
+                df = pd.concat(
+                    [star_df.iloc[:, 0], df, star_df.iloc[:, 1]], axis=1
+                )
         else:
             # Add the same star data for all planets
             vals = [val[0] for val in star_df.values]  # So messy
@@ -2901,12 +3297,12 @@ class StaticSystem:
 
     def to_rebound(
         self,
-        sim: rebound.Simulation = None,
+        sim: Simulation = None,
         fillna: bool = True,
         units: Union[bool, Tuple[float, float]] = True,
         random_m_angle: bool = False,
         verbose: bool = True,
-    ) -> "rebound.Simulation":
+    ) -> "Simulation":
         """Return a REBOUND simulation with the system data.
 
         Note
@@ -2947,7 +3343,7 @@ class StaticSystem:
 
         # Create a new simulation if not provided
         if sim is None:
-            sim = rebound.Simulation()
+            sim = Simulation()
             if verbose:
                 print("New REBOUND simulation created.")
 
@@ -2965,14 +3361,35 @@ class StaticSystem:
             print(" Using user-defined units:", units)
         # If not defined, the user provides (unit_mass, unit_length) in [Kg, m]
 
-        # Add the star at the center
-        sim.add(
-            m=self.star.mass * M_SUN / units[0],
-            r=self.star.radius * R_SUN / units[1],
-            hash=self.star.name,
-        )
-        if verbose:
+        # Add the central star
+        if self.is_binary_:  # Binary
+            sim.add(
+                m=self.star.star0.mass * M_SUN / units[0],
+                r=self.star.star0.radius * R_SUN / units[1],
+                hash=self.star.star0.name,
+            )
+            if self.is_circumbinary:  # Circumbinary
+                sim.add(
+                    m=self.star.star1.mass * M_SUN / units[0],
+                    r=self.star.star1.radius * R_SUN / units[1],
+                    hash=self.star.star1.name,
+                )
+        else:  # Single star
+            sim.add(
+                m=self.star.mass * M_SUN / units[0],
+                r=self.star.radius * R_SUN / units[1],
+                hash=self.star.name,
+            )
+        # Print message
+        if verbose and not self.is_binary_:
             print(f" Star {self.star.name} added.")
+        elif verbose and self.is_binary_ and self.is_circumbinary:
+            print(
+                f" Stars {self.star.star0.name} "
+                + f"and {self.star.star1.name} added."
+            )
+        elif verbose and self.is_binary_:
+            print(f" Star {self.star.star0.name} added.")
 
         # Add the planets. Loop
         for planet in self.planets:
@@ -3014,6 +3431,16 @@ class StaticSystem:
         if verbose:
             print(f" {self.n_planets_} planets added.")
 
+        # Check if final binary
+        if self.is_binary_ and not self.is_circumbinary:
+            sim.add(
+                m=self.star.star1.mass * M_SUN / units[0],
+                r=self.star.star1.radius * R_SUN / units[1],
+                hash=self.star.star1.name,
+            )
+            if verbose:
+                print(f" Star {self.star.star1.name} added.")
+
         return sim
 
     def copy(self) -> "StaticSystem":
@@ -3023,749 +3450,7 @@ class StaticSystem:
             planets=[planet.copy() for planet in self.planets],
             name=self.name,
             metadata=self.metadata,
-        )
-
-
-# =============================================================================
-# NEW STATIC CLASSES (TBD)
-# =============================================================================
-
-
-@attrs.define(repr=False, frozen=True, slots=True)
-class StaticBinaryStar:
-    """StaticBinaryStar class.
-
-    Attributes
-    ----------
-    star0 : StaticStar
-        StaticStar instance for the primary star.
-    star1 : StaticStar
-        StaticStar instance for the secondary star.
-    name : str, optional. Default: 'unnamed'.
-        Name of the binary system.
-    alternative_name : str, optional. Default: 'unknown'.
-        Alternative name of the binary system.
-    detection_method : str, optional. Default: 'unknown'.
-        Detection method of the binary system.
-    distance : float, optional. Default: 0.0.
-        Distance to the binary system, in parsecs.
-    known_orbit : bool, optional. Default: False.
-        Whether the orbit is known.
-    a : float, optional. Default: 0.0.
-        Semi-major axis of the binary system, in AU.
-    e : float, optional. Default: 0.0.
-        Eccentricity of the binary system.
-    imut : float, optional. Default: 0.0.
-        Inclination of the mutual orbit, in degrees.
-    n_planets : int, optional. Default: 0.
-        Number of planets in the binary system.
-    metadata : dict, optional. Default: {}.
-        Metadata of the dataset.
-    """
-
-    star0: StaticStar = attrs.field(
-        validator=attrs.validators.instance_of(StaticStar)
-    )
-    star1: StaticStar = attrs.field(
-        validator=attrs.validators.instance_of(StaticStar)
-    )
-    binary_df: Union[pd.DataFrame, pd.Series] = attrs.field(
-        validator=attrs.validators.instance_of((pd.DataFrame, pd.Series)),
-        converter=lambda df: df.squeeze(),  # Convert to Series if possible
-    )
-    name: str = attrs.field(
-        validator=attrs.validators.instance_of(str), default="unnamed"
-    )
-    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
-
-    total_mass_: float = attrs.field(init=False)
-
-    source_: str = attrs.field(init=False)
-    user_defined_: bool = attrs.field(init=False)
-
-    @source_.default
-    def _source__default(self):
-        """Set the default value for source_."""
-        main_source = self.star0.source
-
-        return main_source if main_source == self.star1.source else "user"
-
-    @user_defined_.default
-    def _user_defined__default(self):
-        """Set the default value for user_defined_."""
-        return self.source_ != "binary"
-
-    @total_mass_.default
-    def _total_mass__default(self):
-        """Set the default value for total_mass_."""
-        return self.star0.mass + self.star1.mass
-
-    def __attrs_post_init__(self):
-        """Post-init method."""
-        pass
-
-    def __len__(self):
-        """len(x) <=> x.__len__()."""
-        return 2
-
-    def __getitem__(self, key):
-        """x[y] <==> x.__getitem__(y)."""
-        return self.binary_df.__getitem__(key)
-
-    def __dir__(self):
-        """dir(pdf) <==> pdf.__dir__()."""
-        return super().__dir__() + dir(self.binary_df)
-
-    def __getattr__(self, a):
-        """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
-        return getattr(self.binary_df, a)
-
-    def __repr__(self):
-        """repr(x) <=> x.__repr__()."""
-        star0 = f"\n Star 1:\n  {self.star0.name}"
-        star1 = f"\n Star 2:\n  {self.star1.name}"
-
-        return (
-            f"StaticBinaryStar: '{self.name}'"
-            + f"{star0} "
-            + f"{star1}"
-            + "\n"
-            + " from binary data source."
-            if not self.user_defined_
-            else ""
-        )
-
-    def _repr_html_(self):
-        """Return a HTML representation of the DataFrame."""
-        if self.binary_df.empty:
-            return self.__repr__()
-
-        ad_id = id(self)
-
-        header = (
-            f" StaticBinaryStar: '{self.name}'"
-            + f"[{self.star0.name} - {self.star1.name}]"
-        )
-        footer = "Binary data"
-        if not self.user_defined_:
-            footer += " from binary data source."
-
-        with pd.option_context("display.show_dimensions", False):
-            df_html = self.binary_df.to_frame()._repr_html_()
-
-        parts = [
-            f'<div class="resokit-data-container" id={ad_id}>',
-            header,
-            df_html,
-            footer,
-            "</div>",
-        ]
-
-        html = "".join(parts)
-
-        return html
-
-    def __iter__(self):
-        """Iterate over the stars."""
-        return iter([self.star0, self.star1])
-
-    def star(
-        self, indices: Union[int, str, List[Union[int, str]]]
-    ) -> StaticStar:
-        """Return the star(s) of the binary system, by given index or name.
-
-        Parameters
-        ----------
-        indices : int, str, list
-            Which star(s) to return.
-            If 'all', return both stars.
-            If an :py:class:`int`, return the star with the given index.
-            If a :py:class:`str`, return the star with the given name.
-            If a list, return the stars with the given indexes or names.
-
-        Returns
-        -------
-        star : StaticStar, list
-            StaticStar instance for the star, or list of stars.
-        """
-        # Check if indices is int
-        if isinstance(indices, int):
-            if indices == 0:
-                return self.star0
-            if indices == 1:
-                return self.star1
-            raise ValueError(
-                "Invalid int value for 'indices'. Must be 0 or 1."
-            )
-        # Check if indices is str
-        elif isinstance(indices, str):
-            if indices == "all":
-                return [self.star0, self.star1]
-            elif indices == self.star0.name:
-                return self.star0
-            elif indices == self.star1.name:
-                return self.star1
-            raise ValueError("Invalid str value for 'indices'.")
-
-        # Parse indices to list
-        indices = parse_to_iter(indices)
-
-        # Check if indices are int or str
-        if not all(isinstance(i, (int, str)) for i in indices):
-            raise TypeError("Indices must be integers or strings.")
-
-        # Check not "all" inside
-        if "all" in indices:
-            raise ValueError("Cannot mix 'all' with other indices.")
-
-        return [self.star(idx) for idx in indices]
-
-    def to_dict(self) -> dict:
-        """Return the metadata as a new dictionary."""
-        return dict(self.metadata)
-
-    def to_dataframe(self) -> pd.DataFrame:
-        """Return the binary data as a new DataFrame."""
-        return self.binary_df.to_frame(name=self.name)
-
-    def copy(self) -> "StaticBinaryStar":
-        """Return a copy of the :py:class:`StaticBinaryStar`."""
-        return StaticBinaryStar(
-            star0=self.star0.copy(),
-            star1=self.star1.copy(),
-            binary_df=self.binary_df.copy(deep=True),
-            name=self.name,
-            metadata=self.metadata,
-        )
-
-
-# Unluckily (for me), this class is extremely similar to StaticSystem
-@attrs.define(repr=False, frozen=True, slots=True)
-class StaticBinarySystem:
-    """StaticBinarySystem class.
-
-    Attributes
-    ----------
-    binary_star : StaticBinaryStar
-        StaticBinaryStar instance for the binary system.
-    planets : list, tuple, StaticPlanet
-        List of StaticPlanet instances.
-    name : str, optional. Default: 'unnamed'.
-        Name of the system.
-    metadata : dict, optional. Default: {}.
-        Metadata of the dataset.
-    """
-
-    binary_star: StaticBinaryStar = attrs.field(
-        validator=attrs.validators.instance_of(StaticBinaryStar)
-    )
-    planets: List[StaticPlanet] = attrs.field(
-        validator=attrs.validators.deep_iterable(
-            member_validator=attrs.validators.instance_of(StaticPlanet)
-        ),
-        converter=parse_to_iter,
-    )
-    circumbinary: bool = attrs.field(
-        validator=attrs.validators.instance_of(bool)
-    )
-    name: str = attrs.field(
-        validator=attrs.validators.instance_of(str), default="unnamed"
-    )
-    metadata: dict = attrs.field(factory=MetaData, converter=MetaData)
-
-    web_page: list = attrs.field(init=False)
-
-    star_names_: list = attrs.field(init=False)
-
-    n_planets_: int = attrs.field(init=False)
-    source_: str = attrs.field(init=False)
-    user_defined_: bool = attrs.field(init=False)
-    planet_names_: list = attrs.field(init=False)
-
-    suffixes_: list = attrs.field(init=False)
-
-    period_ratios_: Union[float, pd.DataFrame] = attrs.field(init=False)
-    __error_ratios__: Union[float, pd.DataFrame] = attrs.field(init=False)
-
-    mass_accum_: pd.Series = attrs.field(init=False)
-    total_mass_: float = attrs.field(init=False)
-
-    @web_page.default
-    def _web_page_default(self):
-        """Set the default value for web_page."""
-        return [
-            self.binary_star.star0.web_page,
-            self.binary_star.star1.web_page,
-            *[planet.web_page for planet in self.planets],
-        ]
-
-    @star_names_.default
-    def _star_names__default(self):
-        """Set the default value for star_names_."""
-        return [self.binary_star.star0.name, self.binary_star.star1.name]
-
-    @n_planets_.default
-    def _n_planets__default(self):
-        """Set the default value for n_planets_."""
-        return len(self.planets)
-
-    @source_.default
-    def _source__default(self):
-        """Set the default value for source_."""
-        main_source = self.binary_star.source_
-        planet0_source = self.planets[0].source
-        same = all(
-            [planet.source == planet0_source for planet in self.planets]
-        )
-
-        return planet0_source if main_source == "binary" and same else "user"
-
-    @user_defined_.default
-    def _user_defined__default(self):
-        """Set the default value for user_defined_."""
-        return self.source_ not in ["eu", "nasa"]
-
-    @planet_names_.default
-    def _planet_names__default(self):
-        """Set the default value for planet_names_."""
-        return [planet.name for planet in self.planets]
-
-    @suffixes_.default
-    def _suffixes__default(self):
-        """Set the default value for suffixes_."""
-        st_sfx = [
-            star.suffix_
-            for star in [self.binary_star.star0, self.binary_star.star1]
-        ]
-        pl_sfx = [planet.suffix_ for planet in self.planets]
-        if self.circumbinary:
-            return st_sfx + pl_sfx
-        return st_sfx[0] + pl_sfx + st_sfx[1]
-
-    @period_ratios_.default
-    def _period_ratios__default(self):
-        """Set the default value for period_ratios_."""
-        if self.n_planets_ == 1:
-            # Outer / Inner
-            if self.circumbinary:
-                return self.planets[0].P / self.binary_star.P
-            return self.binary_star.P / self.planets[0].P
-
-        return pd.DataFrame()  # Empty mutable DataFrame
-
-    @__error_ratios__.default
-    def ___error_ratios__default(self):
-        """Set the default value for __error_ratios__."""
-        if self.n_planets_ == 1:  # Only planet error available
-            per_err = max(self.planets[0].P_err_min, self.planets[0].P_err_max)
-            if self.circumbinary:
-                return per_err / self.binary_star.P
-            return self.period_ratios_ * per_err / self.planets[0].P
-
-        return pd.DataFrame()  # Empty mutable DataFrame
-
-    @mass_accum_.default
-    def _mass_accum__default(self):
-        """Set the default value for mass_accum_."""
-        # Calculate the accumulated mass inside each planet orbit
-        # (and the stars too), without including that planet.
-        # THe series will have n_planets_ + 2 elements.
-        in_masses = [self.binary_star.star0.mass, self.binary_star.total_mass_]
-        for i in range(self.n_planets_):
-            in_masses.append(
-                in_masses[-1] + self.planets[i].mass
-            )  # Accumulated mass
-
-        return pd.Series(
-            in_masses, index=["star0", "star1"] + self.planet_names_
-        )
-
-    @total_mass_.default
-    def _total_mass__default(self):
-        """Set the default value for total_mass_."""
-        return self.mass_accum_.iloc[-1]
-
-    def __attrs_post_init__(self):
-        """Post-initialization hook."""
-        binary_name = self.binary_star.name
-        parsed_star_name = parse_name(binary_name)
-
-        # Check if all planets they have the same star name
-        for planet in self.planets:
-            if parse_name(planet.star_name) != parsed_star_name:
-                warnings.warn(
-                    f"Planet({planet.name}) parsed "
-                    + f"star name({planet.star_name})"
-                    + f" is different from parsed Star({binary_name}).",
-                    stacklevel=2,
-                )
-
-        # Check if all planets have unique names
-        if self.n_planets_ != len(set(self.planet_names_)):
-            warnings.warn("Planets must have unique names.", stacklevel=2)
-
-        return
-
-    def __repr__(self):
-        """repr(x) <=> x.__repr__()."""
-        stars_msg = (
-            "\n"
-            + " Stars:"
-            + f"\n  {self.binary_star.star0.name}"
-            + f"\n  {self.binary_star.star1.name}"
-        )
-        planets_msg = (
-            "\n"
-            + f" Planet{'s' if self.n_planets_ > 1 else ''}:"
-            + "\n  "
-            + "\n  ".join(self.planet_names_)
-        )
-        binarity_msg = "\n" + f" Circumbinary: {self.circumbinary}"
-        return (
-            f"StaticBinarySystem: '{self.binary_star.name}'"
-            + f"{stars_msg}"
-            + f"{planets_msg}"
-            + "\n"
-            + f" from '{self.source_}' data source."
-            if not self.user_defined_
-            else "" + f"{binarity_msg}"
-        )
-
-    def __getitem__(self, key: Union[int, str]):
-        """x[y] <==> x.__getitem__(y).
-
-        Parameters
-        ----------
-        key : int, str
-            Integer or list of integers to slice planets,
-            or strings for attributes.
-
-        Returns
-        -------
-        A sliced planet object or specific items of the system.
-        """
-        key = parse_to_iter(key)
-
-        if all(isinstance(i, int) for i in key):
-            return self.planet(key)
-        elif any(isinstance(i, int) for i in key):
-            raise NotImplementedError(
-                "Mixed integer and string indexing not supported."
-            )
-
-        return self.get_item(key)
-
-    def __len__(self):
-        """len(x) <=> x.__len__()."""
-        return self.n_planets_ + 1
-
-    def __iter__(self):
-        """Iterate over the stars and planets."""
-        if self.circumbinary:
-            return iter(
-                [self.binary_star.star0, self.binary_star.star1] + self.planets
-            )
-        return iter(
-            [self.binary_star.star0] + self.planets + [self.binary_star.star1]
-        )
-
-    def body(self, indices: Union[int, str, List[Union[str, int]]]) -> Union[
-        StaticStar,
-        StaticPlanet,
-        List[Union[StaticStar, StaticPlanet]],
-    ]:
-        """Return the bodies by given indices or name.
-
-        The inner star is 0. If a circumbinary, then the outer star is 1,
-        and the planets start from 2. If not a circumbinary, then planets
-        start from 1, and the outer star is n_planets + 1.
-
-        Parameters
-        ----------
-        indices : int or Iterable[int] or str or
-            Indices of the bodies to return.
-            If "all" (the only str possible), all individual bodies
-            are returned.
-
-        Returns
-        -------
-        bodies : StaticBinaryStar or StaticPlanet or list
-            Star and/or planet or list the objects requested.
-        """
-        # Check if indices is an integer
-        if isinstance(indices, int):
-            if not 0 <= indices < self.n_planets_ + 2:
-                raise ValueError("Index must be between 0 and n_planets + 1.")
-            if indices == 0:  # Inner star
-                return self.binary_star.star0
-            if self.circumbinary:  # Circumbinary
-                if indices == 1:  # Outer star
-                    return self.binary_star.star1
-                return self.planets[indices - 2]  # Planets
-            # Not circumbinary
-            if indices == self.n_planets_ + 1:  # Outer star
-                return self.binary_star.star1
-            return self.planets[indices - 1]
-        # Check if indices is a string
-        elif isinstance(indices, str):
-            if indices == "all":  # All bodies
-                if self.circumbinary:
-                    return [
-                        self.binary_star.star0,
-                        self.binary_star.star1,
-                    ] + self.planets
-                return (
-                    [self.binary_star.star0]
-                    + self.planets
-                    + [self.binary_star.star1]
-                )
-            if indices in self.planet_names_:  # Planet name
-                return self.planets[self.planet_names_.index(indices)]
-            if indices in self.star_names_:  # Star name
-                return [self.binary_star.star0, self.binary_star.star1][
-                    self.star_names_.index(indices)
-                ]
-            if indices == self.binary_star.name:  # Binary name
-                return self.binary_star
-            if len(indices) == 1:  # Seach by suffix
-                # Check suffixes not duplicated
-                if len(set(self.suffixes_)) != len(self.suffixes_):
-                    raise ValueError("Suffixes must be unique.")
-                if indices not in self.suffixes_:
-                    raise ValueError("Invalid suffix value for 'indices'.")
-                return self.body(self.suffixes_.index(indices))
-            raise ValueError(
-                "Invalid value for 'indices."
-                + "Must be 'all', or (list of) int or str."
-            )
-
-        # Parse indices to list
-        indices = parse_to_iter(indices)
-
-        # Check if indices are int or str
-        if not all(isinstance(i, (int, str)) for i in indices):
-            raise TypeError("Indices must be integers or strings.")
-
-        # Check not "all" inside
-        if "all" in indices:
-            raise ValueError("Cannot mix 'all' with other indices.")
-
-        return [self.body(i) for i in indices]
-
-    def star(
-        self, indices: Union[int, Iterable[int]]
-    ) -> Union[StaticBinaryStar, List[StaticBinaryStar]]:
-        """Slice the stars by given indices or name.
-
-        The inner star is 0, and the secondary star is 1.
-
-        Parameters
-        ----------
-        indices : int, Iterable[int]
-            Indices for slicing stars.
-
-        Returns
-        -------
-        star : StaticBinaryStar or list[StaticBinaryStar]
-            A copy of a system's star :py:class:`StaticBinaryStar`
-            or list of :py:class:`StaticBinaryStar` objects.
-        """
-        # Check if indices is an integer
-        if isinstance(indices, int):
-            if not 0 <= indices < 2:
-                raise ValueError("Index must be 0 or 1.")
-
-            return (
-                self.binary_star.star0
-                if indices == 0
-                else self.binary_star.star1
-            )
-        # Check if indices are str
-        if isinstance(indices, str):
-            if indices in self.star_names_:
-                return self.star(self.star_names_.index(indices))
-            if indices == "all":
-                return [self.binary_star.star0, self.binary_star.star1]
-            if len(indices) == 1:
-                # Check suffixes not duplicated
-                if len(set(self.suffixes_)) != len(self.suffixes_):
-                    raise ValueError("Suffixes must be unique.")
-                if indices not in self.suffixes_:
-                    raise ValueError("Invalid suffix value for 'indices'.")
-                return self.star(self.suffixes_.index(indices))
-            raise ValueError("Invalid str value for 'indices'.")
-
-        # Parse indices to list
-        indices = parse_to_iter(indices)
-
-        # Check if indices are int or str
-        if not all(isinstance(i, (int, str)) for i in indices):
-            raise TypeError("Indices must be integers or strings.")
-
-        # Check not "all" inside
-        if "all" in indices:
-            raise ValueError("Cannot mix 'all' with other indices.")
-
-        return [self.star(i) for i in indices]
-
-    def planet(
-        self, indices: Union[int, str, Iterable[int]]
-    ) -> Union[StaticPlanet, List[StaticPlanet]]:
-        """Slice the planets by given indices.
-
-        Parameters
-        ----------
-        indices : int, str, Iterable[int]
-            Indices for slicing planets.
-            If "all", return all planets.
-
-        Returns
-        -------
-        planet : StaticPlanet or list[StaticPlanet]
-            A copy of a system's planet :py:class:`StaticPlanet`
-            or list of :py:class:`StaticPlanet` objects.
-        """
-        # Check if indices is an integer
-        if isinstance(indices, int):
-            if not 0 <= indices < self.n_planets_:
-                raise ValueError("Index must be between 0 and n_planets - 1.")
-            return self.planets[indices]
-        # Check if indices is a string
-        elif isinstance(indices, str):
-            if indices == "all":  # All planets
-                return self.planets
-            if indices in self.planet_names_:  # Planet name
-                return self.planets[self.planet_names_.index(indices)]
-            if len(indices) == 1:  # Seach by suffix
-                # Check suffixes not duplicated
-                if len(set(self.suffixes_)) != len(self.suffixes_):
-                    raise ValueError("Suffixes must be unique.")
-                if indices not in self.suffixes_:
-                    raise ValueError("Invalid suffix value for 'indices'.")
-                return self.planet(self.suffixes_.index(indices))
-            raise ValueError("Invalid str value for 'indices'.")
-
-        # Check if indices are int or str
-        if not all(isinstance(i, (int, str)) for i in indices):
-            raise TypeError("Indices must be integers or strings.")
-
-        # Check not "all" inside
-        if "all" in indices:
-            raise ValueError("Cannot mix 'all' with other indices.")
-
-        return [self.planet(i) for i in indices]
-
-    def _get_planets_items(
-        self, items: Union[str, List[str]], return_values: bool = True
-    ) -> Union[str, List[str]]:
-        """Retrieve specific attributes of planets.
-
-        Parameters
-        ----------
-        items : str, list[str]
-            Names of planet attributes.
-        return_values : bool, default=True
-            Whether to return values or full objects.
-
-        Returns
-        -------
-        items : list
-            Values or full objects of the specified planet attributes.
-        """
-        data = [planet[items] for planet in self.planets]
-
-        if return_values:
-            try:
-                return [item.values[0] for item in data]
-            except AttributeError:
-                pass  # Fall back to full objects
-
-        return [item for item in data]
-
-    def _get_single_item(self, item: str):
-        """Handle retrieval when a single item is requested."""
-        # Retrieve star attributes
-        if item.startswith("star"):
-            if item[4] == "0":
-                return self.star(0)[item.replace("star0_", "")]
-            if item[4] == "1":
-                return self.star(1)[item.replace("star1_", "")]
-            if item[4] == "_":
-                return self.binary_star[item]
-            return self.star[item.replace("star", "")]
-
-        # Retrieve planets attributes
-        if self.n_planets_ > 1:
-            return pd.Series(
-                self._get_planets_items(item),
-                index=self.planet_names_,
-                name=item,
-            )
-
-        # Only one planet
-        return self.planets[0][item]
-
-    def get_item(
-        self, items: Union[str, List[str]], error: bool = False
-    ) -> Union[pd.Series, pd.DataFrame]:
-        """Retrieve specific attributes of the system (stars and/or planets).
-
-        Parameters
-        ----------
-        items : str, list[str]
-            Names of the desired attributes.
-        error : bool, optional. Default: False.
-            Whether to return the error columns.
-            Only available for standard ResokitDataFrame objects.
-
-        Returns
-        -------
-        items : pd.Series, pd.DataFrame
-            Pandas Series or DataFrame with the requested items.
-        """
-        # Parse items to list
-        items = parse_to_iter(items)
-
-        # Check if error is requested
-        if error:
-            items_with_error = [
-                item
-                for item in items
-                for item in (item, f"{item}_err_min", f"{item}_err_max")
-            ]
-            items = [  # Keep only the items with errors in RESO_DTYPES
-                item for item in items_with_error if item in RESO_DTYPES.keys()
-            ]
-
-        # Retrieve attributes when there's only one item
-        if len(items) == 1:
-            return self._get_single_item(items[0])
-
-        # Retrieve attributes when there are multiple items
-        dicc = {}  # Dictionary to store the items and their values
-        for item in items:
-            dicc[item] = self._get_single_item(item)
-
-        # Create DataFrame
-        df = pd.DataFrame(dicc)
-
-        # Return Series if only one column
-        return df.squeeze() if len(df.columns) == 1 else df
-
-    # FALTA AGREGAR LAS FUNCIONES DE AQUÍ
-
-    def to_dict(self) -> dict:
-        """Return the metadata as a new dictionary."""
-        return dict(self.metadata)
-
-    def copy(self) -> "StaticBinarySystem":
-        """Return a copy of the :py:class:`StaticBinarySystem`."""
-        return StaticBinarySystem(
-            binary_star=self.binary_star.copy(),
-            planets=[planet.copy() for planet in self.planets],
-            circumbinary=self.circumbinary,
-            name=self.name,
-            metadata=self.metadata,
+            is_circumbinary=self.is_circumbinary,
         )
 
 
@@ -3829,23 +3514,26 @@ def _create_static_star(
 
 
 def _create_static_system(
-    star: StaticStar,
+    star: Union[StaticStar, StaticBinaryStar],
     planets: List[StaticPlanet],
     name: str,
     metadata=None,
+    circumbinary: bool = False,
 ) -> StaticSystem:
     """Create a :py:class:`StaticSystem` instance.
 
     Parameters
     ----------
-    star : StaticStar
-        StaticStar instance.
+    star : StaticStar, StaticBinaryStar
+        StaticStar or StaticBinaryStar instance.
     planets : list, tuple, StaticPlanet
         List of StaticPlanet instances.
     name : str
         Name of the system.
     metadata : dict, optional. Default: {}.
         Metadata of the dataset.
+    circumbinary : bool, optional. Default: False.
+        Whether the system is circumbinary.
 
     Returns
     -------
@@ -3860,6 +3548,7 @@ def _create_static_system(
         planets=planets,
         name=name,
         metadata=metadata,
+        is_circumbinary=circumbinary,
     )
 
 
@@ -3897,7 +3586,7 @@ def _create_static_binary_star_from_binaries(
     return StaticBinaryStar(
         star0=star0,
         star1=star1,
-        binary_df=binary_row.to_frame(name=name).T,
+        data=binary_row.to_frame(name=name).T,
         name=name,
         metadata=metadata,
     )
@@ -3905,6 +3594,9 @@ def _create_static_binary_star_from_binaries(
 
 def resokit_to_system(
     resokit_data: ResokitDataFrame,
+    binary_star: Union[None, StaticBinaryStar] = None,
+    circumbinary: bool = False,
+    verbose: bool = False,
 ) -> StaticSystem:
     """Convert a :py:class:`ResokitDataFrame` to a :py:class:`StaticSystem`.
 
@@ -3912,6 +3604,12 @@ def resokit_to_system(
     ----------
     resokit_data : ResokitDataFrame
         ResokitDataFrame instance with the data.
+    binary_star : StaticBinaryStar, optional. Default: None.
+        StaticBinaryStar instance to use as the binary star.
+    circumbinary : bool, optional. Default: False.
+        Whether the system is circumbinary.
+    verbose : bool, optional. Default: True.
+        Whether to print a message when creating the system.
 
     Returns
     -------
@@ -3972,12 +3670,31 @@ def resokit_to_system(
     if not str(star_df.name).isnumeric():
         star_df.name = star_df["name"]
 
+    # Message
+    if verbose:
+        print(f"Creating system {star_df.name}.")
+
     # Create star
     star = _create_static_star(
         star_data=star_df,
-        source=resokit_data.source,
+        source=resokit_data.source if binary_star is None else "binary",
         metadata=resokit_data.metadata,
     )
+    # Create binary star only if needed
+    if binary_star is None:
+        if verbose:
+            print(f" Star {star.name} created.")
+    else:
+        binary = _create_static_binary_star_from_binaries(
+            star0=star,  # Star0 is the one from the Resokit data
+            star1=binary_star.star1,
+            binary_row=binary_star.data,
+            name=star_df.name,
+            metadata=resokit_data.metadata,
+        )
+        star = binary
+        if verbose:
+            print(f" Using binary star {star.name}.")
 
     # Create Planets
     if resokit_data.n_objects_ > 1:  # Multiple planets
@@ -4002,11 +3719,16 @@ def resokit_to_system(
             metadata=resokit_data.metadata,
         )
 
+    # Message
+    if verbose:
+        print(f" {resokit_data.n_objects_} planets created.")
+
     return _create_static_system(
         star=star,
         planets=planets,
         name=star.name,
         metadata=resokit_data.metadata,
+        circumbinary=circumbinary,
     )
 
 
@@ -4038,7 +3760,8 @@ def binary_row_to_binary_star(
 
     # Create the necessary series for the StaticStar instances
     # First, the shared parameters we usually get in a StaticStar
-    shared_resokit = binary_row[["star_dist", "disc_method"]].copy()
+    shared_resokit = binary_row[["dist", "disc_method"]].copy()
+    shared_resokit.columns = ["star_dist", "disc_method"]  # Same as Resokit
     # Then, the parameters for each star
     star0_resokit = pd.Series(
         {
