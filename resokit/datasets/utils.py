@@ -14,17 +14,27 @@
 # IMPORTS
 # =============================================================================
 
+
 import os
+import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from types import MappingProxyType
-from typing import Union
+from typing import Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from pandas import DataFrame, read_csv
 
 from resokit.utils.parser import assert_module_imported
+
+try:
+    from bs4 import BeautifulSoup
+
+    beautifulsoup_imported = True
+except ImportError:
+    beautifulsoup_imported = False
 
 try:
     import requests
@@ -503,6 +513,12 @@ _NASA_MAPPING = {
 # Mapping of dataset names to their respective dtypes
 DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
 
+# URL to query the dataset length
+QUERY_LENGTH_URL = {
+    "eu": "https://exoplanet.eu/home/",
+    "nasa": "https://exoplanetarchive.ipac.caltech.edu/index.html",
+}
+
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
@@ -669,7 +685,7 @@ def request_dataset(
 
     # Print message
     if verbose:
-        print(f" Downloading data from {url}...")
+        print(f"Downloading data from {url}...")
 
     # Check if the print size is in MB or KB
     print_unit = "MB"
@@ -736,3 +752,162 @@ def is_notebook() -> bool:
             return False  # Other type (?)
     except NameError:
         return False  # Probably standard Python interpreter
+
+
+def check_online_dataset(
+    source: str, verbose: bool = True
+) -> Tuple[int, datetime]:
+    """Query the length (count) of the dataset from the specified source.
+
+    Parameters
+    ----------
+    source : str
+        Data source identifier ('eu' or 'nasa').
+    verbose : bool, optional. Default: True.
+        Print query information.
+
+    Returns
+    -------
+    length : int
+        Amount of entries (rows) in the dataset.
+    last_update : datetime
+        Date of the last update of the dataset.
+    """
+    # Ensure requests and BeautifulSoup modules are imported
+    assert_module_imported(requests_imported, "requests")
+    assert_module_imported(requests_imported, "beautifulsoup4")
+
+    source = source.lower()  # Ensure lowercase
+
+    # Message
+    if verbose:
+        print(f"Checking online dataset from {source}...")
+
+    # Call subfunction
+    if source == "eu":
+        npl, fecha = _check_online_eu(verbose=verbose)
+    elif source == "nasa":
+        npl, fecha = _check_online_nasa(verbose=verbose)
+    else:
+        raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
+
+    if verbose and npl != -1:
+        print(" Number of planets in online dataset:", npl)
+        print(" Last online update:", fecha.strftime("%Y-%m-%d"))
+
+    return npl, fecha
+
+
+def _check_online_eu(verbose: bool = True) -> Tuple[int, datetime]:
+    """Query the length of the exoplanet.eu dataset.
+
+    Parameters
+    ----------
+    verbose : bool, optional. Default: True.
+        Print query information.
+
+    Returns
+    -------
+    length : int
+        Amount of entries (rows) in the dataset.
+        If no match is found, -1 is returned.
+    last_update : datetime
+        Date of the last update of the dataset.
+        If no match is found, None is returned.
+    """
+    try:
+        # Fetch the webpage content
+        response = requests.get(QUERY_LENGTH_URL["eu"], timeout=10)
+        response.raise_for_status()  # Raise an error for HTTP issues
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Find the text containing "Last update"
+        text = None
+        for p in soup.find_all("p"):
+            if "Last update" in p.text:
+                text = p.text
+                break
+
+        if text is None:
+            if verbose:
+                print("No 'Last update' text found on the webpage.")
+            return -1, None
+
+        # Extract the date and number of planets using regex
+        match = re.search(
+            r"Last update: (\w+\.\s\d{1,2},\s\d{4}) currently (\d+) planets\.",
+            text,
+        )
+
+        if not match:
+            if verbose:
+                print("No match found in the extracted text.")
+            return -1, None
+
+        # Parse extracted values
+        date_str, planet_count = match.groups()
+        last_update = datetime.strptime(date_str, "%b. %d, %Y")
+        n_planets = int(planet_count)
+
+        return n_planets, last_update
+
+    except requests.exceptions.RequestException as e:
+        if verbose:
+            print(f"Error fetching the webpage: {e}")
+
+    return -1, None
+
+
+def _check_online_nasa(verbose: bool = True) -> Tuple[int, datetime]:
+    """Query the length of the NASA dataset.
+
+    Parameters
+    ----------
+    verbose : bool, optional. Default: True.
+        Print query information.
+
+    Returns
+    -------
+    length : int
+        Amount of entries (rows) in the dataset.
+        If no match is found, -1 is returned.
+    last_update : datetime
+        Date of the last update of the dataset.
+        If no match is found, None is returned.
+    """
+    try:
+        # Fetch the webpage content
+        response = requests.get(QUERY_LENGTH_URL["nasa"])
+        response.raise_for_status()  # Raise an error for HTTP issues
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Extract the number of confirmed planets
+        planet_count_div = soup.find("div", class_="stat")
+        n_planets = (
+            int(planet_count_div.text.replace(",", "").strip())
+            if planet_count_div
+            else None
+        )
+
+        # Extract the last update date
+        date_div = soup.find("div", class_="date")
+        date_str = date_div.text.strip() if date_div else None
+
+        # Convert date string to datetime object
+        last_update = (
+            datetime.strptime(date_str, "%m/%d/%Y") if date_str else None
+        )
+
+        # Print results
+        if n_planets is None or last_update is None:
+            if verbose:
+                print("No match found in the extracted text.")
+            return -1, None
+
+        return n_planets, last_update
+
+    except requests.exceptions.RequestException as e:
+        if verbose:
+            print(f"Error fetching the webpage: {e}")
+
+    return -1, None
