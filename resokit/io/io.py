@@ -199,8 +199,8 @@ def _load_system_from_db(
     Returns
     -------
     Tuple[pd.DataFrame, Tuple[str,int] : data, binary
-        data : Loaded system as a DataFrame.
-        binary : Tuple with the binary information. If the system is a binary
+        data: Loaded system as a DataFrame.
+        binary: Tuple with the binary information. If the system is a binary
             system, then the tuple is (cb_letter, dataset_index).
             If it is circumbinary, cb_letter is "p"; if it is circumstellar,
             cb_letter is "s". If the system is not a binary system, then
@@ -408,7 +408,7 @@ def load_system_from_eu(
         or :py:class:`StaticSystem`.
     """
     # Load the system from the database
-    df, binary, _ = _load_system_from_db(
+    df, bin_type, _ = _load_system_from_db(
         name=name,
         is_planet=is_planet,
         source="eu",
@@ -440,13 +440,27 @@ def load_system_from_eu(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return XSystem
-        if binary:
-            pass
-            # return resokit_to_binary_system(reso, binary=True)  # TBD!!!
-        return resokit_to_system(reso)  # Return StaticSystem
+    if as_resokit:  # Return ResoKit DataFrame
+        return reso
 
-    return reso  # Return ResoKit DataFrame
+    # Return StaticSystem
+    if bin_type in ["p", "s"]:  # We have to create StaticBinaryStar
+        binary = load_from_binary(
+            name=name,
+            exact_match=exact_match,
+            as_pandas=False,
+            soft=False,
+            add_period=True,
+            verbose=False,
+        )
+        return resokit_to_system(
+            reso,
+            binary_star=binary,
+            circumbinary=bin_type == "p",
+            verbose=verbose,
+        )
+
+    return resokit_to_system(reso, verbose=verbose)  # Return StaticSystem
 
 
 def load_system_from_nasa(
@@ -512,7 +526,7 @@ def load_system_from_nasa(
         or :py:class:`StaticSystem`.
     """
     # Load the system from the database
-    df, binary, bindx = _load_system_from_db(
+    df, bin_type, _ = _load_system_from_db(
         name=name,
         is_planet=is_planet,
         source="nasa",
@@ -550,10 +564,27 @@ def load_system_from_nasa(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return StaticSystem
-        return resokit_to_system(reso)
+    if as_resokit:  # Return ResoKit DataFrame
+        return reso
 
-    return reso  # Return ResoKit DataFrame
+    # Return StaticSystem
+    if bin_type in ["p", "s"]:  # We have to create StaticBinaryStar
+        binary = load_from_binary(
+            name=name,
+            exact_match=exact_match,
+            as_pandas=False,
+            soft=False,
+            add_period=True,
+            verbose=False,
+        )
+        return resokit_to_system(
+            reso,
+            binary_star=binary,
+            circumbinary=bin_type == "p",
+            verbose=verbose,
+        )
+
+    return resokit_to_system(reso, verbose=verbose)  # Return StaticSystem
 
 
 # --------------------------- Binary Stars ------------------------------------
