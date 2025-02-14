@@ -27,6 +27,8 @@ from .databases import load_eu  # noqa
 from .databases import load_nasa  # noqa
 from .databases import update_eu  # noqa
 from .databases import update_nasa  # noqa
+from .databases import check_outdated  # noqa
+from .utils import check_online_dataset  # noqa
 
 # Make the functions available at the package level
 
@@ -38,6 +40,8 @@ __all__ = [
     "load_binary",
     "load_eu",
     "load_nasa",
+    "check_online_dataset",
+    "check_outdated",
     "update_eu",
     "update_nasa",
 ]

@@ -33,7 +33,7 @@ REQUIREMENTS = [
     "matplotlib",
     "pandas",
     "scipy",
-]  # extras: " requests, astropy"
+]
 
 PATH = pathlib.Path(os.path.abspath(os.path.dirname(__file__)))
 
@@ -77,7 +77,10 @@ def do_setup():
         include_package_data=True,
         license="MIT",
         install_requires=REQUIREMENTS,
-        extras_require={"query": ["requests", "astropy"], "reb": ["rebound"]},
+        extras_require={
+            "query": ["requests", "astropy", "beautifulsoup4"],
+            "reb": ["rebound"],
+        },
         keywords=["resokit", "planetary systems", "resonances"],
         classifiers=[
             "Intended Audience :: Education",
