@@ -30,6 +30,7 @@ from resokit.core import MetaData, df_to_resokit
 from resokit.datasets.utils import (
     DATASET_DTYPES,
     ZIP_FILENAME,
+    check_online_dataset,
     load_from_zip,
     remove_from_zip,
     request_dataset,
@@ -160,9 +161,11 @@ class ResoKitDataset:
     def __getitem__(self, key):
         """x[y] <==> x.__getitem__(y)."""
         sliced = self.dataset.__getitem__(key)
+        len_sliced = len(sliced)
         if isinstance(sliced, pd.Series):
-            sliced = sliced.to_frame().T
-        is_full = self.is_full and len(sliced) == len(self.dataset)
+            sliced = sliced.to_frame()
+            len_sliced = len(sliced.T)
+        is_full = self.is_full and len_sliced == len(self.dataset)
         return ResoKitDataset(
             dataset=sliced,
             source=self.source,
@@ -219,6 +222,23 @@ class ResoKitDataset:
         html = "".join(parts)
 
         return html
+
+    def __eq__(self, value):
+        """x == y <==> x.__eq__(y)."""
+        if isinstance(value, ResoKitDataset):
+            return (
+                self.dataset.equals(value.dataset)
+                and self.source == value.source
+                and self.age == value.age
+                and self.origin == value.origin
+                and self.is_full == value.is_full
+                and self.metadata == value.metadata
+            )
+        elif isinstance(value, pd.DataFrame):
+            return self.dataset.equals(value)
+        elif isinstance(value, (str, int, float)):
+            return self.dataset == value
+        return False
 
     def to_dataframe(
         self, columns: list = None, copy: bool = True, sort: bool = False
@@ -691,6 +711,57 @@ def _update_stored_dataset(
     return
 
 
+def check_outdated(source: str, verbose: bool = True) -> bool:
+    """Check if the stored dataset is outdated.
+
+    Parameters
+    ----------
+    source : str
+        Source of the dataset ('eu' or 'nasa').
+    verbose : bool, optional. Default: True.
+        Whether to print informational messages.
+
+    Returns
+    -------
+    outdated : bool
+        Whether the dataset is outdated.
+    """
+    # Check if source is valid
+    source = source.lower()  # Ensure lowercase
+    if source not in _DATASET_FILENAMES:
+        raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
+
+    # Check if the dataset is stored
+    if source == "eu":
+        df_stored = load_full("eu", verbose=False, to_df=True, only_index=True)
+    else:
+        df_stored = load_full("nasa", verbose=False, to_df=True)
+        # Keep only non controversial and default_set
+        df_stored = df_stored[df_stored["default_set"] == 1]
+        df_stored = df_stored[df_stored["controversial"] == 0]
+    n_stored = len(df_stored)
+    if n_stored > 0 and verbose:
+        print(f"Number of planets in stored dataset: {n_stored}")
+    elif verbose:
+        print("Could not load the stored dataset. ")
+
+    # Check if the dataset is outdated
+    n_pl, _ = check_online_dataset(source=source, verbose=True)
+
+    if n_pl == n_stored:
+        if verbose:
+            print("Dataset is already up-to-date.")
+        return False
+    elif n_pl < 0 and verbose:
+        print("Cannot check if the dataset is up-to-date. ")
+    elif n_pl < n_stored and verbose:
+        print("The online dataset has less rows than the stored dataset. ")
+    if verbose:
+        print("The dataset is outdated.")
+
+    return True
+
+
 def download(
     source: str,
     dir_path: Union[str, Path, None] = None,
@@ -702,6 +773,7 @@ def download(
     to_resokit: Union[bool, None] = None,
     chunk_size: int = 1024,
     print_size: float = 0.15,
+    check_online: bool = True,
 ) -> Union[Path, pd.DataFrame, ResoKitDataset]:
     """Download a dataset from a specified source and save it locally.
 
@@ -744,6 +816,8 @@ def download(
         Default is 1024 bytes (1 KB).
     print_size: float, optional. Default: 0.15.
         Update frequency for the download progress bar.
+    check_online : bool, optional. Default: True.
+        Whether to check if the dataset is already up-to-date.
 
     Returns
     -------
@@ -813,6 +887,11 @@ def download(
     else:
         zip_path = None
         zip_name = ZIP_FILENAME
+
+    # Check if online
+    if check_online and not overwrite:
+        if not check_outdated(source, verbose=verbose):
+            return
 
     # Download the dataset
     data = request_dataset(
@@ -1102,11 +1181,14 @@ def _load_stored_index(
     dataset : pd.DataFrame or ResoKitDataset
         The loaded dataset as a DataFrame or a ResoKitDataset.
     """
+    inm = _IN_MEMORY_INDEXES[source]
+    if inm.dataset.empty:
+        return inm
     if not to_df:
         if to_resokit:
-            return _IN_MEMORY_INDEXES[source].to_resokit()
-        return _IN_MEMORY_INDEXES[source]
-    return _IN_MEMORY_INDEXES[source].to_dataframe()
+            return inm.to_resokit()
+        return inm
+    return inm.to_dataframe()
 
 
 def load_eu(
@@ -1633,6 +1715,7 @@ def load_full(
             verbose=check_age,
         )
         origin.append("zip")
+
     # Load the dataset from the file
     elif from_file:
         file_path = dir_path / from_file
