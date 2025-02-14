@@ -35,7 +35,6 @@ except ImportError:
     requests_imported = False
 
 try:
-    from astropy.io.votable import parse_single_table
     from astropy.table import Table
 
     astropy_imported = True
@@ -46,6 +45,7 @@ except ImportError:
 # CONSTANTS
 # =============================================================================
 
+# Query URLs for the two datasets
 QUERY_URL = {
     "eu": "http://voparis-tap-planeto.obspm.fr/tap/sync?lang=ADQL&",
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?",
@@ -259,51 +259,3 @@ def query_online(
         return resokit_to_system(reso)
 
     return reso  # Return ResoKit DataFrame
-
-
-def query_dataset_length(source: str) -> int:
-    """Query the length (count) of the dataset from the specified source.
-
-    Parameters
-    ----------
-    source : str
-        Data source identifier ('eu' or 'nasa').
-
-    Returns
-    -------
-    length : int
-        Amount of entries (rows) in the dataset.
-    """
-    # Ensure requests and astropy modules are imported
-    assert_module_imported(requests_imported, "requests")
-
-    source = source.lower()  # Ensure lowercase
-
-    # Build the query
-    if source == "nasa":
-        query = "query=SELECT+COUNT(*)+FROM+ps&format=csv"
-    elif source == "eu":
-        query = "query=SELECT+COUNT(*)+FROM+exoplanet.epn_core"
-        assert_module_imported(  # Ensure astropy is imported
-            astropy_imported, "astropy", "Not needed for NASA."
-        )
-    else:
-        raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
-
-    url = QUERY_URL[source]  # Define the query URL
-
-    try:  # Execute the query
-        response = requests.get(url + query)
-        response.raise_for_status()
-
-        # For NASA, parse CSV response
-        if source == "nasa":
-            return int(response.text.splitlines()[1])
-
-        # For EU, parse as VOTable
-        votable = parse_single_table(BytesIO(response.content))
-        return int(votable.array[0][0])
-
-    except requests.RequestException as e:
-        print(f" Error querying {source} dataset length: {e}")
-        return 0  # Return 0 on error
