@@ -77,7 +77,7 @@ _BINARIES_COLUMNS = [
     "alternate_name",
     "star0_mass",
     "star1_mass",
-    "star_dist",
+    "dist",
     "disc_method",
     "a",
     "e",
@@ -86,7 +86,7 @@ _BINARIES_COLUMNS = [
     "planet_e",
     "planet_mass",
     "planet_HW_crit",
-    "imutual",
+    "imut",
 ]
 
 
@@ -1867,8 +1867,8 @@ def load_binary(
             df = _IN_MEMORY_BINARIES[letter].copy()
             # Clean if requested
             if clean:
-                df.loc[df[7] > 98, 7] = pd.NA
-                df.loc[df[13] > 998, 13] = pd.NA
+                df.loc[df[7] > 98, 7] = pd.NA  # eccentricity
+                df.loc[df[13] > 998, 13] = pd.NA  # imutual
             # Rename columns if requested
             if rename_columns:
                 df.columns = _BINARIES_COLUMNS
