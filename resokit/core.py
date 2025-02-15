@@ -400,11 +400,7 @@ class ResokitDataFrame:
         ResokitDataFrame
             Copy of the ResokitDataFrame.
         """
-        return ResokitDataFrame(
-            data=self.data.copy(),
-            source=self.source,
-            metadata=self.metadata,
-        )
+        return attrs.evolve(self)
 
 
 # =============================================================================
@@ -643,6 +639,97 @@ class StaticBody(ResokitDataFrame):
                 + f"Got: {type(self.data)} instead."
             )
 
+    def __dir__(self):
+        """Return the attributes of both the superclass and this instance."""
+        instance_attrs = list(self.__dict__.keys())  # Get self attributes
+        parent_attrs = super().__dir__()  # Get superclass attributes
+        return sorted(set(instance_attrs + parent_attrs))  # Remove duplicates
+
+    def __repr__(self, cls_name: str = "StaticBody"):
+        """repr(x) <=> x.__repr__()."""
+        text = f"{cls_name} '{self.name}'"
+        if not self.user_defined_:
+            text += f" from {self.source} data source"
+        else:
+            text += " user defined"
+
+        return text
+
+    def _repr_html_(self, ad_id=None, switch=False, cls_name="StaticBody"):
+        """Return a HTML representation of the StaticBody."""
+        if ad_id is None:
+            ad_id = id(self)
+        prefoot = f"{cls_name} '{self.name}''"
+        if not self.user_defined_:
+            prefoot += f" from {self.source} data source"
+        else:
+            prefoot += " user defined"
+
+        return super()._repr_html_(ad_id=ad_id, prefoot=prefoot, switch=switch)
+
+    def __getitem__(self, key: Union[int, str, list]):
+        """x[y] <==> x.__getitem__(y)."""
+        key = parse_to_iter(key)
+
+        if any(isinstance(i, int) for i in key):
+            raise IndexError(
+                "StaticBody does not support integer indexing. "
+                + "Use the 'name' column instead."
+            )
+
+        if len(key) == 1:
+            return self.data[key[0]]
+
+        return self.data[key]
+
+    def change_value(self, attr: str, value: any) -> "StaticBody":
+        """Set an attribute of the StaticBody and return a new instance.
+
+        Parameters
+        ----------
+        attr : str
+            Attribute to set.
+        value : any
+            Value to set.
+
+        Returns
+        -------
+        StaticBody
+            A new StaticBody with the updated attribute.
+        """
+        # Can not change is_star
+        if attr == "is_star":
+            raise ValueError("Cannot change 'is_star' attribute.")
+
+        # Modify the metadata
+        new_metadata = dict(self.metadata)
+        msg = f"Changed {attr} to {value}."
+        new_metadata["history"] = new_metadata.get("history", []) + [msg]
+
+        # If name, then change data.name too
+        if attr == "name":
+            new_data = self.data.copy()
+            new_data.name = value
+            new_data["name"] = value
+            return attrs.evolve(
+                self,
+                data=new_data,
+                source="user",
+                metadata=new_metadata,
+            )
+        else:
+            # Check if the attribute is in the data
+            if attr not in self.data.index:
+                return attrs.evolve(self, **{attr: value})
+
+        # Copy and modify the data dictionary directly
+        new_data = self.data.copy()
+        new_data[attr] = value
+
+        return attrs.evolve(
+            self, data=new_data, metadata=new_metadata, source="user"
+        )
+
 
 @attrs.define(repr=False, on_setattr=attrs.setters.frozen, slots=True)
 class StaticPlanet(StaticBody):
@@ -691,45 +778,19 @@ class StaticPlanet(StaticBody):
                         stacklevel=2,
                     )
 
-    def __getitem__(self, key: Union[int, str, list]):
-        """x[y] <==> x.__getitem__(y)."""
-        key = parse_to_iter(key)
-
-        if all(isinstance(i, int) for i in key):
-            raise IndexError(
-                "StaticPlanet does not support integer indexing. "
-                + "Use the 'name' column instead."
-            )
-        elif any(isinstance(i, int) for i in key):
-            raise NotImplementedError(
-                "Mixed integer and string indexing not supported."
-            )
-
-        if len(key) == 1:
-            return self.data[key[0]]
-
-        return self.data[key]
-
-    def __repr__(self):
-        """repr(x) <=> x.__repr__()."""
-        text = f"StaticPlanet '{self.name}'"
-        if not self.user_defined_:
-            text += f" from {self.source} data source"
-        else:
-            text += " user defined"
-
-        return text
-
     def _repr_html_(self):
         """Return a HTML representation of the StaticPlanet."""
-        ad_id = id(self)
-        prefoot = f"StaticPlanet '{self.name}''"
-        if not self.user_defined_:
-            prefoot += f" from {self.source} data source"
-        else:
-            prefoot += " user defined"
+        return super()._repr_html_(ad_id=id(self), cls_name="StaticPlanet")
 
-        return super()._repr_html_(ad_id=ad_id, prefoot=prefoot, switch=True)
+    def __dir__(self):
+        """Return the attributes of both the superclass and this instance."""
+        instance_attrs = list(self.__dict__.keys())  # Get self attributes
+        parent_attrs = super().__dir__()  # Get superclass attributes
+        return sorted(set(instance_attrs + parent_attrs))  # Remove duplicates
+
+    def __repr__(self, cls_name="StaticPlanet"):
+        """repr(x) <=> x.__repr__()."""
+        return super().__repr__(cls_name)
 
     def get_item(
         self,
@@ -966,14 +1027,6 @@ class StaticPlanet(StaticBody):
             **plot_kwargs,
         )
 
-    def copy(self) -> "StaticPlanet":
-        """Return a copy of the StaticPlanet."""
-        return StaticPlanet(
-            data=self.data.copy(),
-            source=self.source,
-            metadata=self.metadata,
-        )
-
 
 @attrs.define(repr=False, on_setattr=attrs.setters.frozen, slots=True)
 class StaticStar(StaticBody):
@@ -1020,41 +1073,19 @@ class StaticStar(StaticBody):
                     )
                     print(col)
 
-    def __getitem__(self, key: Union[int, str, list]):
-        """x[y] <==> x.__getitem__(y)."""
-        key = parse_to_iter(key)
-
-        if any(isinstance(i, int) for i in key):
-            raise IndexError(
-                "StaticStar does not support integer indexing. "
-                + "Use the 'name' column instead."
-            )
-
-        if len(key) == 1:
-            return self.data[key[0]]
-
-        return self.data[key]
-
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
-        text = f"StaticStar '{self.name}'"
-        if not self.user_defined_:
-            text += f" from {self.source} data source"
-        else:
-            text += " user defined"
-
-        return text
+        return super().__repr__(cls_name="StaticStar")
 
     def _repr_html_(self):
         """Return a HTML representation of the StaticStar."""
-        ad_id = id(self)
-        prefoot = f"StaticStar '{self.name}'"
-        if not self.user_defined_:
-            prefoot += f" from {self.source} data source"
-        else:
-            prefoot += " user defined"
+        return super()._repr_html_(ad_id=id(self), cls_name="StaticStar")
 
-        return super()._repr_html_(ad_id=ad_id, prefoot=prefoot, switch=True)
+    def __dir__(self):
+        """Return the attributes of both the superclass and this instance."""
+        instance_attrs = list(self.__dict__.keys())  # Get self attributes
+        parent_attrs = super().__dir__()  # Get superclass attributes
+        return sorted(set(instance_attrs + parent_attrs))  # Remove duplicates
 
     def plot(
         self,
@@ -1103,14 +1134,6 @@ class StaticStar(StaticBody):
             ax=ax,
             label=label,
             **plot_kwargs,
-        )
-
-    def copy(self) -> "StaticStar":
-        """Return a copy of the StaticStar."""
-        return StaticStar(
-            data=self.data.copy(),
-            source=self.source,
-            metadata=self.metadata,
         )
 
 
@@ -1346,6 +1369,84 @@ class StaticBinaryStar:
 
         return [self.star(idx) for idx in indices]
 
+    def change_value(
+        self, attr: str, value: any, in_star: Union[None, int] = None
+    ) -> "StaticBinaryStar":
+        """Set an attribute of the StaticBinaryStar and return a new instance.
+
+        Parameters
+        ----------
+        attr : str
+            Attribute to set.
+        value : any
+            Value to set.
+        in_star : int, optional (default: None)
+            Index of the star to modify (0 or 1).
+            If None, modifies the binary system.
+
+        Returns
+        -------
+        StaticBinaryStar
+            A new instance with the updated attribute.
+        """
+        # Check if in_star is None
+        if in_star is None:
+            return self._change_binary_attribute(attr, value)
+        elif in_star == 0:
+            return self._change_star_attribute(0, attr, value)
+        elif in_star == 1:
+            return self._change_star_attribute(1, attr, value)
+
+        raise ValueError("Invalid value for 'in_star'. Must be 0, 1, or None.")
+
+    def _change_binary_attribute(
+        self, attr: str, value: any
+    ) -> "StaticBinaryStar":
+        """Modify an attribute of the binary system (not an individual star)."""
+        # Check if the attribute is in the data
+        if attr not in self.data.index:
+            return attrs.evolve(self, **{attr: value})
+
+        # Modify the data dictionary
+        new_data = self.data.copy()
+        new_data[attr] = value
+
+        # Modify the metadata
+        new_metadata = dict(self.metadata)
+        msg = f"Changed {attr} to {value}."
+        new_metadata["history"] = new_metadata.get("history", []) + [msg]
+
+        return attrs.evolve(self, data=new_data, metadata=new_metadata)
+
+    def _change_star_attribute(
+        self, star_index: int, attr: str, value: any
+    ) -> "StaticBinaryStar":
+        """Modify an attribute of one of the stars (star0 or star1)."""
+        # Select and modify the star
+        stars = [self.star0, self.star1]
+        stars[star_index] = stars[star_index].change_value(attr, value)
+
+        # Also, change the star source
+        stars[star_index] = stars[star_index].change_value("source", "user")
+
+        # And modify the metadata too
+        new_metadata = dict(stars[star_index].metadata)
+        msg = f"Changed {attr} to {value}."
+        new_metadata["history"] = new_metadata.get("history", []) + [msg]
+        stars[star_index] = stars[star_index].change_value(
+            "metadata", new_metadata
+        )
+
+        # Also, the binary metadata
+        new_metadata = dict(self.metadata)
+        # Add a message in "notes" if not already there
+        msg = f" Changed {attr} in star {star_index} to {value}."
+        new_metadata["history"] = new_metadata.get("history", []) + [msg]
+
+        return attrs.evolve(
+            self, star0=stars[0], star1=stars[1], metadata=new_metadata
+        )
+
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
         return dict(self.metadata)
@@ -1356,13 +1457,7 @@ class StaticBinaryStar:
 
     def copy(self) -> "StaticBinaryStar":
         """Return a copy of the :py:class:`StaticBinaryStar`."""
-        return StaticBinaryStar(
-            star0=self.star0.copy(),
-            star1=self.star1.copy(),
-            data=self.data.copy(deep=True),
-            name=self.name,
-            metadata=self.metadata,
-        )
+        return attrs.evolve(self)
 
 
 @attrs.define(repr=False, frozen=True, slots=True)
@@ -1686,7 +1781,9 @@ class StaticSystem:
         return False
 
     def body(
-        self, indices: Union[int, str, Iterable[Union[int, str]]]
+        self,
+        indices: Union[int, str, Iterable[Union[int, str]]],
+        only_index: bool = False,
     ) -> Union[
         StaticStar,
         StaticPlanet,
@@ -1704,6 +1801,8 @@ class StaticSystem:
             Indices for slicing star and planets.
             If "all", return all bodies.
             Instead of index numbers, the bodies names can be used.
+        only_index : bool, default=False
+            Return only the index of the bodies.
 
         Returns
         -------
@@ -1712,22 +1811,34 @@ class StaticSystem:
             planet :py:class:`StaticPlanet` or
             binary star :py:class:`StaticBinaryStar` or list of them.
         """
+        # Define possible extra in in case circum-binary
+        extra = 2 if self.is_binary_ and self.is_circumbinary else 1
         # Check if indices is an integer
         if isinstance(indices, int):
-            if not 0 <= indices < self.n_planets_ + 1:
+            if not 0 <= indices < self.n_planets_ + extra:
                 raise IndexError(
                     "Index out of range. "
-                    + f"Expected: 0 to {self.n_planets_}. Got: {indices}."
+                    + f"Expected: 0 to {self.n_planets_ + extra - 1}. "
+                    + f"Got: {indices}."
                 )
-            return self.star if indices == 0 else self.planet(indices - 1)
+            return indices if only_index else self.bodies_[indices]
         # Check if indices is a string
         elif isinstance(indices, str):
             if indices == "all":  # All bodies
+                if only_index:
+                    return list(range(self.n_stars_ + self.n_planets_))
                 return [self.star] + self.planets
             if indices == "star" or indices == self.star.name:  # Star
                 return self.star
+            if self.is_binary_:
+                if indices == self.star.star0.name or indices == "star0":
+                    return self.star.star0
+                if indices == self.star.star1.name or indices == "star1":
+                    return self.star.star1
             if indices in self.planet_names_:  # Planet name
-                return self.planets[self.planet_names_.index(indices) + 1]
+                if only_index:
+                    return self.planet_names_.index(indices)
+                return self.planets[self.planet_names_.index(indices)]
             if len(indices) == 1:  # Check suffixes
                 # Assert no repeated suffixes
                 if len(self.suffixes_) != len(set(self.suffixes_)):
@@ -1739,8 +1850,9 @@ class StaticSystem:
                     raise ValueError(
                         f"Suffix '{indices}' not found in star or planets."
                     )
-                # Get planet from int index from suffix
-                return self.planets[self.suffixes_.index(indices) + 1]
+                # Get planet from int index from suffixes
+                indices = self.suffixes_.index(indices)
+                return indices if only_index else self.bodies_[indices]
             raise ValueError(
                 "Invalid index. "
                 + "Expected: 'all', 'star', or planet name. "
@@ -1761,7 +1873,9 @@ class StaticSystem:
         return [self.body(i) for i in indices]
 
     def planet(
-        self, indices: Union[int, str, Iterable[Union[int, str]]]
+        self,
+        indices: Union[int, str, Iterable[Union[int, str]]],
+        only_index: bool = False,
     ) -> Union[StaticPlanet, List[StaticPlanet]]:
         """Slice the planets by given indices.
 
@@ -1773,6 +1887,8 @@ class StaticSystem:
             Indices for slicing planets.
             If "all", return all planets.
             Instead of index numbers, the planets names can be used.
+        only_index : bool, default=False
+            Return only the index of the planets.
 
         Returns
         -------
@@ -1780,53 +1896,37 @@ class StaticSystem:
             A copy of a system's planet :py:class:`StaticPlanet`
             or list of :py:class:`StaticPlanet` objects.
         """
-        # Check if indices is an integer
-        if isinstance(indices, int):
-            if not 0 <= indices <= self.n_planets_ - 1:
-                raise IndexError(
-                    "Index out of range. "
-                    + f"Expected: 0 to {self.n_planets_ - 1}. Got: {indices}."
-                )
-            return self.planets[indices]
-        # Check if indices is a str
-        elif isinstance(indices, str):
-            if indices == "all":  # All planets
-                return self.planets
-            elif indices in self.planet_names_:  # Planet name
-                return self.planets[self.planet_names_.index(indices)]
-            elif len(indices) == 1:  # Planet suffix
-                # Get Suffixes
-                if len(self.suffixes_) != len(
-                    set(self.suffixes_)
-                ):  # Check if duplicates
-                    raise ValueError(
-                        "Cannot slice by suffix. "
-                        + "Planets have repeated suffixes."
-                    )
-                if (
-                    indices not in self.suffixes_
-                ):  # Check if suffix is in planets
-                    raise ValueError(
-                        f"Suffix '{indices}' not found in planets."
-                    )
-                # Get planet from int index from suffix
-                return self.planets[self.suffixes_.index(indices)]
-
-            raise ValueError(
-                "Invalid index. "
-                + f"Expected: 'all' or planet name. Got: {indices}."
-            )
-
+        # Define possible extra in in case circum-binary
+        extra = 2 if self.is_binary_ and self.is_circumbinary else 1
+        # parse indices to iter
         indices = parse_to_iter(indices)
+        for idx, num in enumerate(indices):
+            if isinstance(num, int):
+                if not 0 <= idx <= self.n_planets_ - 1:
+                    raise IndexError(
+                        "Index out of range. "
+                        + f"Expected: 0 to {self.n_planets_ - 1}. Got: {idx}."
+                    )
+                indices[idx] = num + extra
 
-        if not all(isinstance(i, (int, str)) for i in indices):
-            raise TypeError("Indices must be integers or strings.")
+        # extract in case of only one index
+        if len(indices) == 1:
+            indices = indices[0]
 
-        # Check not "all" inside
-        if "all" in indices:
-            raise ValueError("Cannot mix 'all' with other indices.")
+        # Get planets
+        bodies = self.body(indices, only_index=only_index)
 
-        return [self.planet(i) for i in indices]
+        # Check if bodies are planets
+        if not only_index and not all(
+            isinstance(b, StaticPlanet) for b in parse_to_iter(bodies)
+        ):
+            raise ValueError("Not all bodies are planets.")
+        elif only_index:  # remeber to remove extra
+            if isinstance(bodies, list):
+                return [b - extra for b in bodies]
+            return bodies - extra
+
+        return bodies
 
     def _get_planets_items(
         self, items: Union[str, List[str]], return_values: bool = True
@@ -2378,6 +2478,31 @@ class StaticSystem:
             Whether to force the estimation of the mass, even if it already
             exists.
             If `False`, return the existing mass if it exists.
+        model : str, optional. Default: "ck17"
+            Model to use for the mass-radius power-law relation.
+            'ck17': Chen & Kipping (2017) [trivariate]
+            'o20': Otegi et al. (2020) [density|bivariate]
+            'e23': Edmondson et al. (2023)
+            'm24': Müller et al. (2024) [bivariate]
+        multivariate : float, tuple, optional. Default: 0.5
+            Probability of using the (first, second, ...) branch if the
+            estimation falls in a multivariate region.
+            For bivariate models ('o20', 'm24'), it must be a float between
+            0 and 1.
+            For trivariate model "ck17", it must be a tuple of two floats
+            between 0 and 1, where the sum of them must be lower equal than 1.
+        err_method : int, optional. Default: -1
+            Which method implement for error calculation.
+            Method -1: Do not calculate errors. Return only the mass.
+            Method 0: Do not calculate errors. Return both as 0.0.
+            Method 1: (Naive) Error propagation with the power-law
+            approximation, using the radius error as the maximum of the
+            two extremes.
+            Warning: May return excessively large errors for multivariate
+            sections.
+            Method 2: Evaluate the radius extremes and calculate each mass
+            extreme with the power-law approximation.
+            Method 3: Returns the approximate model error as value errors.
         **kwargs : dict
             Additional keyword arguments for the
             :py:func:`resokit.utils.mass_radius.estimate_mass` function.
@@ -2457,9 +2582,29 @@ class StaticSystem:
             Whether to force the estimation of the radius, even if it already
             exists.
             If `False`, return the existing radius if it exists.
+        model : str, optional. Default: "ck17"
+            Model to use for the mass-radius power-law relation.
+            'ck17': Chen & Kipping (2017)
+            'o20': Otegi et al. (2020) [density|bivariate]
+            'e23': Edmondson et al. (2023)
+            'm24': Müller et al. (2024)
+        bivariate : float, optional. Default: 0.5
+            Probability of using the lower branch if the estimation falls in a
+            bivariate region. Must be a number between 0 and 1.
+            Only used if model is 'o20'.
+        err_method : int, optional. Default: -1
+            Which method implement for error calculation.
+            Method -1: Do not calculate errors. Return only the radius.
+            Method 0: Do not calculate errors. Return both as 0.0.
+            Method 1: (Naive) Error propagation with the power-law
+            approximation, using the mass error as the maximum of the
+            two extremes.
+            Method 2: Evalaute the mass extremes and calculate each
+            radius extreme.
+            Method 3: Returns the approximate model error as value errors.
         **kwargs : dict
             Additional keyword arguments for the
-            :py:func:`resokit.utils.radius_radius.estimate_radius` function.
+            :py:func:`resokit.utils.mass_radius.estimate_radius` function.
 
         Note
         ----
@@ -2837,25 +2982,10 @@ class StaticSystem:
             A new :py:class`StaticSystem` instance without the removed planet.
         """
         if isinstance(index, str):  # Remove by name or suffix
-
-            if len(index) == 1:  # Remove by suffix
-                indexes = [
-                    planet.suffix_ for planet in self.planets
-                ]  # Suffixes
-                if len(indexes) != len(set(indexes)):
-                    raise ValueError("Suffixes must be unique to remove.")
-                if index not in indexes:
-                    raise ValueError(f"Suffix '{index}' not found in planets.")
-                index = indexes.index(index)  # Get index from suffix
-
-            else:  # Remove by name
-                if self.n_planets_ != len(set(self.planet_names_)):
-                    raise ValueError(
-                        "Planets must have unique names to remove."
-                    )
-                if index not in self.planet_names_:
-                    raise ValueError(f"Name '{index}' not found in planets.")
-                index = self.planet_names_.index(index)  # Get index from name
+            body = self.body(index)
+            if isinstance(body, StaticStar):
+                raise ValueError("Cannot remove the star.")
+            index = self.planet_names_.index(body.name)
 
         if index < 0 or index >= self.n_planets_:
             raise IndexError("Index out of range.")
@@ -2866,26 +2996,19 @@ class StaticSystem:
         ]
 
         # Create a new metadata dictionary
-        new_meta = self.to_dict()
-        if "removed_planet" not in new_meta:
-            new_meta["removed_planet"] = self.planets[index].name
-        else:
-            new_meta["removed_planet"] += f", {self.planets[index].name}"
+        new_meta = dict(self.metadata)
+        new_meta["removed_planet"] = new_meta.get("removed_planet", []) + [
+            self.planets[index].name
+        ]
 
         # Create a new StaticSystem instance
-        ss = StaticSystem(
-            star=self.star,
-            planets=new_planets,
-            name=self.name,
-            metadata=new_meta,
-            is_circumbinary=self.is_circumbinary,
-        )
+        new_ss = attrs.evolve(self, planets=new_planets, metadata=new_meta)
 
         # Print message
         if verbose:
             print(f"Planet {self.planets[index].name} [{index}] removed.")
 
-        return ss
+        return new_ss
 
     def add_planet(
         self,
@@ -2929,26 +3052,115 @@ class StaticSystem:
             new_planets = sorted(new_planets, key=lambda x: x[sort_col])
 
         # Create a new metadata dictionary
-        new_meta = self.to_dict()
-        if "added_planet" not in new_meta:
-            new_meta["added_planet"] = planet.name
-        else:
-            new_meta["added_planet"] += f", {planet.name}"
+        new_meta = dict(self.metadata)
+        new_meta["added_planet"] = new_meta.get("added_planet", []) + [
+            planet.name
+        ]
 
         # Create a new StaticSystem instance
-        ss = StaticSystem(
-            star=self.star,
-            planets=new_planets,
-            name=self.name,
-            metadata=new_meta,
-            is_circumbinary=self.is_circumbinary,
-        )
+        new_ss = attrs.evolve(self, planets=new_planets, metadata=new_meta)
 
         # Print message
         if verbose:
             print(f"Planet {planet.name} added.")
 
-        return ss
+        return new_ss
+
+    def swap_planets(
+        self,
+        i: Union[int, str],
+        j: Union[int, str],
+        verbose: bool = True,
+    ) -> "StaticSystem":
+        """Switch the position of two planets in the system.
+
+        Parameters
+        ----------
+        i : int, str
+            Index or suffix (1 char) or name of the first planet to switch.
+        j : int, str
+            Index or suffix (1 char) or name of the second planet to switch.
+        verbose : bool, optional. Default: True.
+            Whether to print a message when switching the planets.
+
+        Returns
+        -------
+        StaticSystem
+            A new :py:class`StaticSystem` instance with the switched planets.
+        """
+        # Get the indexes of the planets
+        i = self.planet(i, only_index=True)
+        j = self.planet(j, only_index=True)
+
+        # Check if the planets are the same
+        if i == j:
+            if verbose:
+                print("The planets are the same. Nothing to do.")
+            return self
+
+        # Create a new list of planets
+        new_planets = self.planets.copy()
+        new_planets[i], new_planets[j] = new_planets[j], new_planets[i]
+
+        # Create a new StaticSystem instance
+        new_ss = attrs.evolve(self, planets=new_planets)
+
+        # Print message
+        if verbose:
+            print(
+                f"Planets {self.planets[i].name} [{i}] and "
+                + f"{self.planets[j].name} [{j}] switched."
+            )
+
+        return new_ss
+
+    def replace_planet(
+        self,
+        index: Union[int, str],
+        planet: StaticPlanet,
+        verbose: bool = True,
+    ) -> "StaticSystem":
+        """Replace a planet in the system with a new one.
+
+        Parameters
+        ----------
+        index : int, str
+            Index or suffix (1 char) or name of the planet to change.
+        planet : StaticPlanet
+            StaticPlanet instance to add.
+        verbose : bool, optional. Default: True.
+            Whether to print a message when changing the planet.
+
+        Returns
+        -------
+        StaticSystem
+            A new :py:class`StaticSystem` instance with the changed planet.
+        """
+        # Get the index of the planet
+        index = self.planet(index, only_index=True)
+        old_name = self.planets[index].name
+
+        # Edit the source of the new planet
+        planet = planet.change_value("source", "user")
+
+        # Create a new list of planets
+        new_planets = self.planets.copy()
+        new_planets[index] = planet
+
+        # Modify the metadata
+        new_meta = dict(self.metadata)
+        new_meta["changed_planet"] = new_meta.get("changed_planet", []) + [
+            planet.name
+        ]
+
+        # Create a new StaticSystem instance
+        new_ss = attrs.evolve(self, planets=new_planets, metadata=new_meta)
+
+        # Print message
+        if verbose:
+            print(f"Planet {old_name} [{index}] replaced by {planet.name}.")
+
+        return new_ss
 
     def pair_ratio(
         self,
@@ -3212,6 +3424,102 @@ class StaticSystem:
         # Get the error from calculated data
         return self.__error_ratios__.iloc[j, i]
 
+    def change_value(
+        self,
+        attr: str,
+        value: any,
+        in_star: Union[None, str, int] = None,
+        in_planet: Union[None, int, str] = None,
+        in_binary: Union[None, bool] = None,
+        verbose: bool = True,
+    ) -> "StaticSystem":
+        """Set an attribute of the StaticSystem and return a new instance.
+
+        Note
+        ----
+        If in_star, in_planet, and in_binary are all None, the attribute of the
+        system is changed.
+
+        Parameters
+        ----------
+        attr : str
+            Attribute to set.
+        value : any
+            Value to set.
+        in_star : bool, int, optional (default: None)
+            If not None, modify the attribute of the star.
+            If the system has a binary star, the star can be selected with
+            the index (0, 1) or the name.
+        in_planet : int, str, optional (default: None)
+            If not None, modify the attribute of the planet.
+            The planet can be selected with the index or the name or suffix.
+        in_binary : bool, optional (default: None)
+            If not None, modify the attribute of the binary system.
+        verbose : bool, optional (default: True)
+            Whether to print a message when changing the attribute.
+
+        Returns
+        -------
+        StaticSystem
+            A new instance with the updated attribute.
+        """
+        # Default_to change
+        to_change = dict()
+        # Check if any of the in_* is not None
+        if in_star is not None:
+            if in_planet is not None or in_binary is not None:
+                raise ValueError(
+                    "Cannot set in_star with in_planet or in_binary."
+                )
+            if not self.is_binary_:
+                to_change = dict({"star": self.star.change_value(attr, value)})
+            else:
+                # Here, "star" is a binary star
+                to_change = dict(
+                    {
+                        "star": self.star.change_value(
+                            attr, value, in_star=in_star
+                        )
+                    }
+                )
+        elif in_planet is not None:
+            if in_binary is not None:
+                raise ValueError("Cannot set in_planet with in_binary.")
+            planet = self.planet(in_planet)
+            new_planet = planet.change_value(attr, value)
+            # Update list of planets
+            new_planets = self.planets.copy()
+            new_planets[self.planet_names_.index(planet.name)] = new_planet
+            to_change = dict({"planets": new_planets})
+        elif in_binary is not None:
+            if not self.is_binary_:
+                raise ValueError(
+                    "Cannot set in_binary in a single star system."
+                )
+            to_change = dict(
+                {"star": self.star.change_value(attr, value, in_star=None)}
+            )
+        else:
+            to_change = dict({attr: value})
+
+        # Modify the metadata
+        new_metadata = dict(self.metadata)
+        msg = f"Changed {attr} to {value}."
+        new_metadata["history"] = new_metadata.get("history", []) + [msg]
+
+        # Update to_change with the attribute and metadata
+        to_change["metadata"] = new_metadata
+
+        # Create a new StaticSystem instance
+        new_ss = attrs.evolve(self, **to_change)
+
+        # Message
+        if verbose:
+            msg = msg[:-1] + f" in {self.name}."
+            print(msg)
+
+        return new_ss
+
     def to_dict(self) -> dict:
         """Return the metadata as a new dictionary."""
         return dict(self.metadata)
@@ -3445,13 +3753,7 @@ class StaticSystem:
 
     def copy(self) -> "StaticSystem":
         """Return a copy of the :py:class:`StaticSystem`."""
-        return StaticSystem(
-            star=self.star.copy(),
-            planets=[planet.copy() for planet in self.planets],
-            name=self.name,
-            metadata=self.metadata,
-            is_circumbinary=self.is_circumbinary,
-        )
+        return attrs.evolve(self)
 
 
 # =============================================================================
