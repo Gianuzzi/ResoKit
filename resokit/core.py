@@ -1913,6 +1913,12 @@ class StaticSystem:
         if len(indices) == 1:
             indices = indices[0]
 
+        # Check in case "all" planets is requested
+        if indices == "all":
+            if only_index:
+                return list(range(self.n_planets_))
+            return self.planets
+
         # Get planets
         bodies = self.body(indices, only_index=only_index)
 
@@ -1921,7 +1927,7 @@ class StaticSystem:
             isinstance(b, StaticPlanet) for b in parse_to_iter(bodies)
         ):
             raise ValueError("Not all bodies are planets.")
-        elif only_index:  # remeber to remove extra
+        elif only_index:  # remember to remove extra
             if isinstance(bodies, list):
                 return [b - extra for b in bodies]
             return bodies - extra
