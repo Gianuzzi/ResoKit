@@ -224,7 +224,7 @@ class ResoKitDataset:
         return html
 
     def __eq__(self, value):
-        """x == y <==> x.__eq__(y)."""
+        """X == Y <==> X.__eq__(Y)."""
         if isinstance(value, ResoKitDataset):
             return (
                 self.dataset.equals(value.dataset)
