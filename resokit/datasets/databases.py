@@ -160,20 +160,16 @@ class ResoKitDataset:
 
     def __getitem__(self, key):
         """x[y] <==> x.__getitem__(y)."""
-        sliced = self.dataset.__getitem__(key)
-        len_sliced = len(sliced)
+        if isinstance(key, ResoKitDataset):
+            # Attempt to get a slice from sliced
+            sliced = self.dataset.__getitem__(key.dataset)
+        else:
+            sliced = self.dataset.__getitem__(key)
+        is_full = self.is_full and len(sliced) == len(self.dataset)
+        # Transform to df if possible
         if isinstance(sliced, pd.Series):
             sliced = sliced.to_frame()
-            len_sliced = len(sliced.T)
-        is_full = self.is_full and len_sliced == len(self.dataset)
-        return ResoKitDataset(
-            dataset=sliced,
-            source=self.source,
-            age=self.age,
-            origin=self.origin,
-            is_full=is_full,
-            metadata=dict(self.metadata),
-        )
+        return attrs.evolve(self, dataset=sliced, is_full=is_full)
 
     def __dir__(self):
         """dir(pdf) <==> pdf.__dir__()."""
@@ -240,6 +236,26 @@ class ResoKitDataset:
             return self.dataset == value
         return False
 
+    def __and__(self, other):
+        """X & Y <==> X.__and__(Y)."""
+        if isinstance(other, ResoKitDataset):
+            return attrs.evolve(
+                self,
+                dataset=self.dataset.__and__(other.dataset),
+                is_full=self.is_full and other.is_full,
+            )
+        return attrs.evolve(self, dataset=self.dataset.__and__(other))
+
+    def __or__(self, other):
+        """X | Y <==> X.__or__(Y)."""
+        if isinstance(other, ResoKitDataset):
+            return attrs.evolve(
+                self,
+                dataset=self.dataset.__or__(other.dataset),
+                is_full=self.is_full and other.is_full,
+            )
+        return attrs.evolve(self, dataset=self.dataset.__or__(other))
+
     def to_dataframe(
         self, columns: list = None, copy: bool = True, sort: bool = False
     ) -> pd.DataFrame:
@@ -304,14 +320,7 @@ class ResoKitDataset:
         ResoKitDataset
             Copy of the ResoKitDataset.
         """
-        return ResoKitDataset(
-            dataset=self.dataset.copy(),
-            source=self.source,
-            age=self.age,
-            origin=self.origin,
-            is_full=self.is_full,
-            metadata=dict(self.metadata),
-        )
+        return attrs.evolve(self, dataset=self.dataset.copy())
 
     def to_resokit(self, sort: bool = False) -> "ResoKitDataset":
         """Convert the dataset to a pure ResoKitDataset.
@@ -338,14 +347,8 @@ class ResoKitDataset:
             sort_by=False,
             return_df=True,
         )
-        return ResoKitDataset(
-            dataset=df,
-            source=self.source,
-            age=self.age,
-            origin=self.origin,
-            is_full=self.is_full,
-            metadata=dict(self.metadata),
-        )
+
+        return attrs.evolve(self, dataset=df)
 
 
 # =============================================================================
@@ -738,10 +741,12 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
         df_stored = load_full("nasa", verbose=False, to_df=True)
         # Keep only non controversial and default_set
         df_stored = df_stored[df_stored["default_set"] == 1]
-        df_stored = df_stored[df_stored["controversial"] == 0]
+        # df_stored = df_stored[df_stored["controversial"] == 0]  # NASA skips
     n_stored = len(df_stored)
     if n_stored > 0 and verbose:
         print(f"Number of planets in stored dataset: {n_stored}")
+        if source == "nasa":
+            print(" (Including also non-default parameters set.)")
     elif verbose:
         print("Could not load the stored dataset. ")
 
