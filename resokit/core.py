@@ -3614,14 +3614,24 @@ class StaticSystem:
         sim: Simulation = None,
         fillna: bool = True,
         units: Union[bool, Tuple[float, float]] = True,
-        random_m_angle: bool = False,
         verbose: bool = True,
     ) -> "Simulation":
         """Return a REBOUND simulation with the system data.
 
+        Creates or updates a REBOUND simulation with the system data.
+
+        Note
+        ----
+            The unknown orbital elements that cant be estimated with
+            fillna (for example, the eccentricity of a single planet) are
+            set to 0.0; independently of the fillna value.
+
         Note
         ----
             The REBOUND simulation is created with the heliocentric orbits.
+            If the system is a circumbinary, the stars are added as the first
+            two particles, and the planets are added after them, with the
+            binary center of mass as the origin.
 
         Note
         ----
@@ -3630,6 +3640,15 @@ class StaticSystem:
             (eg. if the user provides the units in [Kg, m], then
             sim.units = ('kg', 'm', <time_unit>) has to be set after the
             simulation is created).
+
+        Note
+        ----
+            If a binary system is provided, the second star will not have radius
+            (unless this attribute has been set manually).
+
+        Note
+        ----
+            The mean anomaly (M) is randomly generated between 0 and 2*pi.
 
         Parameters
         ----------
@@ -3644,10 +3663,6 @@ class StaticSystem:
             If tuple, use the given units. The tuple must be
             (unit_mass, unit_length). The user has to ensure the
             consistency of the units after the simulation is created.
-        random_m_angle : bool, optional. Default: False.
-            Whether to use random values for the mean anomaly, in
-            case the planets do not have it.
-            If False, use 0.0.
         verbose : bool, optional. Default: True.
             Whether to print a message when creating the simulation.
 
@@ -3677,23 +3692,47 @@ class StaticSystem:
 
         # Add the central star
         if self.is_binary_:  # Binary
+            if not self.star.known_orbit_:
+                warnings.warn(
+                    "Binary stars has unknown orbit. Check the "
+                    + "final simulation carefully.",
+                    stacklevel=2,
+                )
             sim.add(
                 m=self.star.star0.mass * M_SUN / units[0],
                 r=self.star.star0.radius * R_SUN / units[1],
                 hash=self.star.star0.name,
             )
+            # Define the "center" for the planets
+            center = sim.particles[self.star.star0.name]
             if self.is_circumbinary:  # Circumbinary
                 sim.add(
                     m=self.star.star1.mass * M_SUN / units[0],
-                    r=self.star.star1.radius * R_SUN / units[1],
+                    r=(
+                        self.star.star1.radius * R_SUN / units[1]
+                        if hasattr(self.star.star1, "radius")
+                        else 0.0
+                    ),
+                    a=self.star.a * AU / units[1],
+                    e=self.star.e,
                     hash=self.star.star1.name,
                 )
+                # Redefine the "center" for the planets
+                # Here we create a new particle at the center of mass
+                sim.add(
+                    m=self.star.total_mass_ * M_SUN / units[0],
+                    r=0.0,
+                    hash="center",
+                )
+                center = sim.particles["center"]
         else:  # Single star
             sim.add(
                 m=self.star.mass * M_SUN / units[0],
                 r=self.star.radius * R_SUN / units[1],
                 hash=self.star.name,
             )
+            # Define the "center" for the planets
+            center = sim.particles[self.star.name]
         # Print message
         if verbose and not self.is_binary_:
             print(f" Star {self.star.name} added.")
@@ -3725,7 +3764,12 @@ class StaticSystem:
                     self.estimate_semi_major_axis(
                         which=planet.name,
                         err_method=-1,  # No error for rebound
-                        jacobi=False,  # Heliocentric orbit
+                        jacobi=(
+                            True
+                            if self.is_binary_ and self.is_circumbinary
+                            else False
+                        ),  # Heliocentric or Circumbinary orbit
+                        deep_estimate=True,
                     )
                     if fillna
                     else 0.0
@@ -3735,12 +3779,12 @@ class StaticSystem:
                 m=pmass * M_JUP / units[0],
                 r=pradius * R_JUP / units[1],
                 a=pa * AU / units[1],
-                e=planet.e,
+                e=planet.e if planet.e > 0 else 0.0,
                 inc=planet.inc * DEG2RAD if planet.inc > 0 else 0.0,
                 omega=planet.w * DEG2RAD if planet.w > 0 else 0.0,
-                M=rng.uniform(0, 2 * pi) if random_m_angle else 0.0,
+                M=rng.uniform(0, 2 * pi),  # Random mean anomaly
                 hash=planet.name,
-                primary=sim.particles[self.star.name],  # Star
+                primary=center,  # Our center
             )
         if verbose:
             print(f" {self.n_planets_} planets added.")
@@ -3749,11 +3793,22 @@ class StaticSystem:
         if self.is_binary_ and not self.is_circumbinary:
             sim.add(
                 m=self.star.star1.mass * M_SUN / units[0],
-                r=self.star.star1.radius * R_SUN / units[1],
+                r=(
+                    self.star.star1.radius * R_SUN / units[1]
+                    if hasattr(self.star.star1, "radius")
+                    else 0.0
+                ),
+                a=self.star.a * AU / units[1],
+                e=self.star.e,
                 hash=self.star.star1.name,
+                primary=center,  # Our center
             )
             if verbose:
                 print(f" Star {self.star.star1.name} added.")
+
+        # Remove center particle if necessary
+        if self.is_binary_ and self.is_circumbinary:
+            sim.remove(hash="center")
 
         return sim
 
