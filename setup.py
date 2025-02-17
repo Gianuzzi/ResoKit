@@ -80,6 +80,7 @@ def do_setup():
         extras_require={
             "query": ["requests", "astropy", "beautifulsoup4"],
             "reb": ["rebound"],
+            "all": ["requests", "astropy", "beautifulsoup4", "rebound"],
         },
         keywords=["resokit", "planetary systems", "resonances"],
         classifiers=[
