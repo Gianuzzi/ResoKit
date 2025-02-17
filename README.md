@@ -39,12 +39,12 @@ $ python -m pip install resokit
 
 #### Extra dependencies
 
-If online databases features (queries, requests) will be used, packages [requests](https://pypi.org/project/requests/) and [astropy](https://pypi.org/project/astropy/) are needed.
+If online databases features (queries, requests) will be used, packages [requests](https://pypi.org/project/requests/), [beautifulsoup4](https://pypi.org/project/beautifulsoup4/) and [astropy](https://pypi.org/project/astropy/) are needed.
 
 You can install all extra ResoKit requirements via pip:
 
 ```bash
-$ python -m pip install resokit[query]
+$ python -m pip install resokit[all]
 ```
 
 ### Development Install
