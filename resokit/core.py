@@ -835,6 +835,7 @@ class StaticPlanet(StaticBody):
 
     def estimate_mass(
         self,
+        new_planet: bool = False,
         **kwargs,
     ) -> float:
         r"""Calculate the mass of the planet using a power-law approximation.
@@ -849,6 +850,8 @@ class StaticPlanet(StaticBody):
 
         Parameters
         ----------
+        new_planet : bool, optional. Default: False.
+            Whether to return a new planet with the estimated mass.
         kwargs : dict
             Keyword arguments for the
             :py:func:`resokit.utils.mass_radius.estimate_mass_single`
@@ -900,10 +903,18 @@ class StaticPlanet(StaticBody):
         mass_err_min = mass_err_min * Me2Mj
         mass_err_max = mass_err_max * Me2Mj
 
+        # Return a new planet?
+        if new_planet:
+            new = self.change_value("mass", mass)
+            new = new.change_value("mass_err_min", mass_err_min)
+            new = new.change_value("mass_err_max", mass_err_max)
+            return new
+
         return mass, mass_err_min, mass_err_max
 
     def estimate_radius(
         self,
+        new_planet: bool = False,
         **kwargs,
     ) -> Tuple[float, float, float]:
         r"""Calculate the radius of a planet using a power-law approximation.
@@ -918,6 +929,8 @@ class StaticPlanet(StaticBody):
 
         Parameters
         ----------
+        new_planet : bool, optional. Default: False.
+            Whether to return a new planet with the estimated radius.
         kwargs : dict
             Keyword arguments for the
             :py:func:`resokit.utils.mass_radius.estimate_radius_single`
@@ -969,6 +982,13 @@ class StaticPlanet(StaticBody):
         # Convert errors to Jupiter radii
         radius_err_min = radius_err_min * Re2Rj
         radius_err_max = radius_err_max * Re2Rj
+
+        # Return a new planet?
+        if new_planet:
+            new = self.change_value("radius", radius)
+            new = new.change_value("radius_err_min", radius_err_min)
+            new = new.change_value("radius_err_max", radius_err_max)
+            return new
 
         return radius, radius_err_min, radius_err_max
 
@@ -2051,6 +2071,7 @@ class StaticSystem:
         deep_estimate: bool = False,
         force: bool = False,
         circular: bool = False,
+        new_system: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the 'period' or 'a' of selected planets in the system.
 
@@ -2111,6 +2132,8 @@ class StaticSystem:
         circular : bool, optional. Default: False.
             Whether to assume the unknown eccentricities are 0.0.
             Only available for Hill radius estimation.
+        new_system : bool, optional. Default: False.
+            Whether to return the estimated parameter as a new system.
 
         Returns
         -------
@@ -2301,6 +2324,29 @@ class StaticSystem:
         # Set the index
         df.index = [param, f"{param}_err_min", f"{param}_err_max"]
 
+        # Check if new system requested
+        if new_system:
+            # Use self function change_value to change the values
+            new = self
+            for planet in planets:  # Iterate over the planets
+                new = new.change_value(
+                    attr=param,
+                    value=df.loc[param, planet.name],
+                    in_planet=planet.name,
+                )
+                if err_method > 0:  # Errors requested
+                    new = new.change_value(
+                        attr=f"{param}_err_min",
+                        value=df.loc[f"{param}_err_min", planet.name],
+                        in_planet=planet.name,
+                    )
+                    new = new.change_value(
+                        attr=f"{param}_err_max",
+                        value=df.loc[f"{param}_err_max", planet.name],
+                        in_planet=planet.name,
+                    )
+            return new
+
         # Check if no error requested
         if err_method == -1:  # No error requested
             return df.loc[param]  # Return only the parameter
@@ -2314,6 +2360,7 @@ class StaticSystem:
         jacobi: bool = False,
         deep_estimate: bool = False,
         force: bool = False,
+        new_system: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the period of selected planets in the system.
 
@@ -2365,6 +2412,9 @@ class StaticSystem:
             Whether to force the estimation of the period, even if it already
             exists.
             If `False`, return the existing period if it exists.
+        new_system : bool, optional. Default: False.
+            Whether to return a new system with the estimated semi-major axis
+            instead of the values.
 
         Returns
         -------
@@ -2380,6 +2430,7 @@ class StaticSystem:
             jacobi=jacobi,
             deep_estimate=deep_estimate,
             force=force,
+            new_system=new_system,
         )
 
     def estimate_semi_major_axis(
@@ -2389,6 +2440,7 @@ class StaticSystem:
         jacobi: bool = False,
         deep_estimate: bool = False,
         force: bool = False,
+        new_system: bool = False,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the semi-major axis of selected planets in the system.
 
@@ -2440,6 +2492,9 @@ class StaticSystem:
             Whether to force the estimation of the semi-major axis, even if it
             already exists.
             If `False`, return the existing semi-major axis if it exists.
+        new_system : bool, optional. Default: False.
+            Whether to return a new system with the estimated semi-major axis
+            instead of the values.
 
         Returns
         -------
@@ -2454,12 +2509,14 @@ class StaticSystem:
             jacobi=jacobi,
             deep_estimate=deep_estimate,
             force=force,
+            new_system=new_system,
         )
 
     def estimate_mass(
         self,
         which: Union[str, int, List[int]] = "all",
         force: bool = False,
+        new_system: bool = False,
         **kwargs,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the mass of selected planets in the system.
@@ -2509,6 +2566,9 @@ class StaticSystem:
             Method 2: Evaluate the radius extremes and calculate each mass
             extreme with the power-law approximation.
             Method 3: Returns the approximate model error as value errors.
+        new_system : bool, optional. Default: False.
+            Whether to return a new system with the estimated mass instead of
+            the values.
         **kwargs : dict
             Additional keyword arguments for the
             :py:func:`resokit.utils.mass_radius.estimate_mass` function.
@@ -2555,6 +2615,28 @@ class StaticSystem:
             ]
         df.index = ["mass", "mass_err_min", "mass_err_max"]
 
+        # New system requested?
+        if new_system:
+            new = self
+            for planet in planets:
+                new = new.change_value(
+                    attr="mass",
+                    value=df.loc["mass", planet.name],
+                    in_planet=planet.name,
+                )
+                if ret_err:
+                    new = new.change_value(
+                        attr="mass_err_min",
+                        value=df.loc["mass_err_min", planet.name],
+                        in_planet=planet.name,
+                    )
+                    new = new.change_value(
+                        attr="mass_err_max",
+                        value=df.loc["mass_err_max", planet.name],
+                        in_planet=planet.name,
+                    )
+            return new
+
         if not ret_err:  # No error requested
             return df.loc["mass"]  # Return only the mass
 
@@ -2564,6 +2646,7 @@ class StaticSystem:
         self,
         which: Union[str, int, List[int]] = "all",
         force: bool = False,
+        new_system: bool = False,
         **kwargs,
     ) -> Union[Tuple[float, float, float], pd.DataFrame]:
         r"""Estimate the radius of selected planets in the system.
@@ -2608,6 +2691,9 @@ class StaticSystem:
             Method 2: Evalaute the mass extremes and calculate each
             radius extreme.
             Method 3: Returns the approximate model error as value errors.
+        new_system : bool, optional. Default: False.
+            Whether to return a new system with the estimated radius instead of
+            the values.
         **kwargs : dict
             Additional keyword arguments for the
             :py:func:`resokit.utils.mass_radius.estimate_radius` function.
@@ -2659,6 +2745,28 @@ class StaticSystem:
                 radius_err_max,
             ]
         df.index = ["radius", "radius_err_min", "radius_err_max"]
+
+        # New system requested?
+        if new_system:
+            new = self
+            for planet in planets:
+                new = new.change_value(
+                    attr="radius",
+                    value=df.loc["radius", planet.name],
+                    in_planet=planet.name,
+                )
+                if ret_err:
+                    new = new.change_value(
+                        attr="radius_err_min",
+                        value=df.loc["radius_err_min", planet.name],
+                        in_planet=planet.name,
+                    )
+                    new = new.change_value(
+                        attr="radius_err_max",
+                        value=df.loc["radius_err_max", planet.name],
+                        in_planet=planet.name,
+                    )
+            return new
 
         if not ret_err:  # No error requested
             return df.loc["radius"]  # Return only the radius
@@ -2737,6 +2845,7 @@ class StaticSystem:
             jacobi=jacobi,
             deep_estimate=deep_estimate,
             circular=circular,
+            new_system=False,
         )
 
     def plot(
@@ -3434,7 +3543,7 @@ class StaticSystem:
         self,
         attr: str,
         value: any,
-        in_star: Union[None, str, int] = None,
+        in_star: Union[None, int] = None,
         in_planet: Union[None, int, str] = None,
         in_binary: Union[None, bool] = None,
         verbose: bool = True,
@@ -3455,7 +3564,7 @@ class StaticSystem:
         in_star : bool, int, optional (default: None)
             If not None, modify the attribute of the star.
             If the system has a binary star, the star can be selected with
-            the index (0, 1) or the name.
+            the index (0, 1).
         in_planet : int, str, optional (default: None)
             If not None, modify the attribute of the planet.
             The planet can be selected with the index or the name or suffix.
@@ -3510,7 +3619,28 @@ class StaticSystem:
 
         # Modify the metadata
         new_metadata = dict(self.metadata)
-        msg = f"Changed {attr} to {value}."
+        msg = f"Changed {attr} to {value} "
+        if in_star:
+            if not self.is_binary_:
+                msg += f"in star {self.star.name}."
+            else:
+                str_name = (
+                    self.star.star0.name
+                    if in_star == 0
+                    else self.star.star1.name
+                )
+                msg += f"in star {str_name}."
+        elif in_planet:
+            msg += f"in planet {planet.name}."
+        elif in_binary:
+            msg += f"in binary system {self.star.name}."
+        else:
+            msg += f"in system {self.name}."
+
+        # Message
+        if verbose:
+            print(msg)
+
         new_metadata["history"] = new_metadata.get("history", []) + [msg]
 
         # Update to_change with the attribute and metadata
@@ -3518,11 +3648,6 @@ class StaticSystem:
 
         # Create a new StaticSystem instance
         new_ss = attrs.evolve(self, **to_change)
-
-        # Message
-        if verbose:
-            msg = msg[:-1] + f" in {self.name}."
-            print(msg)
 
         return new_ss
 
