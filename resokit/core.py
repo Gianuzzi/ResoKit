@@ -25,7 +25,7 @@ import attrs
 
 import matplotlib.pyplot as plt
 
-from numpy import isnan, pi, sqrt
+from numpy import isnan, pi, sqrt, nan
 from numpy.random import default_rng
 
 import pandas as pd
@@ -684,7 +684,7 @@ class StaticBody(ResokitDataFrame):
 
         return self.data[key]
 
-    def change_value(self, attr: str, value: any) -> "StaticBody":
+    def set_attr(self, attr: str, value: any) -> "StaticBody":
         """Set an attribute of the StaticBody and return a new instance.
 
         Parameters
@@ -703,9 +703,12 @@ class StaticBody(ResokitDataFrame):
         if attr == "is_star":
             raise ValueError("Cannot change 'is_star' attribute.")
 
+        new_attr = attr not in self.data.index
+
         # Modify the metadata
         new_metadata = dict(self.metadata)
-        msg = f"Changed {attr} to {value}."
+        aux = "Changed" if new_attr else "Added"
+        msg = f"{aux} {attr} to {value}."
         new_metadata["history"] = new_metadata.get("history", []) + [msg]
 
         # If name, then change data.name too
@@ -720,8 +723,11 @@ class StaticBody(ResokitDataFrame):
                 metadata=new_metadata,
             )
         else:
-            # Check if the attribute is in the data
-            if attr not in self.data.index:
+            # Check if the attribute is in, but not in data
+            if new_attr and hasattr(self, attr):
+                # List only the attributes that can be set
+                if attr not in ["web_page", "suffix_", "user_defined_"]:
+                    raise ValueError(f"Attribute '{attr}' is not in the data.")
                 return attrs.evolve(self, **{attr: value})
 
         # Copy and modify the data dictionary directly
@@ -907,9 +913,9 @@ class StaticPlanet(StaticBody):
 
         # Return a new planet?
         if new_planet:
-            new = self.change_value("mass", mass)
-            new = new.change_value("mass_err_min", mass_err_min)
-            new = new.change_value("mass_err_max", mass_err_max)
+            new = self.set_attr("mass", mass)
+            new = new.set_attr("mass_err_min", mass_err_min)
+            new = new.set_attr("mass_err_max", mass_err_max)
             return new
 
         return mass, mass_err_min, mass_err_max
@@ -987,9 +993,9 @@ class StaticPlanet(StaticBody):
 
         # Return a new planet?
         if new_planet:
-            new = self.change_value("radius", radius)
-            new = new.change_value("radius_err_min", radius_err_min)
-            new = new.change_value("radius_err_max", radius_err_max)
+            new = self.set_attr("radius", radius)
+            new = new.set_attr("radius_err_min", radius_err_min)
+            new = new.set_attr("radius_err_max", radius_err_max)
             return new
 
         return radius, radius_err_min, radius_err_max
@@ -1391,7 +1397,7 @@ class StaticBinaryStar:
 
         return [self.star(idx) for idx in indices]
 
-    def change_value(
+    def set_attr(
         self, attr: str, value: any, in_star: Union[None, int] = None
     ) -> "StaticBinaryStar":
         """Set an attribute of the StaticBinaryStar and return a new instance.
@@ -1413,20 +1419,26 @@ class StaticBinaryStar:
         """
         # Check if in_star is None
         if in_star is None:
-            return self._change_binary_attribute(attr, value)
+            return self._set_binary_attribute(attr, value)
         elif in_star == 0:
-            return self._change_star_attribute(0, attr, value)
+            return self._set_star_attribute(0, attr, value)
         elif in_star == 1:
-            return self._change_star_attribute(1, attr, value)
+            return self._set_star_attribute(1, attr, value)
 
         raise ValueError("Invalid value for 'in_star'. Must be 0, 1, or None.")
 
-    def _change_binary_attribute(
+    def _set_binary_attribute(
         self, attr: str, value: any
     ) -> "StaticBinaryStar":
         """Modify an attribute of the binary system (not an individual star)."""
-        # Check if the attribute is in the data
-        if attr not in self.data.index:
+        # Check if the attribute is not in the data
+        new_attr = attr not in self.data.index
+
+        # Check if an attr not in data
+        if new_attr and hasattr(self, attr):
+            # List only possible attributes
+            if attr not in ["name", "web_page", "suffix_"]:
+                raise ValueError(f"Cannot change '{attr}' attribute.")
             return attrs.evolve(self, **{attr: value})
 
         # Modify the data dictionary
@@ -1435,27 +1447,34 @@ class StaticBinaryStar:
 
         # Modify the metadata
         new_metadata = dict(self.metadata)
-        msg = f"Changed {attr} to {value}."
+        aux = "Added" if new_attr else "Changed"
+        msg = f"{aux} {attr} to {value}."
         new_metadata["history"] = new_metadata.get("history", []) + [msg]
 
         return attrs.evolve(self, data=new_data, metadata=new_metadata)
 
-    def _change_star_attribute(
+    def _set_star_attribute(
         self, star_index: int, attr: str, value: any
     ) -> "StaticBinaryStar":
         """Modify an attribute of one of the stars (star0 or star1)."""
-        # Select and modify the star
+        # Get the stars
         stars = [self.star0, self.star1]
-        stars[star_index] = stars[star_index].change_value(attr, value)
+
+        # Check if a new star attribute
+        new_attr = attr not in stars[star_index].data
+
+        # Select and modify the star
+        stars[star_index] = stars[star_index].set_attr(attr, value)
 
         # Also, change the star source
-        stars[star_index] = stars[star_index].change_value("source", "user")
+        stars[star_index] = stars[star_index].set_attr("source", "user")
 
         # And modify the metadata too
         new_metadata = dict(stars[star_index].metadata)
-        msg = f"Changed {attr} to {value}."
+        aux = "Added" if new_attr else "Changed"
+        msg = f"{aux} {attr} to {value}."
         new_metadata["history"] = new_metadata.get("history", []) + [msg]
-        stars[star_index] = stars[star_index].change_value(
+        stars[star_index] = stars[star_index].set_attr(
             "metadata", new_metadata
         )
 
@@ -2328,21 +2347,21 @@ class StaticSystem:
 
         # Check if new system requested
         if new_system:
-            # Use self function change_value to change the values
+            # Use self function set_attr to change the values
             new = self
             for planet in planets:  # Iterate over the planets
-                new = new.change_value(
+                new = new.set_attr(
                     attr=param,
                     value=df.loc[param, planet.name],
                     in_planet=planet.name,
                 )
                 if err_method > 0:  # Errors requested
-                    new = new.change_value(
+                    new = new.set_attr(
                         attr=f"{param}_err_min",
                         value=df.loc[f"{param}_err_min", planet.name],
                         in_planet=planet.name,
                     )
-                    new = new.change_value(
+                    new = new.set_attr(
                         attr=f"{param}_err_max",
                         value=df.loc[f"{param}_err_max", planet.name],
                         in_planet=planet.name,
@@ -2621,18 +2640,18 @@ class StaticSystem:
         if new_system:
             new = self
             for planet in planets:
-                new = new.change_value(
+                new = new.set_attr(
                     attr="mass",
                     value=df.loc["mass", planet.name],
                     in_planet=planet.name,
                 )
                 if ret_err:
-                    new = new.change_value(
+                    new = new.set_attr(
                         attr="mass_err_min",
                         value=df.loc["mass_err_min", planet.name],
                         in_planet=planet.name,
                     )
-                    new = new.change_value(
+                    new = new.set_attr(
                         attr="mass_err_max",
                         value=df.loc["mass_err_max", planet.name],
                         in_planet=planet.name,
@@ -2752,18 +2771,18 @@ class StaticSystem:
         if new_system:
             new = self
             for planet in planets:
-                new = new.change_value(
+                new = new.set_attr(
                     attr="radius",
                     value=df.loc["radius", planet.name],
                     in_planet=planet.name,
                 )
                 if ret_err:
-                    new = new.change_value(
+                    new = new.set_attr(
                         attr="radius_err_min",
                         value=df.loc["radius_err_min", planet.name],
                         in_planet=planet.name,
                     )
-                    new = new.change_value(
+                    new = new.set_attr(
                         attr="radius_err_max",
                         value=df.loc["radius_err_max", planet.name],
                         in_planet=planet.name,
@@ -3258,7 +3277,7 @@ class StaticSystem:
         old_name = self.planets[index].name
 
         # Edit the source of the new planet
-        planet = planet.change_value("source", "user")
+        planet = planet.set_attr("source", "user")
 
         # Create a new list of planets
         new_planets = self.planets.copy()
@@ -3319,6 +3338,7 @@ class StaticSystem:
         # Redefine use_binary if needed
         if not self.is_binary_:
             use_binary = False
+
         # Check if there are at least 3 bodies
         if self.n_planets_ + (2 if use_binary else 1) < 3:
             raise ValueError("There must be at least 3 bodies to compare.")
@@ -3363,7 +3383,7 @@ class StaticSystem:
                     )
                 return self.period_ratios_
 
-            # Get all the period ratios
+            # Get all the periods
             periods = self.get_item("P")
             # Create a Series in case a single object is returned
             if self.n_planets_ == 1:
@@ -3472,7 +3492,7 @@ class StaticSystem:
             return self.__error_ratios__  # Already calculated for 3 bodies
 
         # Extract pair ratio
-        pair_ratio = self.pair_ratio(*pair, error=False, use_binary=False)
+        pair_ratio = self.pair_ratio(*pair, error=False, use_binary=True)
 
         # Formula: sqrt((err1/P1)^2 + (err2/P2)^2) * ratio
 
@@ -3481,45 +3501,38 @@ class StaticSystem:
             # Return the DataFrame if it's already calculated
             if not self.__error_ratios__.empty:
                 return self.__error_ratios__
-            # Create a DataFrame with all the period ratios
+            # Create an empty series
+            max_P_err_P = pd.Series(data=0.0, index=pair_ratio.index)
+            # Fill the series with the planets first
+            for i, name in enumerate(self.planet_names_):
+                max_P_err_P[name] = (
+                    max(
+                        abs(self.planets[i].P_err_min),
+                        abs(self.planets[i].P_err_max),
+                    )
+                    / self.planets[i].P
+                )
+            # Add Error to binary if needed
+            if self.is_binary_:
+                # Check if the star has errors
+                b_P_err_min = getattr(self.star, "P_err_min", nan)
+                b_P_err_max = getattr(self.star, "P_err_max", nan)
+                max_P_err_P[self.star_names_[1]] = (
+                    max(abs(b_P_err_min), abs(b_P_err_max)) / self.star.P
+                )
+            # Create the DataFrame
             sigma2 = pd.DataFrame(
-                [
-                    [
-                        (
-                            max(
-                                abs(self.planets[i].P_err_min),
-                                abs(self.planets[i].P_err_max),
-                            )
-                            / self.planets[i].P
-                        )
-                        ** 2
-                        + (
-                            max(
-                                abs(self.planets[j].P_err_min),
-                                abs(self.planets[j].P_err_max),
-                            )
-                            / self.planets[j].P
-                        )
-                        ** 2
-                        for i in range(self.n_planets_)
-                    ]
-                    for j in range(self.n_planets_)
-                ],
-                index=pair_ratio.index,
-                columns=pair_ratio.columns,
+                data=nan, index=pair_ratio.index, columns=pair_ratio.columns
             )
+            # Fill the DataFrame
+            for name1 in pair_ratio.index:
+                for name2 in pair_ratio.columns:
+                    sigma2.loc[name1, name2] = sqrt(
+                        max_P_err_P[name1] ** 2 + max_P_err_P[name2] ** 2
+                    )
+
             # Calculate the error
             df = pair_ratio * sqrt(sigma2)
-
-            # Add None Error to binary if needed
-            if self.is_binary_:
-                df[self.star_names_[1]] = None
-                df.loc[self.star_names_[1]] = None
-                if (
-                    self.is_circumbinary
-                ):  # Reorder to get the star at the beginning
-                    df = df[[self.star_names_[1]] + self.planet_names_]
-                    df = df.reindex([self.star_names_[1]] + self.planet_names_)
 
             # Store the DataFrame
             self.__error_ratios__[df.columns] = df
@@ -3541,7 +3554,7 @@ class StaticSystem:
         # Get the error from calculated data
         return self.__error_ratios__.iloc[j, i]
 
-    def change_value(
+    def set_attr(
         self,
         attr: str,
         value: any,
@@ -3589,21 +3602,17 @@ class StaticSystem:
                     "Cannot set in_star with in_planet or in_binary."
                 )
             if not self.is_binary_:
-                to_change = dict({"star": self.star.change_value(attr, value)})
+                to_change = dict({"star": self.star.set_attr(attr, value)})
             else:
                 # Here, "star" is a binary star
                 to_change = dict(
-                    {
-                        "star": self.star.change_value(
-                            attr, value, in_star=in_star
-                        )
-                    }
+                    {"star": self.star.set_attr(attr, value, in_star=in_star)}
                 )
         elif in_planet is not None:
             if in_binary is not None:
                 raise ValueError("Cannot set in_planet with in_binary.")
             planet = self.planet(in_planet)
-            new_planet = planet.change_value(attr, value)
+            new_planet = planet.set_attr(attr, value)
             # Update list of planets
             new_planets = self.planets.copy()
             new_planets[self.planet_names_.index(planet.name)] = new_planet
@@ -3614,14 +3623,14 @@ class StaticSystem:
                     "Cannot set in_binary in a single star system."
                 )
             to_change = dict(
-                {"star": self.star.change_value(attr, value, in_star=None)}
+                {"star": self.star.set_attr(attr, value, in_star=None)}
             )
         else:
             to_change = dict({attr: value})
 
         # Modify the metadata
         new_metadata = dict(self.metadata)
-        msg = f"Changed {attr} to {value} "
+        msg = f"Setting {attr} to {value} "
         if in_star:
             if not self.is_binary_:
                 msg += f"in star {self.star.name}."
@@ -3635,7 +3644,7 @@ class StaticSystem:
         elif in_planet:
             msg += f"in planet {planet.name}."
         elif in_binary:
-            msg += f"in binary system {self.star.name}."
+            msg += f"in binary star system {self.star.name}."
         else:
             msg += f"in system {self.name}."
 
