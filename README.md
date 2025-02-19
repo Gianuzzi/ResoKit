@@ -5,6 +5,7 @@
 <!-- BODY -->
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://badge.fury.io/py/uttrs)
+[![ResoKit CI](https://github.com/Gianuzzi/ResoKit/actions/workflows/CI.yml/badge.svg)](https://github.com/Gianuzzi/ResoKit/actions/workflows/CI.yml)
 [![Documentation Status](https://readthedocs.org/projects/resokit/badge/?version=latest)](https://resokit.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://tldrlegal.com/license/mit-license)
 [![https://github.com/leliel12/diseno_sci_sfw](https://img.shields.io/badge/DiSoftCompCi-FAMAF-ffda00)](https://github.com/leliel12/diseno_sci_sfw)
