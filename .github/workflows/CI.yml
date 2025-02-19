@@ -1,0 +1,13 @@
+# ==============================================================
+# CI with GitHub Actions
+# ==============================================================
+
+name: ResoKit CI
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  testing:
+    uses: Gianuzzi/ResoKit/.github/workflows/tests.yml@multi
