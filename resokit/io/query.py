@@ -1,6 +1,6 @@
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -131,7 +131,8 @@ def _execute_query(query: str, source: str):
         Resulting dataset as a pandas DataFrame.
     """
     # Ensure requests module is imported
-    assert_module_imported(requests_imported, "requests")
+    global requests_imported
+    requests_imported = assert_module_imported(requests_imported, "requests")
 
     source = source.lower()  # Ensure lowercase
 
@@ -198,7 +199,8 @@ def query_online(
         (if `as_resokit=True`), or :py:class:`StaticSystem`.
     """
     # Ensure requests and astropy modules are imported
-    assert_module_imported(requests_imported, "requests")
+    global requests_imported
+    requests_imported = assert_module_imported(requests_imported, "requests")
 
     if not planet_name and not star_name:
         raise ValueError(
@@ -216,7 +218,8 @@ def query_online(
 
     if source == "eu":
         field_name = "target_name" if planet_name else "star_name"
-        assert_module_imported(
+        global astropy_imported
+        astropy_imported = assert_module_imported(
             astropy_imported, "astropy", "Not needed for NASA."
         )
     else:

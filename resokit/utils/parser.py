@@ -3,7 +3,7 @@
 
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -17,6 +17,7 @@
 # IMPORTS
 # =============================================================================
 
+import importlib
 import platform
 import sys
 from difflib import SequenceMatcher
@@ -240,7 +241,12 @@ RATIOS_THRESHOLD = 0.92  # Similarity ratio threshold
 
 
 def assert_module_imported(
-    imported: bool, module_name: str, message: str = ""
+    imported: bool,
+    module_name: str,
+    message: str = "",
+    retry: bool = True,
+    alias: str = None,
+    package: str = None,
 ):
     """Assert that the specified module is imported.
 
@@ -252,11 +258,28 @@ def assert_module_imported(
         Name of the module to check.
     message : str, optional. Default: ""
         Error message to display if the module is not imported.
+    retry : bool, optional. Default: True
+        Whether to retry the import if the module is not imported.
+    alias : str, optional. Default: None
+        Alias for the module.
+    package : str, optional. Default: None
+        Package to import the module from.
+
+    Returns
+    -------
+    bool
+        Whether the module is imported.
     """
+    if alias is None:
+        alias = module_name
     if not imported:
-        raise ImportError(
-            f"{module_name} is required for this function. {message}"
-        )
+        if retry:
+            try:
+                importlib.import_module(module_name, package)
+                return True
+            except ImportError:
+                pass
+        raise ImportError(f"{alias} is required for this function. {message}")
 
     return True  # Module is imported
 

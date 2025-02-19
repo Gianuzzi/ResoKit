@@ -1,6 +1,6 @@
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -32,9 +32,9 @@ from resokit.utils.parser import assert_module_imported
 try:
     from bs4 import BeautifulSoup
 
-    beautifulsoup_imported = True
+    bs4_imported = True
 except ImportError:
-    beautifulsoup_imported = False
+    bs4_imported = False
 
 try:
     import requests
@@ -681,7 +681,8 @@ def request_dataset(
         The downloaded data.
     """
     # Check if requests is imported
-    assert_module_imported(requests_imported, "requests")
+    global requests_imported
+    requests_imported = assert_module_imported(requests_imported, "requests")
 
     # Print message
     if verbose:
@@ -774,8 +775,11 @@ def check_online_dataset(
         Date of the last update of the dataset.
     """
     # Ensure requests and BeautifulSoup modules are imported
-    assert_module_imported(requests_imported, "requests")
-    assert_module_imported(requests_imported, "beautifulsoup4")
+    global requests_imported, bs4_imported
+    requests_imported = assert_module_imported(requests_imported, "requests")
+    bs4_imported = assert_module_imported(
+        bs4_imported, "bs4", alias="beautifulsoup4", package="BeautifulSoup"
+    )
 
     source = source.lower()  # Ensure lowercase
 
