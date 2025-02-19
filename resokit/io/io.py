@@ -363,7 +363,7 @@ def load_system_from_eu(
     as_resokit: bool = False,
     alternative_names: bool = False,
     exact_match: bool = True,
-    check_binary: Union[bool, None] = False,
+    check_binary: Union[bool, None] = True,
     soft: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from ExoplanetEU.
@@ -397,7 +397,7 @@ def load_system_from_eu(
         flexible, and a very (very) similar name will be accepted.
         Useful for names with different characters (e.g., hyphens), or
         for names with extra information (e.g., "A" or "B").
-    check_binary : bool, optional. Default: False.
+    check_binary : bool, optional. Default: True.
         Whether to check if the system is a binary system.
         If it is a binary system indeed, then the final system
         created is a `StaticBinarySystem` instead of a `StaticSystem`.
@@ -484,7 +484,7 @@ def load_system_from_nasa(
     default_set: bool = True,
     as_resokit: bool = False,
     exact_match: bool = True,
-    check_binary: Union[bool, None] = False,
+    check_binary: Union[bool, None] = True,
     soft: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from NASA.
@@ -522,7 +522,7 @@ def load_system_from_nasa(
         flexible, and a very (very) similar name will be accepted.
         Useful for names with different characters (e.g., hyphens), or
         for names with extra information (e.g., "A" or "B").
-    check_binary : bool, optional. Default: False.
+    check_binary : bool, optional. Default: True.
         Whether to check if the system is a binary system.
         If it is a binary system indeed, then the final system
         created is a `StaticBinarySystem` instead of a `StaticSystem`.
