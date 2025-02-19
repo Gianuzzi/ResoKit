@@ -10,4 +10,4 @@ on:
 
 jobs:
   testing:
-    uses: Gianuzzi/ResoKit/.github/workflows/tests.yml@multi
+    uses: Gianuzzi/ResoKit/.github/workflows/tests.yml@ema
