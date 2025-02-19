@@ -1,6 +1,6 @@
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -549,17 +549,17 @@ def _update_stored_dataset(
     if _IS_FULLY_STORED[source] and not overwrite:
         return  # No need to update if already fully stored
 
+    # Check if the dataset is empty
     if new_df.empty:
         if verbose:
             print(" No rows to store in memory.")
         return
 
     # Store the rows in the index
-    if is_full:
-
-        # Check if the index is already stored
-        if not _IN_MEMORY_INDEXES[source].dataset.empty and not overwrite:
-            return
+    if is_full and (  # Full dataset and
+        _IN_MEMORY_INDEXES[source].dataset.empty  # Empty index or
+        or (not _IN_MEMORY_INDEXES[source].dataset.empty and overwrite)  # Renw
+    ):
 
         # Get the index columns
         new_index = new_df[_INDEX_COLUMNS[source]].copy()
@@ -592,9 +592,11 @@ def _update_stored_dataset(
         if verbose:
             print(" Updated stored index in memory.")
 
+    # Check if only the index is needed
     if index_only:
         return
 
+    # Check if is fully stored
     if is_full or _IN_MEMORY_DATASETS[source].dataset.empty:
         # Update the stored dataset
         _IN_MEMORY_DATASETS[source] = df_to_dataset(
@@ -751,7 +753,7 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
         print("Could not load the stored dataset. ")
 
     # Check if the dataset is outdated
-    n_pl, _ = check_online_dataset(source=source, verbose=True)
+    n_pl, _ = check_online_dataset(source=source, verbose=verbose)
 
     if n_pl == n_stored:
         if verbose:
@@ -1060,6 +1062,12 @@ def _check_file_age(
     if zip_path:
         file_name = Path(file_path).name
         with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
+            # Check if the file is in the ZIP archive
+            if file_name not in zipf.namelist():
+                raise FileNotFoundError(
+                    f"File {file_name} not found in {zip_path}."
+                )
+            # Get the file's last modified date
             date_info = zipf.getinfo(file_name).date_time
             creation = datetime.datetime(*date_info)
     else:
@@ -1715,7 +1723,7 @@ def load_full(
             verbose=verbose,
         )
         age = _check_file_age(
-            file_path=from_file,
+            file_path=file_name,
             zip_path=zip_path,
             verbose=check_age,
         )
@@ -1732,7 +1740,7 @@ def load_full(
             dtype=DATASET_DTYPES[source],
         )
         age = _check_file_age(
-            file_path=from_file,
+            file_path=file_path,
             zip_path=None,
             verbose=check_age,
         )
@@ -1787,7 +1795,7 @@ def load_full(
     index_only = not store
 
     # Check storing
-    if store_index or store:  # If not storing, return the data
+    if store_index or store:
         _update_stored_dataset(
             data,
             source,
