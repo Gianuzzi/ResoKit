@@ -25,7 +25,7 @@ import attrs
 
 import matplotlib.pyplot as plt
 
-from numpy import isnan, pi, sqrt, nan
+from numpy import isnan, nan, pi, sqrt
 from numpy.random import default_rng
 
 import pandas as pd
@@ -3503,11 +3503,11 @@ class StaticSystem:
                 return self.__error_ratios__
 
             # Create an empty series
-            max_P_err_P = pd.Series(data=0.0, index=pair_ratio.index)
+            max_perr_p = pd.Series(data=0.0, index=pair_ratio.index)
 
             # Fill the series with the planets first
             for i, name in enumerate(self.planet_names_):
-                max_P_err_P[name] = (
+                max_perr_p[name] = (
                     max(
                         abs(self.planets[i].P_err_min),
                         abs(self.planets[i].P_err_max),
@@ -3518,10 +3518,10 @@ class StaticSystem:
             # Add Error to binary if needed
             if self.is_binary_:
                 # Check if the star has errors
-                b_P_err_min = getattr(self.star, "P_err_min", nan)
-                b_P_err_max = getattr(self.star, "P_err_max", nan)
-                max_P_err_P[self.star_names_[1]] = (
-                    max(abs(b_P_err_min), abs(b_P_err_max)) / self.star.P
+                b_perr_min = getattr(self.star, "P_err_min", nan)
+                b_perr_max = getattr(self.star, "P_err_max", nan)
+                max_perr_p[self.star_names_[1]] = (
+                    max(abs(b_perr_min), abs(b_perr_max)) / self.star.P
                 ) ** 2
 
             # Create the DataFrame sigma2
@@ -3532,7 +3532,7 @@ class StaticSystem:
             for name1 in pair_ratio.index:
                 for name2 in pair_ratio.columns:
                     sigma2.loc[name1, name2] = (
-                        max_P_err_P[name1] + max_P_err_P[name2]
+                        max_perr_p[name1] + max_perr_p[name2]
                     )
 
             # Calculate the error
