@@ -3,7 +3,7 @@
 
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -107,6 +107,7 @@ def _search_system_index(
     parse = True
     # Load the dataset if not in memory
     if not alternative_names:
+        not_parsed = None  # Will be stored and parsed next time
         # Update the keyword arguments
         parsed = load_full(
             source=source,
@@ -124,11 +125,11 @@ def _search_system_index(
             )  # Will be stored and parsed next time
         raw_series = raw_series[column]  # Get the column
     else:
-        raw_series = load_full(
+        not_parsed = load_full(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )
-        raw_series = raw_series[column].str.split(", ").explode()
+        raw_series = not_parsed[column].str.split(", ").explode()
 
     # Use the new function
     index, values, ratio = find_best_match(
@@ -140,14 +141,12 @@ def _search_system_index(
         return index, values, ratio
 
     # If parse is None, then we have to get back the original values
-    original_values = (
-        load_full(
+    if not_parsed is None:
+        not_parsed = load_full(
             source=source,
-            **{**load_kwargs, "only_index": True, "verbose": False},
-        )[column]
-        .loc[index]
-        .tolist()
-    )
+            **{**load_kwargs, "only_index": False, "verbose": False},
+        )
+    original_values = not_parsed[column].loc[index].tolist()
 
     # Redefine ratio if exact match
     if original_values[0] == name:
