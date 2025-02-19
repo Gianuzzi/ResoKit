@@ -3,7 +3,7 @@
 
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -33,16 +33,6 @@ def zip_path():
 
 
 @pytest.fixture(scope="session")
-def skip_rows():
-    return {"nasa": 291, "eu": 0}
-
-
-@pytest.fixture(scope="session")
-def index_cols():
-    return {"nasa": ["pl_name", "hostname"], "eu": ["name", "star_name"]}
-
-
-@pytest.fixture(scope="session")
 def random_int_gen():
     def _random_int(size=1):
         rng = np.random.default_rng(seed=42)
@@ -52,11 +42,9 @@ def random_int_gen():
 
 
 @pytest.fixture(scope="session")
-def has_requests():
-    try:
-        import requests
+def db_temp_path(tmp_path_factory):
+    def make_temp_path(source="data"):
+        fn = tmp_path_factory.mktemp("tmp") / f"{source}.csv"
+        return fn
 
-        requests  # silence flake8
-        return True
-    except ImportError:
-        return False
+    return make_temp_path
