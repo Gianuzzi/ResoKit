@@ -835,6 +835,10 @@ def download(
     # Check if source is valid
     source = source.lower()  # Ensure lowercase
     if source not in _DATASET_FILENAMES:
+        if source == "binary":
+            raise ValueError(
+                "Use download_binaries to download binary datasets."
+            )
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
     # Check if something to do
@@ -2023,6 +2027,8 @@ def load_binary(
 
     return data
 
+    # check_online: bool = True,
+
 
 def download_binary(
     circumbinary: bool,
@@ -2215,6 +2221,29 @@ def download_binary(
         return zip_path
 
     return
+
+
+def update_binary(**kwargs) -> Union[Path, pd.DataFrame, None]:
+    """Update a dataset from a specified source and save it locally.
+
+    The dataset is updated from the internet and can be stored in a file,
+    a ZIP archive, in memory, and/or simply returned.
+
+    Note
+    ----
+    Requires the requests library.
+
+    Parameters
+    ----------
+    **kwargs
+        Keyword arguments to pass to the `download_binary` function.
+
+    Returns
+    -------
+    dataset : Path or pd.DataFrame or str or None
+        Updated binary dataset.
+    """
+    return download_binary(**kwargs)
 
 
 # -------------------------- MEMORY MANAGEMENT --------------------------------
