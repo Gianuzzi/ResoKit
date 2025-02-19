@@ -3501,8 +3501,10 @@ class StaticSystem:
             # Return the DataFrame if it's already calculated
             if not self.__error_ratios__.empty:
                 return self.__error_ratios__
+
             # Create an empty series
             max_P_err_P = pd.Series(data=0.0, index=pair_ratio.index)
+
             # Fill the series with the planets first
             for i, name in enumerate(self.planet_names_):
                 max_P_err_P[name] = (
@@ -3511,7 +3513,8 @@ class StaticSystem:
                         abs(self.planets[i].P_err_max),
                     )
                     / self.planets[i].P
-                )
+                ) ** 2
+
             # Add Error to binary if needed
             if self.is_binary_:
                 # Check if the star has errors
@@ -3519,16 +3522,17 @@ class StaticSystem:
                 b_P_err_max = getattr(self.star, "P_err_max", nan)
                 max_P_err_P[self.star_names_[1]] = (
                     max(abs(b_P_err_min), abs(b_P_err_max)) / self.star.P
-                )
-            # Create the DataFrame
+                ) ** 2
+
+            # Create the DataFrame sigma2
             sigma2 = pd.DataFrame(
                 data=nan, index=pair_ratio.index, columns=pair_ratio.columns
             )
             # Fill the DataFrame
             for name1 in pair_ratio.index:
                 for name2 in pair_ratio.columns:
-                    sigma2.loc[name1, name2] = sqrt(
-                        max_P_err_P[name1] ** 2 + max_P_err_P[name2] ** 2
+                    sigma2.loc[name1, name2] = (
+                        max_P_err_P[name1] + max_P_err_P[name2]
                     )
 
             # Calculate the error
