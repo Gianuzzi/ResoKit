@@ -63,7 +63,7 @@ def _search_system_index(
     raw_df : pd.DataFrame, optional. Default: None.
         Raw dataset used for the search, instead of loading it.
     alternative_names : bool, optional. Default: False.
-        Whether to search for alternative names.
+        Whether to search in the alternative names column.
     load_kwargs : dict
         Extra keyword arguments for the load function.
 
@@ -104,31 +104,32 @@ def _search_system_index(
     )
 
     # Define parsing
-    parse = True
+    parse = True  # True means name and raw_series are parsed
+    not_parsed = None  # Will be stored and parsed next time
     # Load the dataset if not in memory
-    if not alternative_names:
-        not_parsed = None  # Will be stored and parsed next time
+    # Search in the main column?
+    if not alternative_names and raw_df is not None:  # Use the raw dataset
+        raw_series = raw_df
+    elif not alternative_names:
         # Update the keyword arguments
         parsed = load_full(
             source=source,
             **{**load_kwargs, "only_index": "parsed", "verbose": False},
-        )
-        if raw_df is not None:
-            raw_series = raw_df
-        elif parsed is not None:
-            parse = None
-            raw_series = parsed
-        else:
+        )  # Load the parsed dataset (if it is in memory)
+        if parsed is not None:  # Use the parsed dataset
+            parse = None  # None mean parse only the name
+            raw_series = parsed  # Because raw_series is already parsed
+        else:  # Load the whole dataset
             raw_series = load_full(
                 source=source,
                 **load_kwargs,
             )  # Will be stored and parsed next time
         raw_series = raw_series[column]  # Get the column
-    else:
+    else:  # Search in the alternate names
         not_parsed = load_full(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
-        )
+        )  # Load the whole dataset
         raw_series = not_parsed[column].str.split(", ").explode()
 
     # Use the new function
@@ -136,19 +137,20 @@ def _search_system_index(
         raw_series, name=name, parse=parse, force=is_planet
     )
 
-    # If parse, return originals
-    if parse is not None:
-        return index, values, ratio
-
-    # If parse is None, then we have to get back the original values
+    # We have to get back the original values
+    # If parse is None, then we have to compute the non parsed
     if not_parsed is None:
         not_parsed = load_full(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )
+    # Get the original values
     original_values = not_parsed[column].loc[index].tolist()
 
-    # Redefine ratio if exact match
+    # Downgrade ratio to account for exact matches
+    ratio = ratio * 0.99
+
+    # Redefine ratio for possible exact match
     if original_values[0] == name:
         ratio = 1
 
@@ -226,7 +228,7 @@ def _load_system_from_db(
                 "Alternative names only available in ExoplanetEU dataset."
             )
         if verbose:
-            print("Searching for alternative names.")
+            print(" Searching for alternative names.")
 
     # Define the keyword arguments
     load_kwargs = {
@@ -257,10 +259,10 @@ def _load_system_from_db(
 
     auxmsg = "alternate names column of " if alternative_names else ""
     # Check if the system was found
-    if ratio < 0.99999:  # To take into account the almost 1 ratio
-        if is_planet:
+    if ratio < 0.98:  # To take into account the almost 1 ratio
+        if verbose and is_planet:
             print(f"Planet {name} not found in {auxmsg}{source} dataset.")
-        else:
+        elif verbose:
             print(f"Star {name} not found in {auxmsg}{source} dataset.")
         if ratio == 0:  # No similar names found
             return pd.DataFrame(), "n", -1  # Return an empty DataFrame
@@ -274,8 +276,9 @@ def _load_system_from_db(
 
         # Message for the most probable and others
         if verbose:
-            print(f" Similar names found in {auxmsg}{source} dataset:")
-            print(f" - {most_prob + others}")
+            if ratio > 0.5:  # Only if ratio is high enough
+                print(f" Similar names found in {auxmsg}{source} dataset:")
+                print(f" - {most_prob + others}")
 
             if source == "eu" and not alternative_names:
                 print(
