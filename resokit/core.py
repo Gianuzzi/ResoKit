@@ -3,7 +3,7 @@
 
 # This file is part of the
 #   ResoKit Project (https://github.com/Gianuzzi/resokit).
-# Copyright (c) 2024, Emmanuel Gianuzzi
+# Copyright (c) 2025, Emmanuel Gianuzzi
 # License: MIT
 #   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
 
@@ -415,7 +415,7 @@ def df_to_resokit(
     copy: bool = False,
     sort_by: Union[str, bool] = "P",
     return_df: bool = False,
-    rename_index: bool = True,
+    rename_index: bool = False,
     metadata: dict = None,
 ) -> ResokitDataFrame:
     """Convert ExoplanetEU or NASA data to :py:class:`ResokitDataFrame`.
@@ -517,7 +517,7 @@ rng = default_rng(seed=42)
 # =============================================================================
 
 
-def static_binary_star_data_validator(
+def _static_binary_star_data_validator(
     instance, attribute, data: Union[pd.Series, pd.DataFrame]
 ):
     """Validate the data for a StaticBinaryStar."""
@@ -624,7 +624,9 @@ class StaticBody(ResokitDataFrame):
     @user_defined_.default
     def _user_defined_default(self):
         """Set the default value for user_defined_."""
-        return self.source not in ["eu", "nasa"]
+        if not self.is_star:
+            return self.source not in ["eu", "nasa"]
+        return self.source not in ["eu", "nasa", "binary"]
 
     def __attrs_pre_init__(self):
         """Pre-initialization hook."""
@@ -1209,7 +1211,7 @@ class StaticBinaryStar:
         validator=attrs.validators.instance_of(StaticStar)
     )
     data: Union[pd.DataFrame, pd.Series] = attrs.field(
-        validator=static_binary_star_data_validator,
+        validator=_static_binary_star_data_validator,
         converter=lambda df: df.squeeze(),  # Convert to Series if possible
     )
 
@@ -3793,7 +3795,8 @@ class StaticSystem:
 
         """
         # Check if REBOUND is imported
-        assert_module_imported(rebound_imported, "rebound")
+        global rebound_imported
+        rebound_imported = assert_module_imported(rebound_imported, "rebound")
 
         # Create a new simulation if not provided
         if sim is None:
@@ -4153,10 +4156,13 @@ def resokit_to_system(
     # Redefine star columns to avoid "star_"
     star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
     # EXTRA: Check if the df name is number (idx from db) or a name
-    # If it's not a number, then the name is one of the planets names,
-    # and we must change it to the star name
-    if not str(star_df.name).isnumeric():
-        star_df.name = star_df["name"]
+    # If it not a number, we must change it to the star name
+    if str(star_df.name).isnumeric():
+        # Check if a binary star is provided
+        if binary_star is not None:
+            star_df.name = binary_star.name
+        else:
+            star_df.name = star_df["name"]
 
     # Message
     if verbose:
