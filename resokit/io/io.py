@@ -296,7 +296,7 @@ def _load_system_from_db(
         pl = "planet" if is_planet else "star"
         if verbose:
             print(
-                f" Found an almost exact match: {pl} {values[0]} "
+                f" Found a very close {pl} match: '{values[0]}' "
                 + f"in {auxmsg}{source} dataset."
             )
         if exact_match:  # Return an empty DataFrame
@@ -364,6 +364,7 @@ def load_system_from_eu(
     alternative_names: bool = False,
     exact_match: bool = True,
     check_binary: Union[bool, None] = False,
+    soft: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from ExoplanetEU.
 
@@ -402,6 +403,9 @@ def load_system_from_eu(
         created is a `StaticBinarySystem` instead of a `StaticSystem`.
         If `None`, the check will be performed only to print
         information (if `verbose=True`).
+    soft : bool, optional. Default: False.
+        If True, return None if the system is not found.
+        If False, raise an error if the system is not found.
 
     Returns
     -------
@@ -425,7 +429,10 @@ def load_system_from_eu(
 
     # Can't work with empty DataFrame
     if df.empty:
-        return df
+        if soft:
+            return None
+        obj = "Planet" if is_planet else "Star"
+        raise ValueError(f"{obj} {name} not found in ExoplanetEU database.")
 
     # Convert the DataFrame to ResoKit format
     # Note: Metadata is set from default values
@@ -478,6 +485,7 @@ def load_system_from_nasa(
     as_resokit: bool = False,
     exact_match: bool = True,
     check_binary: Union[bool, None] = False,
+    soft: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
     """Load system from NASA.
 
@@ -520,6 +528,9 @@ def load_system_from_nasa(
         created is a `StaticBinarySystem` instead of a `StaticSystem`.
         If `None`, the check will be performed only to print
         information (if `verbose=True`).
+    soft : bool, optional. Default: False.
+        If True, return None if the system is not found.
+        If False, raise an error if the system is not found.
 
     Returns
     -------
@@ -542,7 +553,10 @@ def load_system_from_nasa(
 
     # Check if the dataset is empty
     if df.empty:
-        return df  # Can't work with empty DataFrame
+        if soft:
+            return None
+        obj = "Planet" if is_planet else "Star"
+        raise ValueError(f"{obj} {name} not found in NASA database.")
 
     # Filter controversial data
     if controversial_set is not None:
@@ -596,7 +610,7 @@ def load_from_binary(
     name: str,
     exact_match: bool = True,
     as_pandas: bool = False,
-    soft: bool = True,
+    soft: bool = False,
     add_period: bool = True,
     verbose: bool = True,
 ) -> StaticBinaryStar:
@@ -611,7 +625,7 @@ def load_from_binary(
         If False, return the best match.
     as_pandas : bool, optional. Default is False.
         If True, return the data as a pandas DataFrame.
-    soft : bool, optional. Default is True.
+    soft : bool, optional. Default is False.
         If True, return None if the star is not found.
         If False, raise an error if the star is not found.
     add_period : bool, optional. Default is True.
@@ -624,6 +638,10 @@ def load_from_binary(
     StaticBinaryStar
         The loaded binary star system.
     """
+    # Print information
+    if verbose:
+        print(f"Looking for star system {name} in binary datasets.")
+
     # Check if the star is part of a binary system
     is_binary, circumbinary, idx, _, _ = check_if_binary(
         star_name=name, exact_match=exact_match, verbose=verbose
@@ -632,7 +650,7 @@ def load_from_binary(
     if not is_binary:
         if soft:
             return None
-        raise ValueError(f"Star {name} is not part of a binary system.")
+        raise ValueError(f"Star {name} not found in binary datasets.")
 
     # Extract the data
     row = load_binary(
