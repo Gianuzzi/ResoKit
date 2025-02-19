@@ -19,7 +19,7 @@ import resokit
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "ResoKit"
-copyright = "2024, Gianuzzi Emmanuel, Cerioni Matías"
+copyright = "2025, Gianuzzi Emmanuel, Cerioni Matías"
 author = "Gianuzzi Emmanuel, Cerioni Matías"
 release = "0.0.1"
 
