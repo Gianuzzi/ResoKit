@@ -1,0 +1,170 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# This file is part of the
+#   ResoKit Project (https://github.com/Gianuzzi/resokit).
+# Copyright (c) 2025, Emmanuel Gianuzzi
+# License: MIT
+#   Full Text: https://github.com/Gianuzzi/resokit/blob/master/LICENSE
+
+# ============================================================================
+# IMPORTS
+# ============================================================================
+
+import pytest
+
+import resokit.io as rio
+from resokit.core import StaticBinaryStar, StaticSystem
+
+# ============================================================================
+# TESTS
+# ============================================================================
+
+
+class TestLoadSystem:
+    load_function = {
+        "eu": rio.load_system_from_eu,
+        "nasa": rio.load_system_from_nasa,
+    }
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_load_system_wrong(self, source: str, capfd):
+        """Test load_system with wrong system."""
+        # Test load_system with wrong system
+        with pytest.raises(ValueError):
+            self.load_function[source](name="wrong_system", verbose=False)
+
+            # Ensure the verbose output is correct
+            out, err = capfd.readouterr()
+            assert out == ""
+            assert "Star wrong_system not found in " in err
+
+        # Now with verbose=True
+        with pytest.raises(ValueError):
+            self.load_function[source](name="wrong_system", verbose=True)
+
+            # Ensure the verbose output is correct
+            out, err = capfd.readouterr()
+            assert "Star wrong_system not found" in out
+            assert "Star wrong_system not found in " in err
+            if source == "eu":
+                assert "Note: ExoplanetEU has alternative" in out
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_load_system_wrong_soft(self, source: str, capfd):
+        """Test load_system with wrong system, soft=True."""
+        # Test load_system with wrong system
+        syst = self.load_function[source](
+            name="wrong_system", verbose=True, soft=True
+        )
+
+        # syst is a DataFrame
+        assert syst is None
+
+        # Ensure the verbose output is correct
+        out, err = capfd.readouterr()
+        assert "Star wrong_system not found" in out
+        assert err == ""
+        if source == "eu":
+            assert "Note: ExoplanetEU has alternative" in out
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_load_system_almost(self, source: str, capfd):
+        """Test load_system with almost correct system."""
+        syst = self.load_function[source](
+            name="kepler11", verbose=False, soft=True
+        )
+
+        assert syst is None
+
+        # Ensure the verbose output is correct
+        out, err = capfd.readouterr()
+        assert out == ""
+        assert err == ""
+
+        # Now with verbose=True
+        syst = self.load_function[source](
+            name="kepler11", verbose=True, soft=True
+        )
+
+        assert syst is None
+
+        # Ensure the verbose output is correct
+        out, err = capfd.readouterr()
+        assert "Looking for star system kepler11" in out
+        assert "Found a very close star match:" in out
+        assert "Execute with exact_match=False to load it" in out
+        assert err == ""
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_load_system_almost_not_exact(self, source: str):
+        """Test load_system with almost correct system."""
+        syst = self.load_function[source](name="kepler11", exact_match=False)
+
+        assert isinstance(syst, StaticSystem)
+        assert syst.n_planets_ == 6
+
+
+class TestLoadBinary:
+    def test_load_binary_wrong(self, capfd):
+        """Test load_binary with wrong system."""
+        with pytest.raises(ValueError):
+            rio.load_from_binary(name="wrong_system", verbose=False)
+
+            # Ensure the verbose output is correct
+            out, err = capfd.readouterr()
+            assert out == ""
+            assert err == "Star wrong_system not found in binary datasets."
+
+        # Now with verbose=True
+        with pytest.raises(ValueError):
+            rio.load_from_binary(name="wrong_system", verbose=True)
+
+            # Ensure the verbose output is correct
+            out, err = capfd.readouterr()
+            assert "Star wrong_system is not part " in out
+            assert err == "Star wrong_system not found in binary datasets."
+
+    def test_load_binary_wrong_soft(self, capfd):
+        """Test load_binary with wrong system, soft=True."""
+        syst = rio.load_from_binary(
+            name="wrong_system", verbose=True, soft=True
+        )
+
+        # syst is a DataFrame
+        assert syst is None
+
+        # Ensure the verbose output is correct
+        out, err = capfd.readouterr()
+        assert "Star wrong_system is not part " in out
+        assert err == ""
+
+    def test_load_binary_almost(self, capfd):
+        """Test load_binary with almost correct system."""
+        syst = rio.load_from_binary(name="kepler47", verbose=False, soft=True)
+
+        assert syst is None
+
+        # Ensure the verbose output is correct
+        out, err = capfd.readouterr()
+        assert out == ""
+        assert err == ""
+
+        # Now with verbose=True
+        syst = rio.load_from_binary(name="kepler47", verbose=True, soft=True)
+
+        assert syst is None
+
+        # Ensure the verbose output is correct
+        out, err = capfd.readouterr()
+        assert "Looking for star system kepler47" in out
+        assert "Found a very close binary match" in out
+        assert "Execute with exact_match=False to load it" in out
+        assert err == ""
+
+    def test_load_binary_almost_not_exact(self):
+        """Test load_binary with almost correct system."""
+        syst = rio.load_from_binary(name="kepler47", exact_match=False)
+
+        assert isinstance(syst, StaticBinaryStar)
+        assert syst.name == "Kepler47"
