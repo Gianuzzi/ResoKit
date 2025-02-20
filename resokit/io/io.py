@@ -133,7 +133,7 @@ def _search_system_index(
         raw_series = not_parsed[column].str.split(", ").explode()
 
     # Use the new function
-    index, values, ratio = find_best_match(
+    index, _, ratio = find_best_match(
         raw_series, name=name, parse=parse, force=is_planet
     )
 
@@ -719,6 +719,7 @@ def check_if_binary(
         ratio : float
             Ratio of the match.
     """
+    maybe = False
     for circumbinary, col in product([True, False], [0, 1]):
         # 0: star0_name, 1: alternate_name
         series = load_binary(
@@ -732,13 +733,15 @@ def check_if_binary(
             series, name=star_name, parse=True
         )
         if ratio > 0.99:  # Found a binary system
+            maybe = True
+            which = "circumbinary" if circumbinary else "circumstellar"
             if exact_match and ratio < 1:
                 if verbose:
-                    print(f" Found a very close binary match in {values}")
+                    print(f" Found a very close binary match in: {values}")
                     print(" Execute with exact_match=False to load it.")
-                continue
+                break
             if verbose:
-                print(f" Binary system found in {values}")
+                print(f" Binary system found in {values}, in {which} orbit.")
             # Check if multiple values
             if len(values) > 1:
                 # In this case, it is probable we looked in
@@ -753,5 +756,7 @@ def check_if_binary(
 
             return True, circumbinary, idx, values, ratio
     if verbose:
-        print(f"Star {star_name} is not part of a binary system.")
+        aux = "could be" if maybe else "is not"
+        print(f"Star {star_name} {aux} part of a binary system.")
+
     return False, False, "", [], 0.0
