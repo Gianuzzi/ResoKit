@@ -6,6 +6,11 @@
    :alt: Python 3.8+
 
 
+.. image:: https://github.com/Gianuzzi/ResoKit/actions/workflows/CI.yml/badge.svg
+   :target: https://github.com/Gianuzzi/ResoKit/actions/workflows/CI.yml
+   :alt: ResoKit CI
+
+
 .. image:: https://readthedocs.org/projects/resokit/badge/?version=latest
    :target: https://resokit.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
