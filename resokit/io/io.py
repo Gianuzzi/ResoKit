@@ -109,7 +109,7 @@ def _search_system_index(
     # Load the dataset if not in memory
     # Search in the main column?
     if not alternative_names and raw_df is not None:  # Use the raw dataset
-        raw_series = raw_df
+        raw_series = raw_df[column]  # Get the column
     elif not alternative_names:
         # Update the keyword arguments
         parsed = load_full(
@@ -129,7 +129,7 @@ def _search_system_index(
         not_parsed = load_full(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
-        )  # Load the whole dataset
+        )  # Load the whole dataset (worst scenario)
         raw_series = not_parsed[column].str.split(", ").explode()
 
     # Use the new function
@@ -164,7 +164,7 @@ def _load_system_from_db(
     store: bool = False,
     store_index: bool = True,
     verbose: bool = True,
-    low_memory: bool = False,
+    low_memory: bool = True,
     alternative_names: bool = False,
     exact_match: bool = False,
     check_binary: bool = True,
@@ -186,7 +186,7 @@ def _load_system_from_db(
         Automatically set to True if store is True.
     verbose : bool, optional. Default: True.
         Whether to print information.
-    low_memory : bool, optional. Default: False.
+    low_memory : bool, optional. Default: True.
         Whether to avoid loading the whole dataset into memory.
         Instead, first loads only the index,
         and then only the system data.
@@ -212,7 +212,7 @@ def _load_system_from_db(
     # Print information
     if verbose:
         print(
-            f"Looking for {'planet' if is_planet else 'star system'} {name} "
+            f"Looking for {'planet' if is_planet else 'star system'} '{name}' "
             + f"in {source} database."
         )
 
@@ -328,7 +328,7 @@ def _load_system_from_db(
         star_name_col = "star_name" if source == "eu" else "hostname"
         star_name = data[star_name_col].iloc[0]  # Get the (first) star name
         if verbose:
-            print(f"Checking if {star_name} is a binary system...")
+            print(f"Checking if '{star_name}' is a binary system...")
         is_binary, circumbinary, idxbin, values, _ = check_if_binary(
             star_name, exact_match=exact_match, verbose=verbose
         )
@@ -640,7 +640,7 @@ def load_from_binary(
     """
     # Print information
     if verbose:
-        print(f"Looking for star system {name} in binary datasets.")
+        print(f"Looking for star system '{name}' in binary datasets.")
 
     # Check if the star is part of a binary system
     is_binary, circumbinary, idx, _, _ = check_if_binary(
