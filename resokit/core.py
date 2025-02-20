@@ -1613,16 +1613,31 @@ class StaticSystem:
             else:
                 main_source = "user"
 
-        return (
-            main_source
-            if all([planet.source == main_source for planet in self.planets])
-            else "user"
+        # Create a set with the sources
+        source_set = set(
+            [main_source] + [planet.source for planet in self.planets]
         )
+
+        # Check if user
+        if "user" in source_set or len(source_set) > 2:
+            return "user"
+
+        # Check if only 1 source
+        if len(source_set) == 1:
+            return main_source
+
+        # Check if "eu" and "nasa". Only other possible case
+        if "eu" in source_set and "nasa" in source_set:
+            # This is a special case (maybe binary system)
+            return "eu_and_nasa"
+
+        # Any other case is "user"
+        return "user"
 
     @user_defined_.default
     def _user_defined__default(self):
         """Set the default value for user_defined_."""
-        return self.source_ not in ["eu", "nasa"]
+        return self.source_ not in ["eu", "nasa", "eu_and_nasa"]  # Special
 
     @star_names_.default
     def _star_names__default(self):
@@ -4179,7 +4194,7 @@ def resokit_to_system(
 
     # Message
     if verbose:
-        print(f"Creating system {star_df.name}.")
+        print(f"Creating system '{star_df.name}'.")
 
     # Create star
     star = _create_static_star(
@@ -4190,7 +4205,7 @@ def resokit_to_system(
     # Create binary star only if needed
     if binary_star is None:
         if verbose:
-            print(f" Star {star.name} created.")
+            print(f" Star '{star.name}' created.")
     else:
         binary = _create_static_binary_star_from_binaries(
             star0=star,  # Star0 is the one from the Resokit data
@@ -4201,7 +4216,7 @@ def resokit_to_system(
         )
         star = binary
         if verbose:
-            print(f" Using binary star {star.name}.")
+            print(f" Using binary star '{star.name}'.")
 
     # Create Planets
     if resokit_data.n_objects_ > 1:  # Multiple planets
