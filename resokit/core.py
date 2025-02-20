@@ -845,7 +845,7 @@ class StaticPlanet(StaticBody):
         self,
         new_planet: bool = False,
         **kwargs,
-    ) -> float:
+    ) -> Union[float, Tuple[float, float, float], 'StaticPlanet']:
         r"""Calculate the mass of the planet using a power-law approximation.
 
         Equation:
@@ -900,23 +900,22 @@ class StaticPlanet(StaticBody):
             **kwargs,
         )
 
-        # Convert mass to Jupiter masses
+        # Convert mass and errors to Jupiter masses
         mass = mass * Me2Mj
-
-        # Return?
-        if not ret_err:
-            return mass
-
-        # Convert errors to Jupiter masses
         mass_err_min = mass_err_min * Me2Mj
         mass_err_max = mass_err_max * Me2Mj
 
         # Return a new planet?
         if new_planet:
             new = self.set_attr("mass", mass)
-            new = new.set_attr("mass_err_min", mass_err_min)
-            new = new.set_attr("mass_err_max", mass_err_max)
+            if ret_err:
+                new = new.set_attr("mass_err_min", mass_err_min)
+                new = new.set_attr("mass_err_max", mass_err_max)
             return new
+
+        # Return
+        if not ret_err:
+            return mass
 
         return mass, mass_err_min, mass_err_max
 
@@ -924,7 +923,7 @@ class StaticPlanet(StaticBody):
         self,
         new_planet: bool = False,
         **kwargs,
-    ) -> Tuple[float, float, float]:
+    ) -> Union[float, Tuple[float, float, float], 'StaticPlanet']:
         r"""Calculate the radius of a planet using a power-law approximation.
 
         Equation:
@@ -980,23 +979,22 @@ class StaticPlanet(StaticBody):
             **kwargs,
         )
 
-        # Convert radius to Jupiter radii
+        # Convert radius and errors to Jupiter radii
         radius = radius * Re2Rj
-
-        # Return?
-        if not ret_err:
-            return radius
-
-        # Convert errors to Jupiter radii
         radius_err_min = radius_err_min * Re2Rj
         radius_err_max = radius_err_max * Re2Rj
 
         # Return a new planet?
         if new_planet:
             new = self.set_attr("radius", radius)
-            new = new.set_attr("radius_err_min", radius_err_min)
-            new = new.set_attr("radius_err_max", radius_err_max)
+            if ret_err:
+                new = new.set_attr("radius_err_min", radius_err_min)
+                new = new.set_attr("radius_err_max", radius_err_max)
             return new
+        
+        # Return
+        if not ret_err:
+            return radius
 
         return radius, radius_err_min, radius_err_max
 
@@ -1466,8 +1464,11 @@ class StaticBinaryStar:
         # Select and modify the star
         stars[star_index] = stars[star_index].set_attr(attr, value)
 
-        # Also, change the star source
-        stars[star_index] = stars[star_index].set_attr("source", "user")
+        # Also, change the star source. This has to be manually done
+        if stars[star_index].source != "user":
+            stars[star_index] = attrs.evolve(
+                stars[star_index], source="user"
+            )
 
         # And modify the metadata too
         new_metadata = dict(stars[star_index].metadata)
@@ -2382,7 +2383,7 @@ class StaticSystem:
         deep_estimate: bool = False,
         force: bool = False,
         new_system: bool = False,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
         r"""Estimate the period of selected planets in the system.
 
         Calculate the period of the planet using the third Kepler's law.
@@ -2462,7 +2463,7 @@ class StaticSystem:
         deep_estimate: bool = False,
         force: bool = False,
         new_system: bool = False,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
         r"""Estimate the semi-major axis of selected planets in the system.
 
         Equation:
@@ -2539,7 +2540,7 @@ class StaticSystem:
         force: bool = False,
         new_system: bool = False,
         **kwargs,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
         r"""Estimate the mass of selected planets in the system.
 
         Equation:
@@ -2669,7 +2670,7 @@ class StaticSystem:
         force: bool = False,
         new_system: bool = False,
         **kwargs,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
         r"""Estimate the radius of selected planets in the system.
 
         Equation:
@@ -2801,7 +2802,7 @@ class StaticSystem:
         jacobi: bool = False,
         deep_estimate: bool = False,
         circular: bool = False,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame]:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
         r"""Calculate the Hill radius of selected planets in the system.
 
         Equation:
@@ -3276,8 +3277,9 @@ class StaticSystem:
         index = self.planet(index, only_index=True)
         old_name = self.planets[index].name
 
-        # Edit the source of the new planet
-        planet = planet.set_attr("source", "user")
+        # Check the source of new planet. If it's not from the user, set it.
+        if planet.source != "user":
+            planet = attrs.evolve(planet, source="user")
 
         # Create a new list of planets
         new_planets = self.planets.copy()
