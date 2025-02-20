@@ -845,7 +845,7 @@ class StaticPlanet(StaticBody):
         self,
         new_planet: bool = False,
         **kwargs,
-    ) -> Union[float, Tuple[float, float, float], 'StaticPlanet']:
+    ) -> Union[float, Tuple[float, float, float], "StaticPlanet"]:
         r"""Calculate the mass of the planet using a power-law approximation.
 
         Equation:
@@ -923,7 +923,7 @@ class StaticPlanet(StaticBody):
         self,
         new_planet: bool = False,
         **kwargs,
-    ) -> Union[float, Tuple[float, float, float], 'StaticPlanet']:
+    ) -> Union[float, Tuple[float, float, float], "StaticPlanet"]:
         r"""Calculate the radius of a planet using a power-law approximation.
 
         Equation:
@@ -991,7 +991,7 @@ class StaticPlanet(StaticBody):
                 new = new.set_attr("radius_err_min", radius_err_min)
                 new = new.set_attr("radius_err_max", radius_err_max)
             return new
-        
+
         # Return
         if not ret_err:
             return radius
@@ -1466,9 +1466,7 @@ class StaticBinaryStar:
 
         # Also, change the star source. This has to be manually done
         if stars[star_index].source != "user":
-            stars[star_index] = attrs.evolve(
-                stars[star_index], source="user"
-            )
+            stars[star_index] = attrs.evolve(stars[star_index], source="user")
 
         # And modify the metadata too
         new_metadata = dict(stars[star_index].metadata)
@@ -2383,7 +2381,7 @@ class StaticSystem:
         deep_estimate: bool = False,
         force: bool = False,
         new_system: bool = False,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, "StaticSystem"]:
         r"""Estimate the period of selected planets in the system.
 
         Calculate the period of the planet using the third Kepler's law.
@@ -2463,7 +2461,7 @@ class StaticSystem:
         deep_estimate: bool = False,
         force: bool = False,
         new_system: bool = False,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, "StaticSystem"]:
         r"""Estimate the semi-major axis of selected planets in the system.
 
         Equation:
@@ -2540,7 +2538,7 @@ class StaticSystem:
         force: bool = False,
         new_system: bool = False,
         **kwargs,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, "StaticSystem"]:
         r"""Estimate the mass of selected planets in the system.
 
         Equation:
@@ -2670,7 +2668,7 @@ class StaticSystem:
         force: bool = False,
         new_system: bool = False,
         **kwargs,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, "StaticSystem"]:
         r"""Estimate the radius of selected planets in the system.
 
         Equation:
@@ -2802,7 +2800,7 @@ class StaticSystem:
         jacobi: bool = False,
         deep_estimate: bool = False,
         circular: bool = False,
-    ) -> Union[Tuple[float, float, float], pd.DataFrame, 'StaticSystem']:
+    ) -> Union[Tuple[float, float, float], pd.DataFrame, "StaticSystem"]:
         r"""Calculate the Hill radius of selected planets in the system.
 
         Equation:
