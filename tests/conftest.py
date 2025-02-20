@@ -15,7 +15,26 @@ import pathlib
 
 import numpy as np
 
+from pandas import DataFrame, Series
+
 import pytest
+
+# ============================================================================
+# CONSTANTS
+# ============================================================================
+
+default_ss = Series(data=[1, 2, 3])
+default_df = DataFrame(data=[[1, 2, 3], [4, 5, 6]])
+
+# ============================================================================
+# CONFIG
+# ============================================================================
+
+
+def pytest_configure(config):
+    pytest.default_ss = default_ss
+    pytest.default_df = default_df
+
 
 # ============================================================================
 # FIXTURES
@@ -48,3 +67,39 @@ def db_temp_path(tmp_path_factory):
         return fn
 
     return make_temp_path
+
+
+@pytest.fixture(scope="session")
+def mock_in_mem(session_mocker):
+    # Define def ss and df
+    def _mock_in_mem(which="all"):
+        if which == "index":
+            # Mock the variables
+            session_mocker.patch(
+                "resokit.datasets.databases._IN_MEMORY_INDEXES",
+                {"eu": default_ss, "nasa": default_ss},
+            )
+        elif which == "parsed":
+            # Mock the variables
+            session_mocker.patch(
+                "resokit.datasets.databases._IN_MEMORY_PARSED_INDEXES",
+                {"eu": default_ss, "nasa": default_ss},
+            )
+        elif which == "data":
+            session_mocker.patch(
+                "resokit.datasets.databases._IN_MEMORY_DATASETS",
+                {"eu": default_df, "nasa": default_df},
+            )
+        elif which == "fully":
+            session_mocker.patch(
+                "resokit.datasets.databases._IS_FULLY_STORED",
+                {"eu": True, "nasa": True},
+            )
+        elif which == "all":
+            _mock_in_mem(which="index")
+            _mock_in_mem(which="data")
+            _mock_in_mem(which="fully")
+        else:
+            raise ValueError(f"which={which} not recognized.")
+
+    return _mock_in_mem

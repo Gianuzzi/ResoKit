@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 import pytest
+from pytest import default_df, default_ss
 
 from resokit.datasets import databases, utils
 from resokit.utils.parser import assert_module_imported
@@ -47,24 +48,21 @@ class TestPath:
 
 class TestClearMemory:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_clear_memory(self, source: str):
+    def test_clear_memory(self, source: str, mock_in_mem):
         """Test the clear_memory function."""
-        # Load the dataset
-        databases.load_full(
-            source=source, store_index=True, store=True, verbose=False
-        )
-
-        # Check if the dictionary of the indexes is not empty
-        assert databases._IN_MEMORY_INDEXES[source] is not None
-
-        # Check if the dictionary of the datasets is not empty
-        assert not databases._IN_MEMORY_DATASETS[source].empty
-
-        # Check if the variable _IS_FULLY_STORED is True
-        assert databases._IS_FULLY_STORED[source]
+        # Mock the variables
+        mock_in_mem(which="all")
 
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
+
+        # Assert the type of the new objects
+        assert isinstance(
+            databases._IN_MEMORY_INDEXES[source], databases.ResoKitDataset
+        )
+        assert isinstance(
+            databases._IN_MEMORY_DATASETS[source], databases.ResoKitDataset
+        )
 
         # Check if the dictionary of the indexes is empty
         assert databases._IN_MEMORY_INDEXES[source].empty
@@ -74,6 +72,50 @@ class TestClearMemory:
 
         # Check if the variable _IS_FULLY_STORED is False
         assert databases._IS_FULLY_STORED[source] is False
+
+        # Check the other source is not touched
+        other = "eu" if source == "nasa" else "nasa"
+        pd.testing.assert_series_equal(
+            databases._IN_MEMORY_INDEXES[other], default_ss
+        )
+        pd.testing.assert_frame_equal(
+            databases._IN_MEMORY_DATASETS[other], default_df
+        )
+        assert databases._IS_FULLY_STORED[other]
+
+    def test_clear_memory_both(self, mock_in_mem):
+        """Test the clear_memory function with both sources."""
+        # Mock the variables
+        mock_in_mem(which="all")
+
+        # Clear the memory
+        databases.clear_memory(source="both", verbose=False)
+
+        # Assert the type of the new objects
+        assert isinstance(
+            databases._IN_MEMORY_INDEXES["eu"], databases.ResoKitDataset
+        )
+        assert isinstance(
+            databases._IN_MEMORY_DATASETS["eu"], databases.ResoKitDataset
+        )
+        assert isinstance(
+            databases._IN_MEMORY_INDEXES["nasa"], databases.ResoKitDataset
+        )
+        assert isinstance(
+            databases._IN_MEMORY_DATASETS["nasa"], databases.ResoKitDataset
+        )
+
+        # Check if the dictionary of the indexes is empty
+        assert databases._IN_MEMORY_INDEXES["eu"].empty
+        assert databases._IN_MEMORY_INDEXES["nasa"].empty
+
+        # Check if the dictionary of the datasets is empty
+        assert databases._IN_MEMORY_DATASETS["eu"].empty
+        assert databases._IN_MEMORY_DATASETS["nasa"].empty
+
+        # Check if the variable _IS_FULLY_STORED is False
+        assert databases._IS_FULLY_STORED["eu"] is False
+        assert databases._IS_FULLY_STORED["nasa"] is False
 
 
 class TestLoadDataset:
@@ -157,7 +199,7 @@ class TestLoadDataset:
         pd.testing.assert_frame_equal(data.dataset, data2.dataset)
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_store(self, source: str):
+    def test_load_store(self, source: str, mocker):
         """Test the load function with the in-memory cache features.
 
         - Test if nothing is saved. (store_index=False)
@@ -167,9 +209,6 @@ class TestLoadDataset:
         """
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
-
-        # Ensure correct zip name
-        utils.ZIP_FILENAME = "datasets.zip"
 
         # Index columns saved
         if source == "nasa":
@@ -235,8 +274,8 @@ class TestLoadDataset:
         # The datasets is loaded from the cache if saved
         # -------------------------------------------------------------------
 
-        # Temporarily change the path of the zip file
-        utils.ZIP_FILENAME = "wrong.zip"
+        # Mock the zip file
+        mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "wrong.zip")
 
         # Load the dataset again
         data2 = databases.load_full(
@@ -250,7 +289,7 @@ class TestLoadDataset:
         pd.testing.assert_frame_equal(data.dataset, data2.dataset)
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_only_index(self, source: str):
+    def test_load_only_index(self, source: str, mocker):
         """Test the load function with the only_index parameter.
 
         - Test if only the indexes are loaded. (only_index=True)
@@ -258,9 +297,6 @@ class TestLoadDataset:
         """
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
-
-        # Ensure correct zip name
-        utils.ZIP_FILENAME = "datasets.zip"
 
         # -------------------------------------------------------------------
         # Only the indexes are loaded. (only_index=True)
@@ -282,8 +318,8 @@ class TestLoadDataset:
         # The indexes are loaded from the cache if saved
         # -------------------------------------------------------------------
 
-        # Temporarily change the path of the zip file
-        utils.ZIP_FILENAME = "wrong.zip"
+        # Mock the zip file
+        mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "wrong.zip")
 
         # Load the dataset again
         index2 = databases.load_full(
@@ -298,7 +334,7 @@ class TestLoadDataset:
 
     # @pytest.mark.parametrize("random_seed", random_int(2))
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_only_rows(self, random_int_gen: int, source: str):
+    def test_load_only_rows(self, random_int_gen: int, source: str, mocker):
         """Test the load function with the only_rows parameter.
 
         - Test ValueError if True. (only_rows=True)
@@ -309,9 +345,6 @@ class TestLoadDataset:
         """
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
-
-        # Ensure correct zip name
-        utils.ZIP_FILENAME = "datasets.zip"
 
         # Get the dataset
         data = databases.load_full(
@@ -385,8 +418,8 @@ class TestLoadDataset:
             row1.dataset, databases._IN_MEMORY_DATASETS[source].dataset
         )
 
-        # Temporarily change the path of the zip file
-        utils.ZIP_FILENAME = "wrong.zip"
+        # Mock the zip file
+        mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "wrong.zip")
 
         # Load with only_rows
         row2 = databases.load_full(
@@ -406,8 +439,8 @@ class TestLoadDataset:
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
 
-        # Ensure correct zip name
-        utils.ZIP_FILENAME = "datasets.zip"
+        # Reset the zip file
+        mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "datasets.zip")
 
         # Load the dataset
         with pytest.raises(ValueError):

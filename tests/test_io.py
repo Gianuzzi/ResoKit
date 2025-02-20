@@ -15,6 +15,7 @@ import pytest
 
 import resokit.io as rio
 from resokit.core import StaticBinaryStar, StaticSystem
+from resokit.datasets import databases
 
 # ============================================================================
 # TESTS
@@ -89,7 +90,7 @@ class TestLoadSystem:
 
         # Ensure the verbose output is correct
         out, err = capfd.readouterr()
-        assert "Looking for star system kepler11" in out
+        assert "Looking for star system 'kepler11'" in out
         assert "Found a very close star match:" in out
         assert "Execute with exact_match=False to load it" in out
         assert err == ""
@@ -101,6 +102,129 @@ class TestLoadSystem:
 
         assert isinstance(syst, StaticSystem)
         assert syst.n_planets_ == 6
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_load_store_system(self, source: str, mocker):
+        """Test load_system and store_system."""
+        # Assert nothing is pre-stored
+        databases.clear_memory("both", verbose=False)
+
+        # -----------------------------------
+        # Store nothing
+        # -----------------------------------
+
+        # Load the system
+        syst = self.load_function[source](
+            name="kepler11",
+            verbose=False,
+            exact_match=False,
+            store_index=False,
+            store=False,
+        )
+
+        # Assert the system is loaded
+        assert isinstance(syst, StaticSystem)
+        assert syst.n_planets_ == 6
+
+        # Assert nothing is stored
+        assert databases._IN_MEMORY_DATASETS[source].empty
+        assert databases._IN_MEMORY_INDEXES[source].empty
+        assert not databases._IS_FULLY_STORED[source]
+
+        # -----------------------------------
+        # Store the index
+        # -----------------------------------
+
+        # Load the system and store the index
+        syst = self.load_function[source](
+            name="kepler11",
+            verbose=False,
+            exact_match=False,
+            store_index=True,
+            store=False,
+        )
+
+        # Assert the system is loaded
+        assert isinstance(syst, StaticSystem)
+        assert syst.n_planets_ == 6
+
+        # Assert just the index is stored
+        assert databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IN_MEMORY_INDEXES[source].empty
+        assert not databases._IS_FULLY_STORED[source]
+
+        # Clear the memory
+        databases.clear_memory("both", verbose=False)
+
+        # -----------------------------------
+        # Store the whole dataset
+        # -----------------------------------
+
+        # Load the system and store the whole dataset
+        syst = self.load_function[source](
+            name="kepler11",
+            verbose=False,
+            exact_match=False,
+            store_index=False,
+            store=True,
+        )
+
+        # Assert the system is loaded
+        assert isinstance(syst, StaticSystem)
+        assert syst.n_planets_ == 6
+
+        # Assert the whole dataset is stored (The index too)
+        assert not databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IN_MEMORY_INDEXES[source].empty
+        assert databases._IS_FULLY_STORED[source]
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_load_from_stored(self, source: str, mocker):
+        """Test load_system with stored datasets."""
+        # Assert nothing is pre-stored
+        databases.clear_memory("both", verbose=False)
+
+        # Load the system and store the whole dataset
+        syst = self.load_function[source](
+            name="kepler11",
+            verbose=False,
+            exact_match=False,
+            store_index=False,
+            store=True,
+        )
+
+        # Assert the system is loaded
+        assert isinstance(syst, StaticSystem)
+        assert syst.n_planets_ == 6
+
+        # Assert the whole dataset is stored (The index too)
+        assert not databases._IN_MEMORY_DATASETS[source].empty
+        assert not databases._IN_MEMORY_INDEXES[source].empty
+        assert databases._IS_FULLY_STORED[source]
+
+        # -----------------------------------
+        # Read from the stored dataset
+        # -----------------------------------
+
+        # Mock the zip_path
+        mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "wrong_name")
+
+        # Load a second system
+        syst = self.load_function[source](
+            name="kepler47",
+            verbose=False,
+            exact_match=False,
+            store_index=False,
+            store=True,
+            low_memory=True,
+        )
+
+        # Assert the system is loaded
+        assert isinstance(syst, StaticSystem)
+        assert syst.n_planets_ == 3
+
+        # Clear the memory
+        databases.clear_memory("both", verbose=False)
 
 
 class TestLoadBinary:
@@ -153,7 +277,7 @@ class TestLoadBinary:
 
         # Ensure the verbose output is correct
         out, err = capfd.readouterr()
-        assert "Looking for star system kepler47" in out
+        assert "Looking for star system 'kepler47'" in out
         assert "Found a very close binary match" in out
         assert "Execute with exact_match=False to load it" in out
         assert err == ""
