@@ -532,6 +532,10 @@ class TestDownloadDataset:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_download_n_requests(self, source: str, mocker):
         """Test the download function when requests is not installed."""
+
+        # Clear the memory
+        databases.clear_memory(source=source, verbose=False)
+
         # Mock the requests_imported variable of resokit
         mocker.patch("resokit.datasets.utils.requests_imported", False)
 

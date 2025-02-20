@@ -31,24 +31,22 @@ class TestLoadSystem:
     def test_load_system_wrong(self, source: str, capfd):
         """Test load_system with wrong system."""
         # Test load_system with wrong system
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Star wrong_system not found in"):
             self.load_function[source](name="wrong_system", verbose=False)
 
-            # Ensure the verbose output is correct
-            out, err = capfd.readouterr()
-            assert out == ""
-            assert "Star wrong_system not found in " in err
+        # Ensure the verbose output is correct
+        out, _ = capfd.readouterr()
+        assert out == ""
 
         # Now with verbose=True
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Star wrong_system not found in"):
             self.load_function[source](name="wrong_system", verbose=True)
 
-            # Ensure the verbose output is correct
-            out, err = capfd.readouterr()
-            assert "Star wrong_system not found" in out
-            assert "Star wrong_system not found in " in err
-            if source == "eu":
-                assert "Note: ExoplanetEU has alternative" in out
+        # Ensure the verbose output is correct
+        out, _ = capfd.readouterr()
+        assert "Star wrong_system not found" in out
+        if source == "eu":
+            assert "Note: ExoplanetEU has alternative" in out
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_load_system_wrong_soft(self, source: str, capfd):
@@ -108,22 +106,20 @@ class TestLoadSystem:
 class TestLoadBinary:
     def test_load_binary_wrong(self, capfd):
         """Test load_binary with wrong system."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Star wrong_system not found"):
             rio.load_from_binary(name="wrong_system", verbose=False)
-
-            # Ensure the verbose output is correct
-            out, err = capfd.readouterr()
-            assert out == ""
-            assert err == "Star wrong_system not found in binary datasets."
+        # Capture the output
+        out, _ = capfd.readouterr()
+        # Ensure the verbose output is correct
+        assert out == ""
 
         # Now with verbose=True
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Star wrong_system not found"):
             rio.load_from_binary(name="wrong_system", verbose=True)
 
-            # Ensure the verbose output is correct
-            out, err = capfd.readouterr()
-            assert "Star wrong_system is not part " in out
-            assert err == "Star wrong_system not found in binary datasets."
+        # Ensure the verbose output is correct
+        out, _ = capfd.readouterr()
+        assert "Star wrong_system is not part " in out
 
     def test_load_binary_wrong_soft(self, capfd):
         """Test load_binary with wrong system, soft=True."""
