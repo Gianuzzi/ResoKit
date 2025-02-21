@@ -443,7 +443,7 @@ class TestLoadDataset:
         mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "datasets.zip")
 
         # Load the dataset
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError), pytest.warns(UserWarning):
             databases.load_full(
                 source=source, only_rows=bad_row, store=False, verbose=False
             )
@@ -461,6 +461,18 @@ class TestLoadDataset:
         # Check if the data is empty
         assert data3.empty
         assert data3.shape == (0, row2.shape[1])
+
+        # Load a dataset with good and bad rows
+        with pytest.warns(UserWarning):
+            data4 = databases.load_full(
+                source=source,
+                only_rows=[good_row] + [bad_row],
+                store=False,
+                verbose=False,
+            )
+
+        # Check if the data has the good rows
+        pd.testing.assert_frame_equal(data1.dataset, data4.dataset)
 
 
 class TestCheckFileAge:
