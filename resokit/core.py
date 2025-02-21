@@ -47,7 +47,6 @@ from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.parser import (
     DEFAULT_METADATA,
     MAPPINGS,
-    RESO_DTYPES,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
@@ -206,6 +205,18 @@ class ResokitDataFrame:
     def __dir__(self):
         """dir(pdf) <==> pdf.__dir__()."""
         return super().__dir__() + dir(self.data)
+
+    def __eq__(self, other):
+        """X == Y <==> X.__eq__(Y)."""
+        if id(self) == id(other):
+            return True
+        if not isinstance(other, ResokitDataFrame):
+            return False
+        if not self.data.equals(other.data):
+            return False
+        if self.source != other.source:
+            return False
+        return True
 
     def __getattr__(self, a):
         """getattr(x, y) <==> x.__getattr__(y) <==> getattr(x, y)."""
@@ -647,6 +658,25 @@ class StaticBody(ResokitDataFrame):
         parent_attrs = super().__dir__()  # Get superclass attributes
         return sorted(set(instance_attrs + parent_attrs))  # Remove duplicates
 
+    def __eq__(self, other: "StaticBody"):
+        """X == Y <==> X.__eq__(Y)."""
+        if id(self) == id(other):
+            return True
+        if not isinstance(other, StaticBody):
+            return False
+        if not self.data.equals(other.data):
+            return False
+        for attr in [
+            "is_star",
+            "name",
+            "suffix_",
+            "web_page",
+            "user_defined_",
+        ]:
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+        return True
+
     def __repr__(self, cls_name: str = "StaticBody"):
         """repr(x) <=> x.__repr__()."""
         text = f"{cls_name} '{self.name}'"
@@ -799,6 +829,12 @@ class StaticPlanet(StaticBody):
     def __repr__(self, cls_name="StaticPlanet"):
         """repr(x) <=> x.__repr__()."""
         return super().__repr__(cls_name)
+
+    def __eq__(self, other: "StaticPlanet"):
+        """X == Y <==> X.__eq__(Y)."""
+        if not isinstance(other, StaticPlanet):
+            return False
+        return super().__eq__(other)
 
     def get_item(
         self,
@@ -1112,6 +1148,12 @@ class StaticStar(StaticBody):
         instance_attrs = list(self.__dict__.keys())  # Get self attributes
         parent_attrs = super().__dir__()  # Get superclass attributes
         return sorted(set(instance_attrs + parent_attrs))  # Remove duplicates
+
+    def __eq__(self, other: "StaticStar"):
+        """X == Y <==> X.__eq__(Y)."""
+        if not isinstance(other, StaticStar):
+            return False
+        return super().__eq__(other)
 
     def plot(
         self,
@@ -1835,6 +1877,17 @@ class StaticSystem:
             return item in self.planets
         return False
 
+    def __eq__(self, other: "StaticSystem"):
+        """X == Y <==> X.__eq__(Y)."""
+        if not isinstance(other, StaticSystem):
+            return False
+        if not (self.star == other.star and self.planets == other.planets):
+            return False
+        for attr in ["name", "is_circumbinary"]:
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+        return True
+
     def body(
         self,
         indices: Union[int, str, Iterable[Union[int, str]]],
@@ -2070,14 +2123,11 @@ class StaticSystem:
 
         # Check if error is requested
         if error:
-            items_with_error = [
+            items = [
                 item
                 for item in items
                 for item in (item, f"{item}_err_min", f"{item}_err_max")
-            ]
-            items = [
-                item for item in items_with_error if item in RESO_DTYPES.keys()
-            ]
+            ]  # x --> x, x_err_min, x_err_max
 
         # Get single item
         if len(items) == 1:
