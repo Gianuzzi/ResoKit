@@ -388,9 +388,9 @@ def otegi_2020_radius(
                 stacklevel=2,
             )
         # Both branches are valid.
-        if not isinstance(bivariate, (int, float)):
-            raise ValueError("Bivariate must be a number between 0 and 1.")
-        if bivariate < 0 or bivariate > 1:
+        if not isinstance(bivariate, (int, float)) or (
+            bivariate < 0 or bivariate > 1
+        ):
             raise ValueError("Bivariate must be a number between 0 and 1.")
 
         if np.random.rand() < bivariate:  # Use first branch
@@ -505,9 +505,9 @@ def otegi_2020_mass(
                 stacklevel=2,
             )
         # Both branches are valid.
-        if not isinstance(bivariate, (int, float)):
-            raise ValueError("Bivariate must be a number between 0 and 1.")
-        if bivariate < 0 or bivariate > 1:
+        if not isinstance(bivariate, (int, float)) or (
+            bivariate < 0 or bivariate > 1
+        ):
             raise ValueError("Bivariate must be a number between 0 and 1.")
 
         if np.random.rand() < bivariate:  # Use first branch
@@ -871,7 +871,9 @@ def estimate_mass_single(
             radius, bivariate=multivariate, silent=silent
         )
     else:
-        raise ValueError("Model not implemented.")
+        raise ValueError(
+            f"Model {model} not implemented. Use 'ck17', 'o20', 'e23' or 'm24'."
+        )
 
     # Calculate the mass error
     if err_method == 0:
@@ -974,7 +976,9 @@ def estimate_radius_single(
     elif model == "m24":
         radius, c, s, x0 = muller_2024_radius(mass)
     else:
-        raise ValueError("Model not implemented.")
+        raise ValueError(
+            f"Model {model} not implemented. Use 'ck17', 'o20', 'e23' or 'm24'."
+        )
 
     # Calculate the radius error
     if err_method == 0:
@@ -1166,7 +1170,7 @@ def estimate_mass(
     radius_err_min: Union[float, np.ndarray] = 0.0,
     radius_err_max: Union[float, np.ndarray] = 0.0,
     model: str = "ck17",
-    multivariate: Union[float, tuple, list] = (0.1, 0.85),
+    multivariate: Union[float, tuple, list] = None,
     err_method: int = -1,
     density: float = 0.0,
     silent: bool = False,
@@ -1194,9 +1198,10 @@ def estimate_mass(
         Probability of using the (first, second, ...) branch if the estimation
         falls in a multivariate region.
         For bivariate models ('o20', 'm24'), it must be a float between
-        0 and 1.
+        0 and 1. Default is 0.5.
         For trivariate model "ck17", it must be a tuple of two floats between
-        0 and 1, where the sum of them must be lower equal than 1.
+        0 and 1, where the sum of them must be lower equal than 1. Default is
+        (0.1, 0.85).
     err_method : int, optional. Default: -1
         Which method implement for error calculation.
         Method -1: Do not calculate errors. Return only the mass.
@@ -1225,6 +1230,11 @@ def estimate_mass(
         If `err_method=0`, the tuple | array is (mass, 0.0, 0.0).
     """
     err_method_aux = 0 if err_method == -1 else err_method
+    if multivariate is None:  # Set default values
+        if model == "ck17":
+            multivariate = (0.1, 0.85)
+        else:
+            multivariate = 0.5
     if isinstance(radius, (int, float)):
         mass, mass_err_min, mass_err_max = estimate_mass_single(
             radius=radius,
