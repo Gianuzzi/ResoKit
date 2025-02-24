@@ -510,6 +510,78 @@ class TestCheckFileAge:
             )
 
 
+class TestDatasetClass:
+    dataset_eu = databases.load_eu(verbose=False)
+    dataset_nasa = databases.load_nasa(verbose=False)
+    dataset_dict = {"eu": dataset_eu, "nasa": dataset_nasa}
+
+    def test_dataset_eq(self):
+        """Test the __eq__ method of the ResoKitDataset class."""
+        assert self.dataset_eu == self.dataset_eu
+        assert self.dataset_nasa == self.dataset_nasa
+        assert self.dataset_eu != self.dataset_nasa
+
+        # Check with datasets and dfs
+        assert self.dataset_eu == self.dataset_eu.dataset
+        assert self.dataset_nasa == self.dataset_nasa.dataset
+        assert self.dataset_eu != self.dataset_nasa
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    def test_dataset_copy(self, source):
+        """Test the copy method of the ResoKitDataset class."""
+        data = self.dataset_dict[source]
+        data2 = data.copy()
+
+        # Check if the data is equal, but different id
+        assert data == data2
+        assert id(data) != id(data2)
+
+    def test_to_dict(self):
+        """Test the to_dict method of the ResoKitDataset class."""
+        data_dict = self.dataset_eu.to_dict()
+
+        # Assert is Metadata
+        assert isinstance(data_dict, dict)
+
+        # Assert the content
+        assert data_dict["author_email"] == "egianuzzi@unc.edu.ar"
+        assert data_dict["author"] == "Emmanuel Gianuzzi"
+
+    @pytest.mark.parametrize(
+        "item", ["mass", "radius", ["mass", "radius"], "bad_item"]
+    )
+    def test_getitem(self, item):
+        """Test the __getitem__ method of the ResoKitDataset class."""
+        if item == "bad_item":
+            with pytest.raises(KeyError):
+                data = self.dataset_eu[item]
+            return
+
+        data = self.dataset_eu[item]
+
+        # Check if the data is a Series
+        assert isinstance(data, databases.ResoKitDataset)
+
+        assert len(data.dataset) == len(self.dataset_eu.dataset)
+
+        # Check the length
+        if isinstance(item, list):
+            assert data.shape[1] == 2
+            assert data.columns.tolist() == item
+        else:
+            assert data.shape[1] == 1
+            assert data.columns[0] == item
+
+    def test_dataset_eq_single_value(self):
+        """Test the __eq__ method with a single value."""
+        # get the known data
+        disc_method = self.dataset_eu["disc_method"]
+        transit = disc_method == "transit"
+        amount = transit.sum().values[0]
+
+        assert amount == 4507  # Known value
+
+
 class TestDownloadDataset:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_download_y_requests(self, source: str, db_temp_path: str):
