@@ -420,7 +420,7 @@ _IN_MEMORY_BINARIES = {
 # --------------------------- EU AND NASA DATASETS ----------------------------
 
 
-def df_to_dataset(
+def _df_to_dataset(
     df: pd.DataFrame,
     source: str,
     age: int = -1,
@@ -565,7 +565,7 @@ def _update_stored_dataset(
         new_index = new_df[_INDEX_COLUMNS[source]].copy()
 
         # Update the index. ONLY IF FULL READED THE INDEX
-        _IN_MEMORY_INDEXES[source] = df_to_dataset(
+        _IN_MEMORY_INDEXES[source] = _df_to_dataset(
             new_index,
             source=source,
             age=age,
@@ -599,7 +599,7 @@ def _update_stored_dataset(
     # Check if is fully stored
     if is_full or _IN_MEMORY_DATASETS[source].dataset.empty:
         # Update the stored dataset
-        _IN_MEMORY_DATASETS[source] = df_to_dataset(
+        _IN_MEMORY_DATASETS[source] = _df_to_dataset(
             new_df,
             source=source,
             age=age,
@@ -699,7 +699,7 @@ def _update_stored_dataset(
         meta_old.update(metadata)
 
     # Update the dataset
-    _IN_MEMORY_DATASETS[source] = df_to_dataset(
+    _IN_MEMORY_DATASETS[source] = _df_to_dataset(
         updated_df,
         source=source,
         age=max(age_old, age),
@@ -972,7 +972,7 @@ def download(
 
     # Return the data
     if to_resokit is not None:
-        return df_to_dataset(
+        return _df_to_dataset(
             df,
             source=source,
             age=0,
@@ -1117,7 +1117,7 @@ def _load_stored_full(
     if not to_df:  # Return as a ResoKitDataset
         if sort:
             sortd = _IN_MEMORY_DATASETS[source].dataset.sort_index()
-            return df_to_dataset(
+            return _df_to_dataset(
                 sortd,
                 source=source,
                 age=_IN_MEMORY_DATASETS[source].age,
@@ -1417,7 +1417,7 @@ def __aux_load_full(
         The loaded dataset as a DataFrame or a ResoKitDataset
     """
     if not to_df:  # Return as ResoKitDataset
-        return df_to_dataset(
+        return _df_to_dataset(
             df,
             source=source,
             age=age,  # age from stored dataset
