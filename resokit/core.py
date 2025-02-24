@@ -464,6 +464,12 @@ def df_to_resokit(
     ResokitDataFrame
         DataFrame in :py:class:`ResokitDataFrame` format.
     """
+    # Check source
+    if source not in ["eu", "nasa"]:
+        raise ValueError(
+            f"source must be 'eu' or 'nasa'. Got: {source} instead."
+        )
+
     # Check if df is a DataFrame
     if not isinstance(df, pd.DataFrame):
         raise TypeError(f"df must be a DataFrame. Got: {type(df)} instead.")
@@ -520,6 +526,7 @@ def df_to_resokit(
     return ResokitDataFrame(data=df, source=source, metadata=metadata)
 
 
+# Set the seed for reproducibility
 rng = default_rng(seed=42)
 
 
