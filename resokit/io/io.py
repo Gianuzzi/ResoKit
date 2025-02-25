@@ -219,7 +219,7 @@ def _load_system_from_db(
     # If storing, then load the whole dataset
     if store:
         store_index = True  # Store the index if the dataset will be stored
-        low_memory = False  # Load the whole dataset if it will be stored
+        # low_memory = False  # Load the whole dataset if it will be stored
 
     # Check if alternative names are available
     if alternative_names:
@@ -254,7 +254,7 @@ def _load_system_from_db(
         is_planet=is_planet,
         raw_df=raw_df,
         alternative_names=alternative_names if source == "eu" else False,
-        **{**load_kwargs, "only_index": True},
+        **{**load_kwargs, "only_index": True, "store": False},  # Not store yet
     )
 
     auxmsg = "alternate names column of " if alternative_names else ""
@@ -446,6 +446,7 @@ def load_system_from_eu(
         source="eu",
         drop=drop,
         copy=False,
+        return_df=False,
         metadata=meta,
     )
 

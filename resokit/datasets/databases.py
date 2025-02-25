@@ -346,6 +346,8 @@ class ResoKitDataset:
             copy=True,
             sort_by=False,
             return_df=True,
+            rename_index=False,
+            metadata=None,
         )
 
         return attrs.evolve(self, dataset=df)
@@ -470,6 +472,8 @@ def _df_to_dataset(
             copy=copy,
             sort_by=False,
             return_df=True,
+            rename_index=False,
+            metadata=None,
         )
 
     if metadata is None:
@@ -556,7 +560,7 @@ def _update_stored_dataset(
         return
 
     # Store the rows in the index
-    if is_full and (  # Full dataset and
+    if is_full and (  # Full dataset or index and
         _IN_MEMORY_INDEXES[source].dataset.empty  # Empty index or
         or (not _IN_MEMORY_INDEXES[source].dataset.empty and overwrite)  # Renw
     ):
@@ -738,11 +742,30 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
 
     # Check if the dataset is stored
     if source == "eu":
-        df_stored = load_full("eu", verbose=False, to_df=True, only_index=True)
+        df_stored = load_full(
+            "eu",
+            verbose=False,
+            to_df=True,
+            only_index=True,
+            check_age=False,
+            only_rows=False,
+            store=False,
+            store_index=True,
+        )
     else:
-        df_stored = load_full("nasa", verbose=False, to_df=True)
-        # Keep only non controversial and default_set
-        df_stored = df_stored[df_stored["default_set"] == 1]
+        df_stored = load_full(
+            "nasa",
+            verbose=False,
+            to_df=True,
+            to_resokit=False,
+            check_age=False,
+            only_index=False,
+            only_rows=False,
+            store=False,
+            store_index=True,
+        )
+        # Keep only non controversial and default_flag (not set bc not to_rk)
+        df_stored = df_stored[df_stored["default_flag"] == 1]
         # df_stored = df_stored[df_stored["controversial"] == 0]  # NASA skips
     n_stored = len(df_stored)
     if n_stored > 0 and verbose:
@@ -959,7 +982,7 @@ def download(
     if to_memory:
         _update_stored_dataset(
             df,
-            source,
+            source=source,
             age=0,
             origin="internet",
             is_full=True,
@@ -1081,58 +1104,51 @@ def _check_file_age(
     age = (datetime.datetime.now() - creation).days
 
     if verbose:
-        print(f"Last modified: {creation} ({age} days ago)")
+        print(f"Last modified: {creation} ({age} days ago).")
 
     return age
 
 
 def _load_stored_full(
     source: str,
-    to_df: bool = False,
     to_resokit: bool = True,
     sort: bool = True,
-) -> Union[pd.DataFrame, ResoKitDataset]:
+) -> ResoKitDataset:
     """Load the fully stored dataset from memory.
 
     Parameters
     ----------
     source : str
         Dataset source ('eu' or 'nasa').
-    to_df : bool, optional
-        Whether to return as a pandas DataFrame.
-    to_resokit : bool, optional
+    to_resokit : bool, optional. Default: True.
         Whether to return the dataset as a ResoKitDataset
-    sort : bool, optional
+    sort : bool, optional. Default: True.
         Whether to sort the dataset by the index columns
 
     Returns
     -------
-    data : Union[pd.DataFrame, ResoKitDataset]
+    data : ResoKitDataset
         The loaded dataset as a DataFrame or a ResoKitDataset.
     """
     # Check if the dataset is fully stored
     if not _IS_FULLY_STORED[source]:
         raise ValueError(f"Source {source} is not fully stored.")
     # Return the dataset
-    if not to_df:  # Return as a ResoKitDataset
-        if sort:
-            sortd = _IN_MEMORY_DATASETS[source].dataset.sort_index()
-            return _df_to_dataset(
-                sortd,
-                source=source,
-                age=_IN_MEMORY_DATASETS[source].age,
-                origin=_IN_MEMORY_DATASETS[source].origin,
-                is_full=_IN_MEMORY_DATASETS[source].is_full,
-                metadata=dict(_IN_MEMORY_DATASETS[source].metadata),
-                copy=False,
-                as_resokit=to_resokit,
-            )
-        elif to_resokit:  # Return as a ResoKitDataset
-            return _IN_MEMORY_DATASETS[source].to_resokit()
-        return _IN_MEMORY_DATASETS[source]  # Return as a ResoKitDaframe
-    if not to_resokit:  # Return as a DataFrame
-        return _IN_MEMORY_DATASETS[source].to_dataframe(sort=sort)
-    return _IN_MEMORY_DATASETS[source].to_resokit().to_dataframe(sort=sort)
+    if sort:
+        sortd = _IN_MEMORY_DATASETS[source].dataset.sort_index()
+        return _df_to_dataset(
+            sortd,
+            source=source,
+            age=_IN_MEMORY_DATASETS[source].age,
+            origin=_IN_MEMORY_DATASETS[source].origin,
+            is_full=_IN_MEMORY_DATASETS[source].is_full,
+            metadata=dict(_IN_MEMORY_DATASETS[source].metadata),
+            copy=False,
+            as_resokit=to_resokit,
+        )
+    elif to_resokit:  # Return as a ResoKitDataset
+        return _IN_MEMORY_DATASETS[source].to_resokit()
+    return _IN_MEMORY_DATASETS[source].copy()
 
 
 def _load_stored_rows(
@@ -1162,7 +1178,7 @@ def _load_stored_rows(
     """
     # If all rows are requested, check if the dataset is fully stored
     if full:
-        return _load_stored_full(source)
+        return _load_stored_full(source, to_resokit=True, sort=True)
 
     # If specific rows are requested
     if rows is not None:
@@ -1211,7 +1227,7 @@ def _load_stored_index(
 def load_eu(
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
-    from_file: Union[str, bool] = True,
+    from_file: Union[str, bool] = False,
     dir_path: Union[str, Path, bool] = True,
     to_resokit: bool = True,
     check_age: bool = False,
@@ -1245,7 +1261,7 @@ def load_eu(
         Path to the ZIP archive to load the dataset.
         If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not loaded from the ZIP archive.
-    from_file : str or Path or bool, optional. Default: True.
+    from_file : str or Path or bool, optional. Default: False.
         Path to the file to load the dataset.
         If `True`, default filename is used. (exoplanet_eu.csv)
         If `False`, the file is not loaded.
@@ -1297,7 +1313,7 @@ def load_eu(
 def load_nasa(
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
-    from_file: Union[str, bool] = True,
+    from_file: Union[str, bool] = False,
     dir_path: Union[str, Path, None] = None,
     to_resokit: bool = True,
     check_age: bool = False,
@@ -1331,7 +1347,7 @@ def load_nasa(
         Path to the ZIP archive to load the dataset.
         If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not loaded from the ZIP archive.
-    from_file : str or Path or bool, optional. Default: True.
+    from_file : str or Path or bool, optional. Default: False.
         Path to the file to load the dataset.
         If `True`, default filename is used. (nasa.csv)
         If `False`, the file is not loaded.
@@ -1444,7 +1460,7 @@ def load_full(
     source: str,
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
-    from_file: Union[str, bool] = True,
+    from_file: Union[str, bool] = False,
     dir_path: Union[str, Path, bool] = True,
     to_resokit: bool = True,
     to_df: bool = False,
@@ -1482,7 +1498,7 @@ def load_full(
         Path to the ZIP archive to load the dataset.
         If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not loaded from the ZIP archive.
-    from_file : str or Path or bool, optional. Default: True.
+    from_file : str or Path or bool, optional. Default: False.
         Path to the file to load the dataset.
         If `True`, default filename is used.
         If `False`, the file is not loaded.
@@ -1612,7 +1628,6 @@ def load_full(
             if not data_stored.empty:
                 age = max(age, xage)
                 origin.append(xorigin)
-
         else:
             # If not from memory, set data_stored to empty
             data_stored = pd.DataFrame()
@@ -1637,7 +1652,6 @@ def load_full(
 
             # No need to load the dataset or store the rows
             # (because they are already stored)
-
             return __aux_load_full(
                 df=data_stored,
                 source=source,
@@ -1689,17 +1703,18 @@ def load_full(
 
     # Check if the dataset is already stored in memory
     if (
-        not (only_index or only_rows)
-        and _IS_FULLY_STORED[source]
-        and from_memory
+        not (only_index or only_rows)  # Check if loading the entire dataset
+        and _IS_FULLY_STORED[source]  # Check if fully stored
+        and from_memory  # Check if loading from memory
     ):
-        data = _load_stored_full(
-            source, to_df=to_df, to_resokit=to_resokit, sort=True
-        )
+        data = _load_stored_full(source, to_resokit=to_resokit, sort=True)
         if verbose:
             print(" Loaded full dataset from memory stored datasets.")
         if check_age:
-            print(f"Last modified: {data.age} days ago")
+            print(f"Last modified: {data.age} days ago.")
+        # Check if to df
+        if to_df:
+            return data.to_dataframe()
         return data
 
     # Define columns to load
@@ -1796,7 +1811,7 @@ def load_full(
     is_full = not only_rows
 
     # Define index_only
-    index_only = not store
+    index_only = only_index or (store_index and not store)
 
     # Check storing
     if store_index or store:
@@ -2094,7 +2109,7 @@ def download_binary(
     if not to_file and not to_zip and not to_memory and not return_data:
         raise ValueError(
             "Nothing to do. Set at least one of "
-            + "to_file, to_zip, to_memory, or to_resokit."
+            + "to_file, to_zip, to_memory, or return_data."
         )
     if (
         not to_file
