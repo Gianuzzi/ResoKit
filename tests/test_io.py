@@ -160,7 +160,7 @@ class TestLoadSystem:
         # Store the whole dataset
         # -----------------------------------
 
-        # Load the system and store the whole dataset
+        # Load the system and store just this system
         syst = self.load_function[source](
             name="kepler11",
             verbose=False,
@@ -173,10 +173,17 @@ class TestLoadSystem:
         assert isinstance(syst, StaticSystem)
         assert syst.n_planets_ == 6
 
-        # Assert the whole dataset is stored (The index too)
+        # Assert a partial dataset is stored (The index too)
         assert not databases._IN_MEMORY_DATASETS[source].empty
         assert not databases._IN_MEMORY_INDEXES[source].empty
-        assert databases._IS_FULLY_STORED[source]
+        assert not databases._IS_FULLY_STORED[source]
+
+        # Assert only this system was stored
+        if source == "eu":
+            assert databases._IN_MEMORY_DATASETS[source].shape[0] == 6
+        else:
+            # Nasa has 97 total solution rows for planets in this system
+            assert databases._IN_MEMORY_DATASETS[source].shape[0] == 97
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_load_from_stored(self, source: str, mocker):
@@ -200,7 +207,7 @@ class TestLoadSystem:
         # Assert the whole dataset is stored (The index too)
         assert not databases._IN_MEMORY_DATASETS[source].empty
         assert not databases._IN_MEMORY_INDEXES[source].empty
-        assert databases._IS_FULLY_STORED[source]
+        assert not databases._IS_FULLY_STORED[source]
 
         # -----------------------------------
         # Read from the stored dataset

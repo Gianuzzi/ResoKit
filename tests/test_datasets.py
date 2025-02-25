@@ -169,25 +169,20 @@ class TestLoadDataset:
             assert data.columns[2] == "mass"
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    @pytest.mark.parametrize("to_resokit", [True, False])
-    def test_load_full(self, source: str, to_resokit: bool):
-        """Test the load_full function, with same result as individual."""
+    def test_load_full_basic(self, source: str):
+        """Test the load_full function."""
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
 
         # Load the dataset
         if source == "nasa":
-            data = databases.load_nasa(to_resokit=to_resokit, verbose=False)
+            data = databases.load_nasa(verbose=False)
         else:
-            data = databases.load_eu(to_resokit=to_resokit, verbose=False)
+            data = databases.load_eu(verbose=False)
 
         # Load the dataset
         data2 = databases.load_full(
             source=source,
-            from_memory=False,
-            from_zip=True,
-            from_file=False,
-            to_resokit=to_resokit,
             verbose=False,
         )
 
@@ -225,7 +220,7 @@ class TestLoadDataset:
             source=source, store_index=False, verbose=False, to_resokit=False
         )
 
-        # Check the dictionary of the indexes if empty
+        # Check all is empty
         assert databases._IN_MEMORY_INDEXES[source].empty
         assert databases._IN_MEMORY_DATASETS[source].empty
         assert not databases._IS_FULLY_STORED[source]
@@ -246,7 +241,7 @@ class TestLoadDataset:
             databases._IN_MEMORY_INDEXES[source].dataset,
         )
 
-        # Check the dictionary of the datasets is empty
+        # Check the dictionary of the datasets partially filled
         assert databases._IN_MEMORY_DATASETS[source].empty
         assert not databases._IS_FULLY_STORED[source]
 
@@ -287,6 +282,68 @@ class TestLoadDataset:
 
         # Check if the data is equal to loaded from the original zip file
         pd.testing.assert_frame_equal(data.dataset, data2.dataset)
+
+    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("to_resokit", [True, False])
+    @pytest.mark.parametrize("to_df", [True, False])
+    @pytest.mark.parametrize("check_age", [True, False])
+    def test_load_full_full(
+        self,
+        source: str,
+        to_resokit: bool,
+        to_df: bool,
+        check_age: bool,
+        capfd,
+    ):
+        """Test the load_full function with all the parameters."""
+        # Load the dataset
+        data = databases.load_full(
+            source=source,
+            to_resokit=to_resokit,
+            to_df=to_df,
+            check_age=check_age,
+            verbose=False,
+            store=True,  # We can use store=True because we are testing
+        )
+
+        out, _ = capfd.readouterr()
+
+        if to_df:
+            # Check if the data is a DataFrame
+            assert isinstance(data, pd.DataFrame)
+
+            # Check it is not a ResokitDataset
+            assert not isinstance(data, databases.ResoKitDataset)
+
+            # Check if the data is not empty
+            assert not data.empty
+        else:
+            # Check if a ResokitDataset
+            assert isinstance(data, databases.ResoKitDataset)
+
+            # Check if the data is not empty
+            assert not data.empty
+
+        # Check if check the age
+        if check_age:
+            if not to_df:  # If to_df, the age is not checked
+                assert data.age > 0
+            assert "Last modified: " in out
+            assert "days ago" in out
+
+        # Check to resokit
+        if to_resokit:
+            assert "star_radius_err_max" in data.columns
+            assert "mass_err_min" in data.columns
+        else:
+            assert "star_radius_err_max" not in data.columns
+            assert "mass_err_min" not in data.columns
+            if source == "nasa":
+                assert "st_raderr2" in data.columns
+                assert "pl_massjerr1" in data.columns
+            else:
+                assert "star_radius_error_max" in data.columns
+                assert "mass_error_min" in data.columns
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_load_only_index(self, source: str, mocker):
@@ -413,6 +470,8 @@ class TestLoadDataset:
         assert not databases._IN_MEMORY_DATASETS[source].empty
         assert not databases._IS_FULLY_STORED[source]
 
+        len_old = databases._IN_MEMORY_DATASETS[source].shape[0]
+
         # Check if properly stored
         pd.testing.assert_frame_equal(
             row1.dataset, databases._IN_MEMORY_DATASETS[source].dataset
@@ -431,6 +490,9 @@ class TestLoadDataset:
 
         # Check if it is the same as before
         pd.testing.assert_frame_equal(row1.dataset, row2.dataset)
+
+        # Check the length
+        assert databases._IN_MEMORY_DATASETS[source].shape[0] == len_old
 
         # -------------------------------------------------------------------
         # Empty df if the number of rows is greater than the dataset.
@@ -576,7 +638,7 @@ class TestDatasetClass:
         """Test the __eq__ method with a single value."""
         # get the known data
         disc_method = self.dataset_eu["disc_method"]
-        transit = disc_method == "transit"
+        transit = disc_method == "Primary Transit"
         amount = transit.sum().values[0]
 
         assert amount == 4507  # Known value

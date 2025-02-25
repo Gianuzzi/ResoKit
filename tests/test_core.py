@@ -404,10 +404,10 @@ class TestStaticSystem:
             name=simple_syst, verbose=False, exact_match=False
         )
         multivariate = (
-            0.99
+            0.9999
             if model in ["o20", "m24"]
-            else ((0.01, 0.99) if model == "ch17" else None)
-        )
+            else ((0.0001, 0.9999) if model == "ch17" else None)
+        )  # Ensure that the test is always the same
         if not force:
             # Assert equal to base example
             mass_ss = syst.estimate_mass(
