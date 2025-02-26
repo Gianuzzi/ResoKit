@@ -352,6 +352,41 @@ class ResoKitDataset:
 
         return attrs.evolve(self, dataset=df)
 
+    def to_file(
+        self,
+        file_path: Union[str, Path],
+        overwrite: bool = False,
+        verbose: bool = True,
+    ) -> None:
+        """Save the dataset to a file.
+
+        This method saves the dataset to a file in CSV format.
+
+        Parameters
+        ----------
+        file_path : str or Path
+            Path to the file to save the dataset.
+        as_resokit : bool, optional. Default: True.
+            Whether to convert the dataset to a pure ResoKit dataset format
+            before saving.
+        overwrite : bool, optional. Default: False.
+            Whether to overwrite the file if it already exists.
+        verbose : bool, optional. Default: True.
+            Whether to print informational messages.
+        """
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+
+        if file_path.exists() and not overwrite:
+            raise FileExistsError(f"File {file_path} already exists.")
+
+        # Save the dataset to a file
+        self.dataset.to_csv(file_path, index=False)
+
+        if verbose:
+            print(f"Dataset saved to {file_path}.")
+        return
+
 
 # =============================================================================
 # VARIABLES
@@ -794,16 +829,16 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
 
 def download(
     source: str,
-    dir_path: Union[str, Path, None] = None,
+    to_memory: bool = True,
     to_file: Union[str, Path, bool, None] = False,
     to_zip: Union[str, Path, bool, None] = False,
-    to_memory: bool = True,
+    dir_path: Union[str, Path, None] = None,
     overwrite: bool = False,
-    verbose: bool = True,
+    check_online: bool = True,
     to_resokit: Union[bool, None] = None,
+    verbose: bool = True,
     chunk_size: int = 1024,
     print_size: float = 0.15,
-    check_online: bool = True,
 ) -> Union[Path, pd.DataFrame, ResoKitDataset]:
     """Download a dataset from a specified source and save it locally.
 
@@ -819,9 +854,8 @@ def download(
     ----------
     source : str
         Identifier for the data source ('eu' or 'nasa').
-    dir_path : str or Path
-        Directory path to save the dataset, or path to the ZIP archive.
-        If `None`, the default directory is used (resokit.datasets).
+    to_memory : bool, optional. Default: False.
+        If `True`, stores the dataset in memory.
     to_file : str or Path or bool, optional. Default: False.
         Path or str to the file to store the dataset.
         If `True`, default filename is used.
@@ -830,24 +864,26 @@ def download(
         Path or str to the ZIP archive to store the dataset.
         If `True`, default ZIP filename is used. (datasets.zip)
         If `False`, the file is not saved nor created in the ZIP archive.
-    to_memory : bool, optional. Default: False.
-        If `True`, stores the dataset in memory.
+    dir_path : str or Path
+        Directory path to save the dataset, or path to the ZIP archive.
+        If `None`, the default directory is used (resokit.datasets).
     overwrite : bool, optional. Default: False.
         If `True`, overwrites the file if it already exists.
-        It also overwrites the stored dataset in memory.
-    verbose : bool, optional. Default: True.
-        If `True`, displays messages about the download process.
+        The memory stored Dataset and Index are always overwritten, 
+        independently of this parameter.
+    check_online : bool, optional. Default: True.
+        Whether to check if the dataset is already up-to-date.
     to_resokit : bool, dict, optional. Default: None.
         If `True`, returns the dataset as a ResoKitDataset.
         If `False`, returns the dataset as a pandas DataFrame.
         If `None`, returns the path to the downloaded file.
+    verbose : bool, optional. Default: True.
+        If `True`, displays messages about the download process.
     chunk_size : int, optional. Default: 1024.
         Size of the chunks to download the dataset, in bytes.
         Default is 1024 bytes (1 KB).
     print_size: float, optional. Default: 0.15.
         Update frequency for the download progress bar.
-    check_online : bool, optional. Default: True.
-        Whether to check if the dataset is already up-to-date.
 
     Returns
     -------
@@ -869,18 +905,6 @@ def download(
         raise ValueError(
             "Nothing to do. Set at least one of "
             + "to_file, to_zip, to_memory, or to_resokit."
-        )
-    if (
-        not to_file
-        and not to_zip
-        and to_memory
-        and to_resokit is None
-        and _IS_FULLY_STORED[source]
-        and not overwrite
-    ):
-        raise ValueError(
-            "Nothing to do. Dataset is already fully stored in memory and "
-            + "overwrite is False."
         )
 
     # Define URS
@@ -924,8 +948,13 @@ def download(
 
     # Check if online
     if check_online and not overwrite:
-        if not check_outdated(source, verbose=verbose):
-            return
+        outdated = check_outdated(source, verbose=verbose)
+        if not outdated and not overwrite:
+            if verbose:
+                print("Use overwrite=True to force the download.")
+            return  # Only redownload if outdated or overwrite
+        elif not outdated and overwrite and verbose:
+            print("Forcing the download.")
 
     # Download the dataset
     data = request_dataset(
@@ -990,7 +1019,7 @@ def download(
             index_only=False,
             sort=True,
             metadata=metadata,
-            overwrite=overwrite,
+            overwrite=True,  # Overwrite the stored dataset
         )
 
     # Return the data
@@ -1844,7 +1873,26 @@ def load_full(
 def _extract_header_and_data(
     lines: List[str], circumbinary: bool, inferr: bool
 ) -> Tuple[str, pd.DataFrame]:
-    """Extract header and data from lines of the dataset."""
+    """Extract header and data from lines of the dataset.
+
+    Parameters
+    ----------
+    lines : List[str]
+        Lines of the dataset.
+    circumbinary : bool
+        Whether the dataset is circumbinary.
+    inferr : bool
+        Whether the width of the columns is inferred.
+        If False, the width of the columns is fixed.
+
+    Returns
+    -------
+    Tuple[str, pd.DataFrame]
+        header : str
+            The header of the dataset.
+        data : pd.DataFrame
+            The dataset as a pandas DataFrame.
+    """
     # Find the index of the last line that starts with "------"
     # (or any number of hyphens)
     separator_index = next(
@@ -1878,13 +1926,13 @@ def _extract_header_and_data(
 
 def load_binary(
     circumbinary: bool,
-    inferr: bool = False,
-    ret_header: bool = False,
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
     from_file: Union[str, bool] = True,
     dir_path: Union[str, Path, bool] = True,
     rename_columns: bool = True,
+    ret_header: bool = False,
+    inferr: bool = False,
     clean: bool = True,
     verbose: bool = True,
 ) -> Union[pd.DataFrame, str]:
@@ -1901,11 +1949,6 @@ def load_binary(
     circumbinary : bool, optional. Default is False.
         If True, read the circumbinary dataset.
         If False, read the binary dataset.
-    inferr : bool, optional. Default is False.
-        If True, read the inferred dataset. If False, read the observed dataset.
-    ret_header : bool, optional. Default is False.
-        If True, return the header.
-        If False, return the data.
     from_memory : bool, optional. Default: True.
         If `True`, loads the dataset from memory if available.
     from_zip : str or Path or bool, optional. Default: True.
@@ -1921,6 +1964,13 @@ def load_binary(
         If `True` or `None` the default directory is used. (resokit.datasets)
     rename_columns : bool, optional. Default is True.
         If True, rename the columns for human readability.
+    ret_header : bool, optional. Default is False.
+        If True, return the header.
+        If False, return the data.
+    inferr : bool, optional. Default is False.
+        If False, the width of the columns is fixed. (Recommended)
+        If True, the parsed width of the columns is inferred. Use in case
+        the dataset cannot be parsed with fixed-width columns.
     clean : bool, optional. Default is True.
         If True, replace the unknown values with NaN.
     verbose : bool, optional. Default is False.
@@ -2047,9 +2097,9 @@ def load_binary(
 
 def download_binary(
     circumbinary: bool,
-    dir_path: Union[str, Path, None] = None,
     to_file: Union[str, Path, bool, None] = False,
     to_zip: Union[str, Path, bool, None] = False,
+    dir_path: Union[str, Path, None] = None,
     to_memory: bool = True,
     return_data: bool = True,
     overwrite: bool = False,
