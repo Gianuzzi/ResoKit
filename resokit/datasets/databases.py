@@ -354,7 +354,7 @@ class ResoKitDataset:
 
     def to_file(
         self,
-        file_path: Union[str, Path],
+        path_or_buf: Union[str, Path, BinaryIO, TextIOWrapper],
         overwrite: bool = False,
         verbose: bool = True,
     ) -> None:
@@ -364,24 +364,26 @@ class ResoKitDataset:
 
         Parameters
         ----------
-        file_path : str or Path
-            Path to the file to save the dataset.
-        as_resokit : bool, optional. Default: True.
-            Whether to convert the dataset to a pure ResoKit dataset format
-            before saving.
+        path_or_buf : str or Path or BinaryIO or TextIOWrapper
+            File path or buffer to save the dataset.
         overwrite : bool, optional. Default: False.
             Whether to overwrite the file if it already exists.
         verbose : bool, optional. Default: True.
             Whether to print informational messages.
         """
-        if isinstance(file_path, str):
-            file_path = Path(file_path)
+        file_path = Path(path_or_buf)
 
         if file_path.exists() and not overwrite:
-            raise FileExistsError(f"File {file_path} already exists.")
+            raise FileExistsError(
+                f"File {file_path} already exists.\n"
+                + "  Set overwrite=True to force the save."
+            )
 
         # Save the dataset to a file
-        self.dataset.to_csv(file_path, index=False)
+        if not overwrite:
+            self.dataset.to_csv(path_or_buf, mode="x")
+        else:
+            self.dataset.to_csv(path_or_buf)
 
         if verbose:
             print(f"Dataset saved to {file_path}.")
@@ -775,6 +777,9 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
     if source not in _DATASET_FILENAMES:
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
+    if verbose:
+        print(f"Checking local dataset from {source}...")
+
     # Check if the dataset is stored
     if source == "eu":
         df_stored = load_full(
@@ -782,7 +787,7 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
             verbose=False,
             to_df=True,
             only_index=True,
-            check_age=False,
+            check_age=True,
             only_rows=False,
             store=False,
             store_index=True,
@@ -793,7 +798,7 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
             verbose=False,
             to_df=True,
             to_resokit=False,
-            check_age=False,
+            check_age=True,
             only_index=False,
             only_rows=False,
             store=False,
@@ -804,9 +809,9 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
         # df_stored = df_stored[df_stored["controversial"] == 0]  # NASA skips
     n_stored = len(df_stored)
     if n_stored > 0 and verbose:
-        print(f"Number of planets in stored dataset: {n_stored}")
+        print(f" Number of planets in stored dataset: {n_stored}")
         if source == "nasa":
-            print(" (Including also non-default parameters set.)")
+            print("  (Including also non-default parameters set.)")
     elif verbose:
         print("Could not load the stored dataset. ")
 
@@ -869,7 +874,7 @@ def download(
         If `None`, the default directory is used (resokit.datasets).
     overwrite : bool, optional. Default: False.
         If `True`, overwrites the file if it already exists.
-        The memory stored Dataset and Index are always overwritten, 
+        The memory stored Dataset and Index are always overwritten,
         independently of this parameter.
     check_online : bool, optional. Default: True.
         Whether to check if the dataset is already up-to-date.
@@ -928,7 +933,10 @@ def download(
             file_name = to_file
         file_path = dir_path / file_name
         if file_path.exists() and not overwrite:
-            raise FileExistsError(f"File {file_path} already exists.")
+            raise FileExistsError(
+                f"File {file_path} already exists.\n"
+                + " Set overwrite=True to force the download."
+            )
     else:
         file_path = None
         file_name = _DATASET_FILENAMES[source]
@@ -941,20 +949,50 @@ def download(
             zip_name = to_zip
         zip_path = dir_path / zip_name
         if zip_path.exists() and not overwrite:
-            raise FileExistsError(f"ZIP archive {zip_path} already exists.")
+            raise FileExistsError(
+                f"ZIP archive {zip_path} already exists.\n"
+                + " Set overwrite=True to force the download."
+            )
     else:
         zip_path = None
         zip_name = ZIP_FILENAME
 
+    # Check if full dataset is stored and not overwrite and
+    # only to memory or to_resokit
+    if (
+        _IS_FULLY_STORED[source]
+        and not overwrite
+        and not to_file
+        and not to_zip
+    ):
+        if verbose:
+            print(
+                "Dataset is already fully stored."
+                + " Set overwrite=True to force the download."
+            )
+        if to_resokit is not None:
+            if to_resokit:
+                return _IN_MEMORY_DATASETS[source]
+            return _IN_MEMORY_DATASETS[source].to_dataframe()
+        return None
+
     # Check if online
-    if check_online and not overwrite:
+    if check_online:
         outdated = check_outdated(source, verbose=verbose)
-        if not outdated and not overwrite:
-            if verbose:
-                print("Use overwrite=True to force the download.")
-            return  # Only redownload if outdated or overwrite
-        elif not outdated and overwrite and verbose:
-            print("Forcing the download.")
+        if not outdated:
+            if (to_file or to_zip) and verbose:
+                print(
+                    "To store the dataset in a file, load it and invoke "
+                    + "the to_file method."
+                )
+            elif verbose:
+                print(
+                    "No need to download the dataset.\n"
+                    + " Set check_online=False to really force it."
+                )
+            if to_resokit is not None:
+                return load_full(source, verbose=False, to_df=not to_resokit)
+            return None
 
     # Download the dataset
     data = request_dataset(
@@ -1133,7 +1171,7 @@ def _check_file_age(
     age = (datetime.datetime.now() - creation).days
 
     if verbose:
-        print(f"Last modified: {creation} ({age} days ago).")
+        print(f" Last modified: {creation} ({age} days ago).")
 
     return age
 
@@ -1225,7 +1263,10 @@ def _load_stored_rows(
 
 
 def _load_stored_index(
-    source: str, to_df: bool = False, to_resokit: bool = True
+    source: str,
+    to_df: bool = False,
+    to_resokit: bool = True,
+    parsed: bool = False,
 ) -> Union[pd.DataFrame, ResoKitDataset]:
     """Load the stored index from memory.
 
@@ -1237,12 +1278,16 @@ def _load_stored_index(
         Whether to return the dataset as a pandas DataFrame.
     to_resokit : bool, optional
         Whether to return the dataset as a ResoKitDataset
+    parsed : bool, optional
+        Whether to return the parsed index.
 
     Returns
     -------
     dataset : pd.DataFrame or ResoKitDataset
         The loaded dataset as a DataFrame or a ResoKitDataset.
     """
+    if parsed:
+        return _IN_MEMORY_PARSED_INDEXES[source]
     inm = _IN_MEMORY_INDEXES[source]
     if inm.dataset.empty:
         return inm
@@ -1715,16 +1760,22 @@ def load_full(
     # Check if the index columns are already stored in memory
     if only_index and from_memory:
         # Check if parsed requested
-        if isinstance(only_index, str) and only_index.lower()[0] == "p":
-            data = _IN_MEMORY_PARSED_INDEXES[source]
+        parsed = isinstance(only_index, str) and only_index.lower()[0] == "p"
+        data = _load_stored_index(
+            source, to_df=False, to_resokit=to_resokit, parsed=parsed
+        )
+        if check_age and data.age >= 0:
+            print(f" Last modified: {data.age} days ago.")
+        if parsed:
             if data is None and verbose:
-                print(" Parsed index not stored.")
+                print(" Parsed index columns not stored.")
             elif data is not None and verbose:
                 print(
                     " Loaded parsed index columns from memory stored dataset."
                 )
             return data
-        data = _load_stored_index(source, to_df=to_df, to_resokit=to_resokit)
+        if to_df:
+            data = data.to_dataframe()
         if not data.empty:
             if verbose:
                 print(" Loaded index columns from memory stored datasets.")
@@ -1739,8 +1790,8 @@ def load_full(
         data = _load_stored_full(source, to_resokit=to_resokit, sort=True)
         if verbose:
             print(" Loaded full dataset from memory stored datasets.")
-        if check_age:
-            print(f"Last modified: {data.age} days ago.")
+        if check_age and data.age >= 0:
+            print(f" Last modified: {data.age} days ago.")
         # Check if to df
         if to_df:
             return data.to_dataframe()
@@ -2092,8 +2143,6 @@ def load_binary(
 
     return data
 
-    # check_online: bool = True,
-
 
 def download_binary(
     circumbinary: bool,
@@ -2195,7 +2244,10 @@ def download_binary(
             file_name = to_file
         file_path = dir_path / file_name
         if file_path.exists() and not overwrite:
-            raise FileExistsError(f"File {file_path} already exists.")
+            raise FileExistsError(
+                f"File {file_path} already exists.\n"
+                + " Set overwrite=True to overwrite it."
+            )
     else:
         file_path = None
         file_name = _BINARIES_FILENAMES[letter]
@@ -2208,7 +2260,10 @@ def download_binary(
             zip_name = to_zip
         zip_path = dir_path / zip_name
         if zip_path.exists() and not overwrite:
-            raise FileExistsError(f"ZIP archive {zip_path} already exists.")
+            raise FileExistsError(
+                f"ZIP archive {zip_path} already exists.\n"
+                + " Set overwrite=True to overwrite it."
+            )
     else:
         zip_path = None
         zip_name = ZIP_FILENAME
@@ -2320,7 +2375,7 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     Parameters
     ----------
     source : str
-        Source to clear ('eu' or 'nasa' or 'both').
+        Source to clear ('eu' or 'nasa' or 'both' 'binary' or 'all').
     verbose : bool, optional. Default: True.
         If `True`, prints messages about the process.
     """
@@ -2335,6 +2390,20 @@ def clear_memory(source: str, verbose: bool = True) -> None:
             _IN_MEMORY_PARSED_INDEXES[source] = None
             if verbose:
                 print(f" Cleared memory for source: {key}")
+        return
+
+    if source == "binary":
+        for key in _IN_MEMORY_BINARIES:
+            # Clear the memory addresses
+            _IN_MEMORY_BINARIES[key] = _mk_empty_dataset(key)
+            _IN_MEMORY_BINARIES_HEADERS[key] = ""
+            if verbose:
+                print(f" Cleared memory for binaries type-{key}")
+        return
+
+    if source == "all":
+        clear_memory("both", verbose=verbose)
+        clear_memory("binary", verbose=verbose)
         return
 
     if source not in _IN_MEMORY_DATASETS:
