@@ -901,7 +901,7 @@ def download(
     if source not in _DATASET_FILENAMES:
         if source == "binary":
             raise ValueError(
-                "Use download_binaries to download binary datasets."
+                "Use download_binary to download binary datasets."
             )
         raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
 
@@ -2150,7 +2150,7 @@ def download_binary(
     to_zip: Union[str, Path, bool, None] = False,
     dir_path: Union[str, Path, None] = None,
     to_memory: bool = True,
-    return_data: bool = True,
+    return_data: bool = False,
     overwrite: bool = False,
     verbose: bool = True,
     chunk_size: int = 1024,
@@ -2375,30 +2375,41 @@ def clear_memory(source: str, verbose: bool = True) -> None:
     Parameters
     ----------
     source : str
-        Source to clear ('eu' or 'nasa' or 'both' 'binary' or 'all').
+        Source to clear: 'eu' or 'nasa' or 'p' or 's'.
+        It can also be 'both' to clear 'eu' and 'nasa' datasets;
+        'binary' to clear 'p' and 's' datasets;
+        or 'all' to clear everything stored in memory.
     verbose : bool, optional. Default: True.
         If `True`, prints messages about the process.
     """
     source = source.lower()  # Ensure lowercase
 
+    if source in _IN_MEMORY_DATASETS:
+        # Clear the memory addresses
+        _IN_MEMORY_INDEXES[source] = _mk_empty_dataset(source)
+        _IN_MEMORY_DATASETS[source] = _mk_empty_dataset(source)
+        _IS_FULLY_STORED[source] = False  # Reset the fully stored flag
+        _IN_MEMORY_PARSED_INDEXES[source] = None
+        if verbose:
+            print(f" Cleared memory for source: {source}")
+        return
+
+    if source in _IN_MEMORY_BINARIES:
+        # Clear the memory addresses
+        _IN_MEMORY_BINARIES[source] = pd.DataFrame()
+        _IN_MEMORY_BINARIES_HEADERS[source] = ""
+        if verbose:
+            print(f" Cleared memory for binaries type-{source}")
+        return
+
     if source == "both":
         for key in _IN_MEMORY_DATASETS:
-            # Clear the memory addresses
-            _IN_MEMORY_INDEXES[key] = _mk_empty_dataset(key)
-            _IN_MEMORY_DATASETS[key] = _mk_empty_dataset(key)
-            _IS_FULLY_STORED[key] = False
-            _IN_MEMORY_PARSED_INDEXES[source] = None
-            if verbose:
-                print(f" Cleared memory for source: {key}")
+            clear_memory(key, verbose=verbose)
         return
 
     if source == "binary":
         for key in _IN_MEMORY_BINARIES:
-            # Clear the memory addresses
-            _IN_MEMORY_BINARIES[key] = _mk_empty_dataset(key)
-            _IN_MEMORY_BINARIES_HEADERS[key] = ""
-            if verbose:
-                print(f" Cleared memory for binaries type-{key}")
+            clear_memory(key, verbose=verbose)
         return
 
     if source == "all":
@@ -2406,16 +2417,8 @@ def clear_memory(source: str, verbose: bool = True) -> None:
         clear_memory("binary", verbose=verbose)
         return
 
-    if source not in _IN_MEMORY_DATASETS:
-        raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
-
-    # Clear the memory addresses
-    _IN_MEMORY_INDEXES[source] = _mk_empty_dataset(source)
-    _IN_MEMORY_DATASETS[source] = _mk_empty_dataset(source)
-    _IS_FULLY_STORED[source] = False  # Reset the fully stored flag
-    _IN_MEMORY_PARSED_INDEXES[source] = None
-
-    if verbose:
-        print(f" Cleared memory for source: {source}")
-
-    return
+    raise ValueError(
+        f"Invalid source: {source}.\n"
+        + " Must be 'eu' or 'nasa' or 'p' or 's'"
+        + " or 'both' or 'binary' or 'all'."
+    )
