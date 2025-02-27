@@ -574,26 +574,19 @@ def load_from_zip(
 
     # Load the dataset from the ZIP archive
     with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
-        if file_name in zipf.namelist():
-            if verbose:  # Print message if verbose
-                print(
-                    f"  Reading {file_name} " + f"directly from {zip_name}..."
-                )
-            # Load directly from the .zip
-            dtypes = DATASET_DTYPES.get(source, None)
-            with zipf.open(file_name) as file:
-                if custom_load is not None:
-                    return custom_load(file)
-                data = read_csv(
-                    file,
-                    header=0,
-                    skiprows=skip_rows,
-                    usecols=usecols,
-                    dtype=dtypes,
-                )
-        else:
-            raise FileNotFoundError(
-                f"File {file_name} not found in {zip_name}."
+        if verbose:  # Print message if verbose
+            print(f"  Reading {file_name} " + f"directly from {zip_name}...")
+        # Load directly from the .zip
+        dtypes = DATASET_DTYPES.get(source, None)
+        with zipf.open(file_name) as file:
+            if custom_load is not None:
+                return custom_load(file)
+            data = read_csv(
+                file,
+                header=0,
+                skiprows=skip_rows,
+                usecols=usecols,
+                dtype=dtypes,
             )
 
     return data
