@@ -795,8 +795,12 @@ def check_online_dataset(
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
     if verbose and npl != -1:
+        days_ago = (datetime.now() - fecha).days
+        print(
+            f" Last online update: {fecha.strftime("%Y-%m-%d")} "
+            + f"({days_ago} days ago)"
+        )
         print(" Number of planets in online dataset:", npl)
-        print(" Last online update:", fecha.strftime("%Y-%m-%d"))
 
     return npl, fecha
 
