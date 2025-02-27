@@ -98,6 +98,9 @@ class TestLoadSystem:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_load_system_almost_not_exact(self, source: str):
         """Test load_system with almost correct system."""
+        # Clear the memory
+        databases.clear_memory("all", verbose=False)
+
         syst = self.load_function[source](name="kepler11", exact_match=False)
 
         assert isinstance(syst, StaticSystem)
@@ -107,7 +110,7 @@ class TestLoadSystem:
     def test_load_store_system(self, source: str, mocker):
         """Test load_system and store_system."""
         # Assert nothing is pre-stored
-        databases.clear_memory("both", verbose=False)
+        databases.clear_memory("all", verbose=False)
 
         # -----------------------------------
         # Store nothing
@@ -189,7 +192,7 @@ class TestLoadSystem:
     def test_load_from_stored(self, source: str, mocker):
         """Test load_system with stored datasets."""
         # Assert nothing is pre-stored
-        databases.clear_memory("both", verbose=False)
+        databases.clear_memory("all", verbose=False)
 
         # Load the system and store the whole dataset
         syst = self.load_function[source](
@@ -237,6 +240,9 @@ class TestLoadSystem:
 class TestLoadBinary:
     def test_load_binary_wrong(self, capfd):
         """Test load_binary with wrong system."""
+        # Assert nothing is pre-stored
+        databases.clear_memory("all", verbose=False)
+
         with pytest.raises(ValueError, match="Star wrong_system not found"):
             rio.load_from_binary(name="wrong_system", verbose=False)
         # Capture the output
@@ -254,6 +260,9 @@ class TestLoadBinary:
 
     def test_load_binary_wrong_soft(self, capfd):
         """Test load_binary with wrong system, soft=True."""
+        # Assert nothing is pre-stored
+        databases.clear_memory("all", verbose=False)
+
         syst = rio.load_from_binary(
             name="wrong_system", verbose=True, soft=True
         )
@@ -268,6 +277,9 @@ class TestLoadBinary:
 
     def test_load_binary_almost(self, capfd):
         """Test load_binary with almost correct system."""
+        # Assert nothing is pre-stored
+        databases.clear_memory("all", verbose=False)
+
         syst = rio.load_from_binary(name="kepler47", verbose=False, soft=True)
 
         assert syst is None
@@ -291,6 +303,9 @@ class TestLoadBinary:
 
     def test_load_binary_almost_not_exact(self):
         """Test load_binary with almost correct system."""
+        # Assert nothing is pre-stored
+        databases.clear_memory("all", verbose=False)
+
         syst = rio.load_from_binary(name="kepler47", exact_match=False)
 
         assert isinstance(syst, StaticBinaryStar)

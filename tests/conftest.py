@@ -62,8 +62,8 @@ def random_int_gen():
 
 @pytest.fixture(scope="session")
 def db_temp_path(tmp_path_factory):
-    def make_temp_path(source="data"):
-        fn = tmp_path_factory.mktemp("tmp") / f"{source}.csv"
+    def make_temp_path(source="data", ext="csv"):
+        fn = tmp_path_factory.mktemp("tmp") / f"{source}.{ext}"
         return fn
 
     return make_temp_path
@@ -90,6 +90,15 @@ def mock_in_mem(session_mocker):
                 "resokit.datasets.databases._IN_MEMORY_DATASETS",
                 {"eu": default_df, "nasa": default_df},
             )
+        elif which == "binary":
+            session_mocker.patch(
+                "resokit.datasets.databases._IN_MEMORY_BINARIES_HEADERS",
+                {"p": "Header_p", "s": "Header_s"},
+            )
+            session_mocker.patch(
+                "resokit.datasets.databases._IN_MEMORY_BINARIES",
+                {"p": default_df, "s": default_df},
+            )
         elif which == "fully":
             session_mocker.patch(
                 "resokit.datasets.databases._IS_FULLY_STORED",
@@ -99,6 +108,8 @@ def mock_in_mem(session_mocker):
             _mock_in_mem(which="index")
             _mock_in_mem(which="data")
             _mock_in_mem(which="fully")
+            _mock_in_mem(which="binary")
+            _mock_in_mem(which="parsed")
         else:
             raise ValueError(f"which={which} not recognized.")
 

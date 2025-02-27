@@ -47,75 +47,94 @@ class TestPath:
 
 
 class TestClearMemory:
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize(
+        "source", ["eu", "nasa", "both", "p", "s", "binary", "all", "wrong"]
+    )
     def test_clear_memory(self, source: str, mock_in_mem):
         """Test the clear_memory function."""
         # Mock the variables
         mock_in_mem(which="all")
 
+        # Pre-check
+        for eunasa in ["eu", "nasa"]:
+            pd.testing.assert_series_equal(
+                databases._IN_MEMORY_INDEXES[eunasa], default_ss
+            )
+            pd.testing.assert_frame_equal(
+                databases._IN_MEMORY_DATASETS[eunasa], default_df
+            )
+            assert databases._IS_FULLY_STORED[eunasa]
+        for ps in ["p", "s"]:
+            pd.testing.assert_frame_equal(
+                databases._IN_MEMORY_BINARIES[ps], default_df
+            )
+            assert databases._IN_MEMORY_BINARIES_HEADERS[ps] == "Header_" + ps
+
+        # Setup
+        if source == "all":
+            eunasa = ["eu", "nasa"]
+            other_en = []
+            binary = ["p", "s"]
+            other_bin = []
+        elif source in ["eu", "nasa"]:
+            eunasa = [source]
+            other_en = ["nasa"] if source == "eu" else ["eu"]
+            binary = []
+            other_bin = ["p", "s"]
+        elif source in ["p", "s"]:
+            binary = [source]
+            other_bin = ["s"] if source == "p" else ["p"]
+            eunasa = []
+            other_en = ["eu", "nasa"]
+        elif source == "both":
+            eunasa = ["eu", "nasa"]
+            other_en = []
+            binary = []
+            other_bin = ["p", "s"]
+        elif source == "binary":
+            binary = ["p", "s"]
+            other_bin = []
+            eunasa = []
+            other_en = ["eu", "nasa"]
+        else:
+            with pytest.raises(ValueError):
+                databases.clear_memory(source=source, verbose=False)
+            return
+
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
 
-        # Assert the type of the new objects
-        assert isinstance(
-            databases._IN_MEMORY_INDEXES[source], databases.ResoKitDataset
-        )
-        assert isinstance(
-            databases._IN_MEMORY_DATASETS[source], databases.ResoKitDataset
-        )
+        # Check the results
+        for en in eunasa:
+            assert isinstance(
+                databases._IN_MEMORY_INDEXES[en], databases.ResoKitDataset
+            )
+            assert isinstance(
+                databases._IN_MEMORY_DATASETS[en], databases.ResoKitDataset
+            )
+            assert databases._IN_MEMORY_INDEXES[en].empty
+            assert databases._IN_MEMORY_DATASETS[en].empty
+            assert not databases._IS_FULLY_STORED[en]
+        for oen in other_en:
+            pd.testing.assert_series_equal(
+                databases._IN_MEMORY_INDEXES[oen], default_ss
+            )
+            pd.testing.assert_frame_equal(
+                databases._IN_MEMORY_DATASETS[oen], default_df
+            )
+            assert databases._IS_FULLY_STORED[oen]
+        for bina in binary:
+            assert databases._IN_MEMORY_BINARIES[bina].empty
+            assert databases._IN_MEMORY_BINARIES_HEADERS[bina] == ""
+        for obin in other_bin:
+            pd.testing.assert_frame_equal(
+                databases._IN_MEMORY_BINARIES[obin], default_df
+            )
+            assert (
+                databases._IN_MEMORY_BINARIES_HEADERS[obin] == "Header_" + obin
+            )
 
-        # Check if the dictionary of the indexes is empty
-        assert databases._IN_MEMORY_INDEXES[source].empty
-
-        # Check if the dictionary of the datasets is empty
-        assert databases._IN_MEMORY_DATASETS[source].empty
-
-        # Check if the variable _IS_FULLY_STORED is False
-        assert databases._IS_FULLY_STORED[source] is False
-
-        # Check the other source is not touched
-        other = "eu" if source == "nasa" else "nasa"
-        pd.testing.assert_series_equal(
-            databases._IN_MEMORY_INDEXES[other], default_ss
-        )
-        pd.testing.assert_frame_equal(
-            databases._IN_MEMORY_DATASETS[other], default_df
-        )
-        assert databases._IS_FULLY_STORED[other]
-
-    def test_clear_memory_both(self, mock_in_mem):
-        """Test the clear_memory function with both sources."""
-        # Mock the variables
-        mock_in_mem(which="all")
-
-        # Clear the memory
-        databases.clear_memory(source="both", verbose=False)
-
-        # Assert the type of the new objects
-        assert isinstance(
-            databases._IN_MEMORY_INDEXES["eu"], databases.ResoKitDataset
-        )
-        assert isinstance(
-            databases._IN_MEMORY_DATASETS["eu"], databases.ResoKitDataset
-        )
-        assert isinstance(
-            databases._IN_MEMORY_INDEXES["nasa"], databases.ResoKitDataset
-        )
-        assert isinstance(
-            databases._IN_MEMORY_DATASETS["nasa"], databases.ResoKitDataset
-        )
-
-        # Check if the dictionary of the indexes is empty
-        assert databases._IN_MEMORY_INDEXES["eu"].empty
-        assert databases._IN_MEMORY_INDEXES["nasa"].empty
-
-        # Check if the dictionary of the datasets is empty
-        assert databases._IN_MEMORY_DATASETS["eu"].empty
-        assert databases._IN_MEMORY_DATASETS["nasa"].empty
-
-        # Check if the variable _IS_FULLY_STORED is False
-        assert databases._IS_FULLY_STORED["eu"] is False
-        assert databases._IS_FULLY_STORED["nasa"] is False
+        return
 
 
 class TestLoadDataset:
@@ -645,11 +664,30 @@ class TestDatasetClass:
 
 
 class TestDownloadDataset:
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_download_y_requests(self, source: str, db_temp_path: str):
+    def retrieve_data(self, source: str, zip_path: str):
+        """Retrieve the data from the zip file."""
+        if source == "eu":
+            filename = "exoplanet_eu.csv"
+        elif source == "p":
+            filename = "plan_circ.txt"
+        else:
+            raise ValueError(f"source={source} not recognized.")
+
+        with zipfile.ZipFile(zip_path, "r") as z:
+            with z.open(f"{filename}", "r") as f:
+                lines = f.read()
+
+        return lines
+
+    def test_download_y_requests(
+        self, db_temp_path: str, capfd, mocker, zip_path
+    ):
         """Test the download function when requests is installed."""
         if not utils.requests_imported:
             pytest.skip("requests is not installed.")
+
+        # JUST FOR SOURCE = "EU"
+        source = "eu"
 
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
@@ -668,10 +706,20 @@ class TestDownloadDataset:
 
         # Set destiny path
         path = Path(tmp_path)
-        # path = databases.BASE_PATH / databases._DATASET_FILENAMES[source]
 
         # CHECK IF THE FILE DOES NOT EXISTS
         assert not path.exists()
+
+        # Get the corresponding lines
+        lines = self.retrieve_data(source, zip_path)
+
+        # MOCK THE DOWNLOAD FUNCTION
+        mocker.patch(
+            "resokit.datasets.databases.request_dataset", return_value=lines
+        )
+        mocker.patch(
+            "resokit.datasets.databases.check_outdated", return_value=True
+        )
 
         # Download the dataset
         data2 = databases.download(
@@ -685,25 +733,21 @@ class TestDownloadDataset:
         # Check if the file is saved
         assert path.exists()
 
-        # Can't download the dataset if the file already exists in memory
-        # (overwrite=False) is the default.
-        with pytest.raises(ValueError):
-            databases.download(source=source, verbose=False)
+        # Assert data2 is equal to data
+        pd.testing.assert_frame_equal(data.dataset, data2.dataset)
 
-        # Can't download the dataset if the file already exists in file
+        # Can't download the dataset if the data already exists in memory
+        # (overwrite=False) is the default.
+        assert databases.download(source=source, verbose=True) is None
+        out, _ = capfd.readouterr()
+
+        assert "Dataset is already fully stored." in out
+        assert "Set overwrite=True to force the download." in out
+
+        # Can't download the dataset if the file already exists
         # (overwrite=False) is the default.
         with pytest.raises(FileExistsError):
             databases.download(source=source, verbose=False, to_file=path)
-
-        # Load the dataset (from the new file because zip is wrong)
-        data2 = databases.load_full(
-            source=source, store_index=False, verbose=False
-        )
-
-        # Check if the data is equal or longer than the original
-        assert data2.shape[0] >= data.shape[0]
-        assert data2.shape[1] == data.shape[1]
-        assert data2.columns.tolist() == data.columns.tolist()
 
         # Remove the file
         path.unlink()
@@ -711,7 +755,6 @@ class TestDownloadDataset:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_download_n_requests(self, source: str, mocker):
         """Test the download function when requests is not installed."""
-
         # Clear the memory
         databases.clear_memory(source=source, verbose=False)
 
@@ -728,3 +771,95 @@ class TestDownloadDataset:
 
         with pytest.raises(ImportError):
             databases.download(source=source, to_memory=True, verbose=False)
+
+    def test_download_y_requests_bina(
+        self, db_temp_path: str, capfd, mocker, zip_path
+    ):
+        """Test the download function when requests is installed."""
+        if not utils.requests_imported:
+            pytest.skip("requests is not installed.")
+
+        # JUST FOR SOURCE = "p"
+        source = "p"
+
+        # Clear the memory
+        databases.clear_memory(source=source, verbose=False)
+
+        # If no destination, raise an error
+        with pytest.raises(ValueError):
+            databases.download_binary(
+                circumbinary=True, to_memory=False, verbose=False
+            )
+
+        # Load the dataset
+        data = databases.load_binary(
+            circumbinary=True,
+            ret_header=False,
+            verbose=False,
+            clean=False,
+        )
+
+        # Get a temp file path
+        tmp_path = db_temp_path(source, "txt")
+
+        # Set destiny path
+        path = Path(tmp_path)
+
+        # CHECK IF THE FILE DOES NOT EXISTS
+        assert not path.exists()
+
+        # MOCK THE DOWNLOAD FUNCTION
+        # Get the corresponding lines
+        lines = self.retrieve_data(source, zip_path)
+
+        # MOCK THE DOWNLOAD FUNCTION
+        mocker.patch(
+            "resokit.datasets.databases.request_dataset", return_value=lines
+        )
+
+        # Download the dataset
+        data2 = databases.download_binary(
+            circumbinary=True, to_file=path, verbose=False, return_data=True
+        )
+
+        # Check if the file is saved
+        assert path.exists()
+
+        # Assert data2 is equal to data
+        pd.testing.assert_frame_equal(data, data2)
+
+        # Can't download the dataset if the data already exists in memory
+        # (overwrite=False) is the default.
+        with pytest.raises(ValueError):
+            databases.download_binary(
+                circumbinary=True, verbose=True, return_data=False
+            )
+            _, err = capfd.readouterr()
+            assert "Nothing to do. Dataset is already stored in memory" in err
+
+        # Can't download the dataset if the file already exists
+        # (overwrite=False) is the default.
+        with pytest.raises(FileExistsError):
+            databases.download_binary(
+                circumbinary=True, verbose=False, to_file=path
+            )
+
+        # Remove the file
+        path.unlink()
+
+        # Set destiny path
+        file_path = Path(tmp_path)
+
+        # Write some content
+        file_path.write_text("Old content")
+
+        with pytest.raises(FileExistsError):
+            databases.download_binary(
+                circumbinary=True,
+                to_file=file_path,
+                overwrite=False,
+                verbose=False,
+            )
+
+        # remove file
+        file_path.unlink()
