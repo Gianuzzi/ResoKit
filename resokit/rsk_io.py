@@ -48,7 +48,7 @@ def _separate_resangs(resangs,npl):
 def load_integration(
     file,
     npl,
-    names=["time", "ibody", "a", "e", "inc", "M", "w", "Omega"],
+    names=["times", "ibody", "a", "e", "inc", "M", "w", "Omega"],
     sep_files=False,
     mass=None,
     radius=None,
@@ -70,9 +70,9 @@ def load_integration(
     npl : int
         Number of planets.
     names : list of str, optional
-        Contents of the columns. Can only include the terms ["time", "ibody",
+        Contents of the columns. Can only include the terms ["times", "ibody",
         "a", "e", "inc", "M", "w", "Omega", "mass", "_"]. Use "_" for
-        throwaways. The default is ["time", "ibody", "a", "e", "inc", "M",
+        throwaways. The default is ["times", "ibody", "a", "e", "inc", "M",
         "w", "Omega"].
     sep_files: bool, optional
         Should be true if data is scattered in a one-file-per-body manner.
@@ -240,4 +240,10 @@ def load_integration(
     resangs = _to_Angles(resangs)
     resangs_l = _separate_resangs(resangs,npl)
     
+    system = DynamicSystem(star=star, planets=planets, resangs=resangs_l)
+    
+    for planet in system.planets:
+    	object.__setattr__(planet, "star", system.star) 
+    	planet.system = system
+        
     return DynamicSystem(star=star, planets=planets, resangs=resangs_l)
