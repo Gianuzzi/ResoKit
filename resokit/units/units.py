@@ -45,9 +45,9 @@ M_JUP = 1.898e27  # kg
 M_EAR = 5.972e24  # kg
 
 # Hour in seconds
-HOUR = 3600  # s
+HOUR = 3600.  # s
 # Day in seconds
-DAY = 86400  # s
+DAY = 86400.  # s
 # Year in seconds
 YEAR = 3.154e7  # s
 
@@ -75,4 +75,13 @@ PC2AU = PC / AU  # Parsec to AU
 # Angle conversions
 DEG2RAD = pi / 180.0  # Degrees to radians
 RAD2DEG = 180.0 / pi  # Radians to degrees
-# Time conversions too obvious to write them here
+# Time conversions
+YEAR2DAY = 365.25  # Years to days
+DAY2YEAR = 1.0 / YEAR2DAY  # Days to years
+HOUR2DAY = 24.0  # Hours to days
+DAY2HOUR = 1.0 / HOUR2DAY  # Days to hours
+HOUR2YEAR = HOUR / YEAR  # Hours to years
+YEAR2HOUR = YEAR / HOUR  # Years to hours
+SEC2HOUR = 1.0 / HOUR  # Seconds to hours
+SEC2DAY = 1.0 / DAY  # Seconds to days
+SEC2YEAR = 1.0 / YEAR  # Seconds to years
