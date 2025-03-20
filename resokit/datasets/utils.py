@@ -750,6 +750,23 @@ def is_notebook() -> bool:
         return False  # Probably standard Python interpreter
 
 
+def __parse_date(date_str: str, soft: bool = True) -> datetime:
+    """Try different date formats to robustly parse the last update date."""
+    # Full & abbreviated months
+    date_formats = ["%B %d, %Y", "%b %d, %Y", "%b. %d, %Y", "%m/%d/%Y"]
+
+    for fmt in date_formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue  # Try the next format
+
+    # If all fail
+    if soft:
+        return False
+    raise ValueError(f"Could not parse date: {date_str}")
+
+
 def check_online_dataset(
     source: str, verbose: bool = True
 ) -> Tuple[int, datetime]:
@@ -784,22 +801,45 @@ def check_online_dataset(
 
     # Call subfunction
     if source == "eu":
-        npl, fecha = _check_online_eu(verbose=verbose)
+        npl_str, date_str = _check_online_eu(verbose=verbose)
     elif source == "nasa":
-        npl, fecha = _check_online_nasa(verbose=verbose)
+        npl_str, date_str = _check_online_nasa(verbose=verbose)
     else:
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
-    if verbose and npl != -1:
-        days_ago = (datetime.now() - fecha).days
-        date = fecha.strftime("%Y-%m-%d")
-        print(f" Last online update: {date} ({days_ago} days ago)")
-        print(" Number of planets in online dataset:", npl)
+    # Parse the planets
+    try:
+        # Remove comma if present
+        npl = int(npl_str.replace(",", ""))
+    except ValueError:
+        if verbose:
+            print(
+                " Could not parse the amount of planets in "
+                + f"online {source} database."
+            )
+        npl = -1
 
-    return npl, fecha
+    # Parse the Date
+    date = __parse_date(date_str, soft=True)
+    if date is False:
+        if verbose:
+            print(" Could not parse the last update date.")
+        date = None
+        days_ago = None
+    else:
+        days_ago = (datetime.now() - date).days
+
+    # Message
+    if verbose:
+        if npl > 0:
+            print(f" Number of planets in online dataset: {npl}")
+        if date:
+            print(f" Last online update: {date} ({days_ago} days ago)")
+
+    return npl, days_ago
 
 
-def _check_online_eu(verbose: bool = True) -> Tuple[int, datetime]:
+def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
     """Query the length of the exoplanet.eu dataset.
 
     Parameters
@@ -826,31 +866,30 @@ def _check_online_eu(verbose: bool = True) -> Tuple[int, datetime]:
         text = None
         for p in soup.find_all("p"):
             if "Last update" in p.text:
-                text = p.text
+                text = p.text.strip()
                 break
 
         if text is None:
             if verbose:
-                print("No 'Last update' text found on the webpage.")
+                print(" No 'Last update' text found on the webpage.")
             return -1, None
 
         # Extract the date and number of planets using regex
-        match = re.search(
-            r"Last update: (\w+\.\s\d{1,2},\s\d{4}) currently (\d+) planets\.",
-            text,
+        aux = (
+            r"Last\s+update[d]?\s*:\s*([\w\.]+\s+\d{1,2},\s+\d{4})"
+            + r"\s+currently\s+([\d,]+)\s+planets"
         )
+        match = re.search(aux, text)
 
         if not match:
             if verbose:
-                print("No match found in the extracted text.")
+                print(" No match found in the extracted text.")
             return -1, None
 
         # Parse extracted values
-        date_str, planet_count = match.groups()
-        last_update = datetime.strptime(date_str, "%b. %d, %Y")
-        n_planets = int(planet_count)
+        date_str, planet_count_str = match.groups()
 
-        return n_planets, last_update
+        return planet_count_str, date_str
 
     except requests.exceptions.RequestException as e:
         if verbose:
@@ -859,7 +898,7 @@ def _check_online_eu(verbose: bool = True) -> Tuple[int, datetime]:
     return -1, None
 
 
-def _check_online_nasa(verbose: bool = True) -> Tuple[int, datetime]:
+def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
     """Query the length of the NASA dataset.
 
     Parameters
@@ -884,28 +923,23 @@ def _check_online_nasa(verbose: bool = True) -> Tuple[int, datetime]:
 
         # Extract the number of confirmed planets
         planet_count_div = soup.find("div", class_="stat")
-        n_planets = (
-            int(planet_count_div.text.replace(",", "").strip())
-            if planet_count_div
-            else None
-        )
+        if planet_count_div:
+            planet_count_str = planet_count_div.text.strip()
+        else:
+            if verbose:
+                print(" No match found in the extracted text.")
+            planet_count_str = -1
 
         # Extract the last update date
         date_div = soup.find("div", class_="date")
-        date_str = date_div.text.strip() if date_div else None
-
-        # Convert date string to datetime object
-        last_update = (
-            datetime.strptime(date_str, "%m/%d/%Y") if date_str else None
-        )
-
-        # Print results
-        if n_planets is None or last_update is None:
+        if date_div:
+            date_str = date_div.text.strip()
+        else:
             if verbose:
-                print("No match found in the extracted text.")
-            return -1, None
+                print(" No match found in the extracted text.")
+            date_str = None
 
-        return n_planets, last_update
+        return planet_count_str, date_str
 
     except requests.exceptions.RequestException as e:
         if verbose:

@@ -810,26 +810,34 @@ def check_outdated(source: str, verbose: bool = True) -> bool:
         # Keep only non controversial and default_flag (not set bc not to_rk)
         df_stored = df_stored[df_stored["default_flag"] == 1]
         # df_stored = df_stored[df_stored["controversial"] == 0]  # NASA skips
-    n_stored = len(df_stored)
-    if n_stored > 0 and verbose:
-        print(f" Number of planets in stored dataset: {n_stored}")
+    n_local = len(df_stored)
+    if n_local > 0 and verbose:
+        print(f" Number of planets in stored dataset: {n_local}")
         if source == "nasa":
             print("  (Including also non-default parameters set.)")
     elif verbose:
         print("Could not load the stored dataset. ")
 
     # Check if the dataset is outdated
-    n_pl, _ = check_online_dataset(source=source, verbose=verbose)
+    n_online, _ = check_online_dataset(source=source, verbose=verbose)
 
-    if n_pl == n_stored:
+    if n_online == n_local:
         if verbose:
             print("Dataset is already up-to-date.")
         return False
-    elif n_pl < 0 and verbose:
-        print("Cannot check if the dataset is up-to-date. ")
-    elif n_pl < n_stored and verbose:
-        print("The online dataset has less rows than the stored dataset. ")
+    elif n_online <= 0:
+        if verbose:
+            print("Cannot check if the dataset is up-to-date. ")
+            print("The dataset could be outdated.")
+        return True
+    elif n_online < n_local:
+        if verbose:
+            print("The online dataset has less rows than the stored dataset. ")
+            print("This is unexpected.")
+        return False
+    # n_online > n_local
     if verbose:
+        print("The online dataset has more rows than the stored dataset. ")
         print("The dataset is outdated.")
 
     return True
