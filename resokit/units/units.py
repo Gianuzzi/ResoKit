@@ -44,6 +44,13 @@ M_JUP = 1.898e27  # kg
 # Earth mass in kg
 M_EAR = 5.972e24  # kg
 
+# Density of Sun in kg/m^3
+RHO_SUN = M_SUN / (4.0 / 3.0 * pi * R_SUN**3)  # kg/m^3
+# Density of Jupiter in kg/m^3
+RHO_JUP = M_JUP / (4.0 / 3.0 * pi * R_JUP**3)  # kg/m^3
+# Density of Earth in kg/m^3
+RHO_EARTH = M_EAR / (4.0 / 3.0 * pi * R_EAR**3)  # kg/m^3
+
 # Hour in seconds
 HOUR = 3600.0  # s
 # Day in seconds
@@ -72,6 +79,13 @@ Rs2Rj = R_SUN / R_JUP  # Solar to Jupiter radius
 # Distance conversions
 AU2PC = AU / PC  # AU to parsec
 PC2AU = PC / AU  # Parsec to AU
+# Density conversions
+RhoJ2RhoE = RHO_JUP / RHO_EARTH  # Jupiter to Earth density
+RhoE2RhoJ = RHO_EARTH / RHO_JUP  # Earth to Jupiter density
+RhoJ2RhoS = RHO_JUP / RHO_SUN  # Jupiter to Solar density
+RhoS2RhoJ = RHO_SUN / RHO_JUP  # Solar to Jupiter density
+RhoE2RhoS = RHO_EARTH / RHO_SUN  # Earth to Solar density
+RhoS2RhoE = RHO_SUN / RHO_EARTH  # Solar to Earth density
 # Angle conversions
 DEG2RAD = pi / 180.0  # Degrees to radians
 RAD2DEG = 180.0 / pi  # Radians to degrees
