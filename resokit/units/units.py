@@ -45,9 +45,9 @@ M_JUP = 1.898e27  # kg
 M_EAR = 5.972e24  # kg
 
 # Hour in seconds
-HOUR = 3600.  # s
+HOUR = 3600.0  # s
 # Day in seconds
-DAY = 86400.  # s
+DAY = 86400.0  # s
 # Year in seconds
 YEAR = 3.154e7  # s
 
