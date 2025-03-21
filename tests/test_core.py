@@ -95,6 +95,7 @@ class K11:
         index=pl_names,
     )
     nasa_p_err_min = [0.0006, 0.0013, 0.0009, 0.0008, 0.0027, 0.001]
+    nasa_p_err_max = [0.001, 0.0008, 0.0009, 0.0012, 0.0032, 0.0006]
 
     perat = pd.DataFrame(
         data=[
@@ -345,6 +346,7 @@ class TestStaticSystem:
             )
         else:
             base["P_err_min"] = K11.nasa_p_err_min
+            base["P_err_max"] = K11.nasa_p_err_max
             pd.testing.assert_frame_equal(
                 per,
                 base,
