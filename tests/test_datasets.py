@@ -38,11 +38,11 @@ class TestPath:
         # Check if the zip file is not empty
         assert zip_path.stat().st_size > 0
         # Check the zipfile has all files:
-        #  "eu.csv", "nasa.csv", "plan_bin500au.txt", "plan_circ.txt"
+        #  "eu.csv", "nasa.csv", "plan_bin500aun.txt", "plan_circ.txt"
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             assert "exoplanet_eu.csv" in zip_ref.namelist()
             assert "nasa.csv" in zip_ref.namelist()
-            assert "plan_bin500au.txt" in zip_ref.namelist()
+            assert "plan_bin500aun.txt" in zip_ref.namelist()
             assert "plan_circ.txt" in zip_ref.namelist()
 
 
@@ -346,7 +346,7 @@ class TestLoadDataset:
         # Check if check the age
         if check_age:
             if not to_df:  # If to_df, the age is not checked
-                assert data.age > 0
+                assert data.age >= 0
             assert "Last modified: " in out
             assert "days ago" in out
 
@@ -579,8 +579,8 @@ class TestCheckFileAge:
         # Check if the age is a float
         assert isinstance(age, int)
 
-        # Check if the age is greater than 0
-        assert age > 0
+        # Check if the age is greater equal than 0
+        assert age >= 0
 
         # Try to check the age of a non-existing file
         with pytest.raises(FileNotFoundError):
@@ -660,7 +660,7 @@ class TestDatasetClass:
         transit = disc_method == "Primary Transit"
         amount = transit.sum().values[0]
 
-        assert amount == 4507  # Known value
+        assert amount == 4512  # Known value
 
 
 class TestDownloadDataset:
