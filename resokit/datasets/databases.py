@@ -69,11 +69,11 @@ _INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
 # Define the sources for the binaries datasets
 _BINARIES_URLS = {
     "p": "https://lesia.obspm.fr/perso/philippe-thebault/plan_circ.txt",
-    "s": "https://lesia.obspm.fr/perso/philippe-thebault/plan_bin500au.txt",
+    "s": "https://lesia.obspm.fr/perso/philippe-thebault/plan_bin500aun.txt",
 }
 
 # Filenames and URLs for the binaries datasets
-_BINARIES_FILENAMES = {"p": "plan_circ.txt", "s": "plan_bin500au.txt"}
+_BINARIES_FILENAMES = {"p": "plan_circ.txt", "s": "plan_bin500aun.txt"}
 
 # Columns of the binaries datasets
 _BINARIES_COLUMNS = [
@@ -1955,19 +1955,23 @@ def _extract_header_and_data(
         data : pd.DataFrame
             The dataset as a pandas DataFrame.
     """
-    # Find the index of the last line that starts with "------"
+    # Find the index of the last line that starts with "Note:"
     # (or any number of hyphens)
-    separator_index = next(
-        i
-        for i, line in enumerate(reversed(lines))
-        if line.strip().startswith("-")
-    )
-    separator_index = len(lines) - separator_index
+    separator_index = len(lines)
+    for i, line in enumerate(reversed(lines)):
+        stripped = line.strip()
+        if stripped.startswith("Note:") or stripped.startswith("-"):
+            separator_index = len(lines) - i
+            break
+
+    # Check if the separator was found
+    if separator_index == len(lines):
+        raise ValueError("Separator line not found.")
 
     # The header is everything before the separator line
     header = "".join(lines[:separator_index]).strip()
 
-    # The data starts after the "----------" line, so we extract the data
+    # The data starts after the last "Note:" line, so we extract the data
     data_lines = [line.replace("\t", " ") for line in lines[separator_index:]]
 
     # Define widths for fixed-width formatted data
@@ -1977,7 +1981,7 @@ def _extract_header_and_data(
     elif circumbinary:
         kwargs["widths"] = [15, 10, 6, 6, 8, 2, 7, 7, 2, 10, 6, 9, 7, 8]
     else:
-        kwargs["widths"] = [15, 10, 6, 6, 8, 2, 7, 7, 2, 8, 6, 9, 7, 8]
+        kwargs["widths"] = [15, 10, 6, 6, 8, 2, 8, 7, 2, 8, 6, 9, 7, 8]
 
     # Use pandas to read the fixed-width formatted data
     # starting after the header
