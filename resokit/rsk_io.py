@@ -4,7 +4,7 @@
 
 import numpy as np
 import pandas as pd
-from rsk_core import DynamicPlanet, Star, DynamicSystem, Angles
+from .rsk_core import DynamicPlanet, Star, DynamicSystem, Angles
 
 # =============================================================================
 # CONSTANTS
