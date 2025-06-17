@@ -4275,13 +4275,6 @@ def resokit_to_system(
             name=star_df.name,
             metadata=resokit_data.metadata,
         )
-        # If we have a binary, we shall set the 2ndarys name as the 1st (if
-        # it ends with an A) but with a B. (To fix #2)
-        if star.name.endswith((" A", "-A")):
-            new_name = star.name[:-2] + (
-                " B" if star.name.endswith(" A") else "-B"
-            )
-            binary = binary.set_attr("name", new_name, in_star=1)
         star = binary
         if verbose:
             print(f" Using binary star '{star.name}'.")
@@ -4345,6 +4338,8 @@ def binary_row_to_binary_star(
     """
     # Get the systems name
     name = binary_row["star0_name"]
+    if str(name).endswith((" A", "-A")) or str(name).endswith((" B", "-B")):
+        name = name[:-2]
     star0_name = name + " A"
     star1_name = name + " B"
 

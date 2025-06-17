@@ -456,6 +456,7 @@ def load_system_from_eu(
 
     # Return StaticSystem
     if bin_type in ["p", "s"]:  # We have to create StaticBinaryStar
+        new_name = reso["star_name"].iloc[0]  # Get star name
         binary = load_from_binary(
             name=name,
             exact_match=exact_match,
@@ -463,6 +464,7 @@ def load_system_from_eu(
             soft=False,
             add_period=True,
             verbose=False,
+            rename=new_name,
         )
         return resokit_to_system(
             reso,
@@ -482,8 +484,8 @@ def load_system_from_nasa(
     store_index: bool = True,
     verbose: bool = True,
     low_memory: bool = True,
-    controversial_set: bool = False,
-    default_set: bool = True,
+    controversial_set: Union[bool, None] = False,
+    default_set: Union[bool, None] = True,
     as_resokit: bool = False,
     exact_match: bool = True,
     check_binary: Union[bool, None] = True,
@@ -509,10 +511,10 @@ def load_system_from_nasa(
         Whether to print information.
     low_memory : bool, optional. Default: True.
         Whether to avoid loading the whole dataset into memory.
-    controversial_set : bool, optional. Default: False.
+    controversial_set : bool, None, optional. Default: False.
         Whether to include controversial data.
         None to include all data.
-    default_set : bool, optional. Default: True.
+    default_set : bool, None, optional. Default: True.
         Whether to include default data.
         None to include all data.
     as_resokit : bool, optional. Default: False.
@@ -561,7 +563,7 @@ def load_system_from_nasa(
         raise ValueError(f"{obj} {name} not found in NASA database.")
 
     # Filter controversial and/ or defalut data
-    single_syst = True
+    single_syst = controversial_set is False and default_set is True
     if controversial_set is not None or default_set is not None:
         if controversial_set is not None:
             df = df[df["pl_controv_flag"] == int(controversial_set)]
@@ -581,12 +583,11 @@ def load_system_from_nasa(
         # In this case, there is no such thing as a "system", because
         # each planet solution may be independant from other. So, we just
         # return all solutions as a DataFrame.
-        if verbose:
+        if verbose and not single_syst:
             print(
-                "Multiple solutions found for the system, "
-                + "returning all solutions."
+                "Multiple solutions found for the search."
+                + " Returning all solutions."
             )
-        single_syst = False
 
     # Convert the DataFrame to ResoKit format
     # Note: Metadata is set from default values
@@ -640,6 +641,7 @@ def load_from_binary(
     soft: bool = False,
     add_period: bool = True,
     verbose: bool = True,
+    rename: Union[str, None] = None,
 ) -> StaticBinaryStar:
     """Load a binary star system from the dataset.
 
@@ -659,6 +661,8 @@ def load_from_binary(
         If True, add the period of the binary system.
     verbose : bool, optional. Default is True.
         If True, print messages.
+    rename:  Union[str, None], optional. Default is None.
+        If not None, set this value as the name of the stars.
 
     Returns
     -------
@@ -690,6 +694,11 @@ def load_from_binary(
     # Add the period
     if add_period:
         row["P"] = calc_period(row["a"], row["star0_mass"], row["star1_mass"])
+
+    # Rename the stars if requested
+    if rename is not None:
+        row["star0_name"] = str(rename)
+        # Just the first, because then binary_row... will rename the second
 
     # Return as a pandas DataFrame if requested
     if as_pandas:
