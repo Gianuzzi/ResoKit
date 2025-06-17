@@ -19,7 +19,7 @@
 
 import warnings
 from collections.abc import Mapping
-from typing import Iterable, List, Tuple, Union
+from typing import Any, Iterable, List, Tuple, Union
 
 import attrs
 
@@ -91,7 +91,7 @@ class MetaData(Mapping):
     12
     """
 
-    _data = attrs.field(converter=dict, factory=dict)
+    _data: dict[Any, Any] = attrs.field(converter=dict, factory=dict)
 
     def __repr__(self):
         """repr(x) <=> x.__repr__()."""
@@ -206,7 +206,7 @@ class ResokitDataFrame:
         """dir(pdf) <==> pdf.__dir__()."""
         return super().__dir__() + dir(self.data)
 
-    def __eq__(self, other):
+    def __eq__(self, other: "ResokitDataFrame") -> bool:
         """X == Y <==> X.__eq__(Y)."""
         if id(self) == id(other):
             return True
@@ -275,7 +275,7 @@ class ResokitDataFrame:
         y: str,
         error_x: bool = False,
         error_y: bool = False,
-        ax: plt.Axes = None,
+        ax: Union[plt.Axes, None] = None,
         label: str = "",
         **plot_kwargs,
     ) -> plt.Axes:
@@ -321,13 +321,14 @@ class ResokitDataFrame:
             raise TypeError("error_x and error_y must be booleans.")
 
         # Check error columns
+        xerr_min = xerr_max = 0
         if error_x:
             try:
                 xerr_min = self[f"{x}_err_min"]
                 xerr_max = self[f"{x}_err_max"]
             except KeyError:
                 error_x = False
-
+        yerr_min = yerr_max = 0
         if error_y:
             try:
                 yerr_min = self[f"{y}_err_min"]
@@ -337,20 +338,24 @@ class ResokitDataFrame:
 
         # Check label
         if label:
-            label = str(label)
+            mylabel = str(label)
         else:
-            label = None
+            mylabel = None
 
         # Check fmt
         fmt = plot_kwargs.pop("fmt", "o")
+
+        # Set xerr and yerr
+        xerr = [[xerr_min], [xerr_max]] if error_x else None
+        yerr = [[yerr_min], [yerr_max]] if error_y else None
 
         # Plot the data
         ax.errorbar(
             x_data,
             y_data,
-            xerr=[[xerr_min], [xerr_max]] if error_x else None,
-            yerr=[[yerr_min], [yerr_max]] if error_y else None,
-            label=label,
+            xerr=xerr,
+            yerr=yerr,
+            label=mylabel,
             fmt=fmt,
             **plot_kwargs,
         )
@@ -427,8 +432,8 @@ def df_to_resokit(
     sort_by: Union[str, bool] = "P",
     return_df: bool = False,
     rename_index: bool = False,
-    metadata: dict = None,
-) -> ResokitDataFrame:
+    metadata: Union[dict, None] = None,
+) -> Union[ResokitDataFrame, pd.DataFrame]:
     """Convert ExoplanetEU or NASA data to :py:class:`ResokitDataFrame`.
 
     This function converts a DataFrame from ExoplanetEU or NASA to a
@@ -721,7 +726,7 @@ class StaticBody(ResokitDataFrame):
 
         return self.data[key]
 
-    def set_attr(self, attr: str, value: any) -> "StaticBody":
+    def set_attr(self, attr: str, value: Any) -> "StaticBody":
         """Set an attribute of the StaticBody and return a new instance.
 
         Parameters
@@ -759,7 +764,7 @@ class StaticBody(ResokitDataFrame):
                 source="user",
                 metadata=new_metadata,
             )
-        else:
+        elif attr != "metadata":
             # Check if the attribute is in, but not in data
             if new_attr and hasattr(self, attr):
                 # List only the attributes that can be set
@@ -865,10 +870,9 @@ class StaticPlanet(StaticBody):
         Series : pandas Series
             Series with the requested items.
         """
-        items = parse_to_iter(items)
 
         vals = {}
-        for item in items:
+        for item in parse_to_iter(items):
             vals[item] = self[item]
             if error:
                 try:
@@ -917,15 +921,15 @@ class StaticPlanet(StaticBody):
             If `err_method=-1` (default), the errors are not returned.
         """
         # Get planet radius and convert to Earth radii
-        radius = self["radius"] * Rj2Re
+        radius = float(self["radius"] * Rj2Re)
 
         radius_err_min = 0.0
         radius_err_max = 0.0
         # Get the errors and convert to Earth radii, if needed (and available)
         ret_err = True
         if kwargs.get("err_method", -1) in [1, 2]:
-            radius_err_min = self["radius_err_min"] * Rj2Re
-            radius_err_max = self["radius_err_max"] * Rj2Re
+            radius_err_min = float(self["radius_err_min"] * Rj2Re)
+            radius_err_max = float(self["radius_err_max"] * Rj2Re)
         elif kwargs.get("err_method", -1) == -1:
             ret_err = False
             kwargs["err_method"] = 0  # Set to 0 for the function
@@ -1445,7 +1449,7 @@ class StaticBinaryStar:
         return [self.star(idx) for idx in indices]
 
     def set_attr(
-        self, attr: str, value: any, in_star: Union[None, int] = None
+        self, attr: str, value: Any, in_star: Union[None, int] = None
     ) -> "StaticBinaryStar":
         """Set an attribute of the StaticBinaryStar and return a new instance.
 
@@ -1475,7 +1479,7 @@ class StaticBinaryStar:
         raise ValueError("Invalid value for 'in_star'. Must be 0, 1, or None.")
 
     def _set_binary_attribute(
-        self, attr: str, value: any
+        self, attr: str, value: Any
     ) -> "StaticBinaryStar":
         """Modify an attribute of the binary system (not an individual star)."""
         # Check if the attribute is not in the data
@@ -1501,7 +1505,7 @@ class StaticBinaryStar:
         return attrs.evolve(self, data=new_data, metadata=new_metadata)
 
     def _set_star_attribute(
-        self, star_index: int, attr: str, value: any
+        self, star_index: int, attr: str, value: Any
     ) -> "StaticBinaryStar":
         """Modify an attribute of one of the stars (star0 or star1)."""
         # Get the stars
@@ -3633,7 +3637,7 @@ class StaticSystem:
     def set_attr(
         self,
         attr: str,
-        value: any,
+        value: Any,
         in_star: Union[None, int] = None,
         in_planet: Union[None, int, str] = None,
         in_binary: Union[None, bool] = None,
@@ -4271,6 +4275,13 @@ def resokit_to_system(
             name=star_df.name,
             metadata=resokit_data.metadata,
         )
+        # If we have a binary, we shall set the 2ndarys name as the 1st (if
+        # it ends with an A) but with a B. (To fix #2)
+        if star.name.endswith((" A", "-A")):
+            new_name = star.name[:-2] + (
+                " B" if star.name.endswith(" A") else "-B"
+            )
+            binary = binary.set_attr("name", new_name, in_star=1)
         star = binary
         if verbose:
             print(f" Using binary star '{star.name}'.")
