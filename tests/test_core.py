@@ -224,13 +224,9 @@ class TestLoadSystem:
         assert len(syst.planets) == 3
 
         # Assert names
-        assert syst.star.name == "Kepler47"
-        if source == "eu":
-            assert syst.star.star0.name == "Kepler-47 A"
-        else:
-            assert syst.star.star0.name == "Kepler-47"
-
-        assert syst.star.star1.name == "Kepler47 B"
+        assert syst.star.name == "Kepler-47"
+        assert syst.star.star0.name == "Kepler-47 A"
+        assert syst.star.star1.name == "Kepler-47 B"
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_load_binary_without_binary_system(self, source: str):

@@ -22,7 +22,7 @@ import platform
 import sys
 from difflib import SequenceMatcher
 from types import MappingProxyType
-from typing import Iterable, Tuple
+from typing import Any, Iterable, Tuple, Union
 
 from pandas import Index, Series
 
@@ -245,8 +245,8 @@ def assert_module_imported(
     module_name: str,
     message: str = "",
     retry: bool = True,
-    alias: str = None,
-    package: str = None,
+    alias: Union[str, None] = None,
+    package: Union[str, None] = None,
 ):
     """Assert that the specified module is imported.
 
@@ -284,7 +284,7 @@ def assert_module_imported(
     return True  # Module is imported
 
 
-def parse_to_iter(value: any, to: type = list) -> Iterable:
+def parse_to_iter(value: Any, to: type = list) -> Iterable:
     """Parse a value to an iterable if it is not already.
 
     Parameters
@@ -358,7 +358,7 @@ def _similar(a: str, b: str) -> float:
     return SequenceMatcher(None, str(a), b).ratio()
 
 
-def _n_close(a: any, b: str, length: int, n=0) -> bool:
+def _n_close(a: Any, b: str, length: int, n=0) -> bool:
     """Check if two strings are n spaces-close."""
     stra = str(a)  # Convert to string
 
@@ -368,7 +368,10 @@ def _n_close(a: any, b: str, length: int, n=0) -> bool:
 
 
 def find_best_match(
-    raw_series: Series, name: str, parse: bool = True, force: bool = False
+    raw_series: Series,
+    name: str,
+    parse: Union[bool, None] = True,
+    force: bool = False,
 ) -> Tuple[Index, Series, float]:
     """Find the best match for a name in a series.
 
@@ -416,7 +419,7 @@ def find_best_match(
         # exact_matches = raw_series.loc[exact_matches.index]
         exact_matches = raw_series[edited_series == name]
         if exact_matches.values[0] == original_name:
-            return exact_matches.index, exact_matches.values, 1
+            return exact_matches.index, exact_matches.values, 1.0
 
         return exact_matches.index, exact_matches.values, 0.99999  # Almost 1
 
