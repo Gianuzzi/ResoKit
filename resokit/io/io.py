@@ -456,7 +456,6 @@ def load_system_from_eu(
 
     # Return StaticSystem
     if bin_type in ["p", "s"]:  # We have to create StaticBinaryStar
-        new_name = reso["star_name"].iloc[0]  # Get star name
         binary = load_from_binary(
             name=name,
             exact_match=exact_match,
@@ -464,7 +463,6 @@ def load_system_from_eu(
             soft=False,
             add_period=True,
             verbose=False,
-            rename=new_name,
         )
         return resokit_to_system(
             reso,
@@ -542,7 +540,6 @@ def load_system_from_nasa(
         Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
         or :py:class:`StaticSystem`.
     """
-    # Load the system from the database
     df, bin_type, _ = _load_system_from_db(
         name=name,
         source="nasa",
@@ -586,7 +583,8 @@ def load_system_from_nasa(
         if verbose and not single_syst:
             print(
                 "Multiple solutions found for the search."
-                + " Returning all solutions."
+                + " Returning all solutions.\n"
+                + " Binary systems are not supported in this case."
             )
 
     # Convert the DataFrame to ResoKit format
@@ -603,7 +601,7 @@ def load_system_from_nasa(
         metadata=meta,
     )
 
-    if as_resokit:  # Return ResoKit DataFrame
+    if as_resokit or not single_syst:  # Return ResoKit DataFrame
         return reso
 
     # Return StaticSystem
@@ -616,17 +614,12 @@ def load_system_from_nasa(
             add_period=True,
             verbose=False,
         )
-        if not single_syst:
-            return resokit_to_system(
-                reso,
-                binary_star=binary,
-                circumbinary=bin_type == "p",
-                verbose=verbose,
-            )
-
-    # If single_syst is False, we return a DataFrame
-    if single_syst:
-        return reso  # Return as intended
+        return resokit_to_system(
+            reso,
+            binary_star=binary,
+            circumbinary=bin_type == "p",
+            verbose=verbose,
+        )
 
     return resokit_to_system(reso, verbose=verbose)  # Return StaticSystem
 

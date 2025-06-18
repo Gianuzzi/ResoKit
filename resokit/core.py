@@ -870,7 +870,6 @@ class StaticPlanet(StaticBody):
         Series : pandas Series
             Series with the requested items.
         """
-
         vals = {}
         for item in parse_to_iter(items):
             vals[item] = self[item]
@@ -4244,40 +4243,64 @@ def resokit_to_system(
 
     # Redefine star columns to avoid "star_"
     star_df = star_df.rename(lambda x: str(x).replace("star_", ""))
+
+    # Main star and system name (from the star)
+    syst_name = str(star_df["name"])
+    if syst_name.endswith((" A", "-A")) or syst_name.endswith((" B", "-B")):
+        syst_name = syst_name[:-2]
+
     # EXTRA: Check if the df name is number (idx from db) or a name
     # If it not a number, we must change it to the star name
     if str(star_df.name).isnumeric():
-        # Check if a binary star is provided
-        if binary_star is not None:
-            star_df.name = binary_star.name
-        else:
-            star_df.name = star_df["name"]
+        star_df.name = star_df["name"]
 
     # Message
     if verbose:
-        print(f"Creating system '{star_df.name}'.")
+        print(f"Creating system '{syst_name}'.")
 
-    # Create star
-    star = _create_static_star(
-        star_data=star_df,
-        source=resokit_data.source if binary_star is None else "binary",
-        metadata=resokit_data.metadata,
-    )
     # Create binary star only if needed
     if binary_star is None:
+        # Create star
+        star = _create_static_star(
+            star_data=star_df,
+            source=resokit_data.source if binary_star is None else "binary",
+            metadata=resokit_data.metadata,
+        )
         if verbose:
             print(f" Star '{star.name}' created.")
     else:
-        binary = _create_static_binary_star_from_binaries(
-            star0=star,  # Star0 is the one from the Resokit data
-            star1=binary_star.star1,
-            binary_row=binary_star.data,
-            name=star_df.name,
+        # If binary star is provided, use it
+        # Rename star0
+        star0_name = (
+            syst_name + " A" if not star_df.name.endswith(" B") else " B"
+        )
+        star_df["name"] = star0_name
+        # Create star
+        star0 = _create_static_star(
+            star_data=star_df,
+            source=resokit_data.source if binary_star is None else "binary",
             metadata=resokit_data.metadata,
         )
-        star = binary
+        # Create star1 from the binary, renaming if needed
+        star1_df = binary_star.star1.to_dataframe()
+        star1_df["name"] = (
+            syst_name + " B" if not star0_name.endswith(" B") else " A"
+        )
+        star1 = _create_static_star(
+            star_data=star1_df.squeeze(),
+            source="binary",
+            metadata=binary_star.star1.metadata,
+        )
+        binary = _create_static_binary_star_from_binaries(
+            star0=star0,  # Star0 is the one from the Resokit data
+            star1=star1,
+            binary_row=binary_star.data,
+            name=syst_name,
+            metadata=resokit_data.metadata,
+        )
         if verbose:
-            print(f" Using binary star '{star.name}'.")
+            print(f" Using binary star '{binary.name}'.")
+        star = binary
 
     # Create Planets
     if resokit_data.n_objects_ > 1:  # Multiple planets
