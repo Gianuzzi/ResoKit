@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from types import MappingProxyType
-from typing import Tuple, Union
+from typing import Any, Callable, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from pandas import DataFrame, read_csv
@@ -530,11 +530,11 @@ def load_from_zip(
     zip_path: Path,
     file_name: str,
     source: Union[str, None] = None,
-    skip_rows: Union[int, callable, None] = None,
-    usecols: Union[list, callable, None] = None,
+    skip_rows: Union[int, Callable, None] = None,
+    usecols: Union[list, Callable, None] = None,
     verbose: bool = True,
-    custom_load: Union[callable, None] = None,
-) -> Union[DataFrame, any]:
+    custom_load: Union[Callable, None] = None,
+) -> Union[DataFrame, Any]:
     """Load the dataset from a ZIP archive.
 
     Reads the dataset from a ZIP archive and returns it as a pandas DataFrame.

@@ -46,7 +46,7 @@ def _search_system_index(
     source: str,
     name: str,
     is_planet: bool = False,
-    raw_df: pd.DataFrame = None,
+    raw_df: Union[pd.DataFrame, None] = None,
     alternative_names: bool = False,
     **load_kwargs,
 ) -> Tuple[pd.Index, pd.Series, float]:
@@ -134,7 +134,7 @@ def _search_system_index(
 
     # Use the new function
     index, _, ratio = find_best_match(
-        raw_series, name=name, parse=parse, force=is_planet
+        raw_series=raw_series, name=name, parse=parse, force=is_planet
     )
 
     # We have to get back the original values
@@ -159,8 +159,8 @@ def _search_system_index(
 
 def _load_system_from_db(
     name: str,
+    source: str,
     is_planet: bool = False,
-    source: str = None,
     store: bool = False,
     store_index: bool = True,
     verbose: bool = True,
@@ -168,17 +168,17 @@ def _load_system_from_db(
     alternative_names: bool = False,
     exact_match: bool = False,
     check_binary: bool = True,
-) -> Tuple[pd.DataFrame, Tuple[str, int]]:
+) -> Tuple[pd.DataFrame, str, int]:
     """Load system from ExoplanetEU or NASA.
 
     Parameters
     ----------
     name : str
         System/planet name.
+    source : str
+        Source of the dataset. Either 'eu' or 'nasa'.
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
-    source : str, optional. Default: None.
-        Source of the dataset. Either 'eu' or 'nasa'.
     store : bool, optional. Default: False.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
@@ -322,6 +322,7 @@ def _load_system_from_db(
 
     # Check if the system is a binary system?
     is_binary = False  # Default: not a binary system
+    circumbinary = False  # Default: not a circumbinary system
     binary_type = "f"  # Default: not a binary system
     idxbin = -1  # Default: not a binary system
     if check_binary:  # Check if binary
@@ -365,7 +366,7 @@ def load_system_from_eu(
     exact_match: bool = True,
     check_binary: Union[bool, None] = True,
     soft: bool = False,
-) -> Union[ResokitDataFrame, StaticSystem]:
+) -> Union[ResokitDataFrame, StaticSystem, None]:
     """Load system from ExoplanetEU.
 
     Parameters
@@ -416,8 +417,8 @@ def load_system_from_eu(
     # Load the system from the database
     df, bin_type, _ = _load_system_from_db(
         name=name,
-        is_planet=is_planet,
         source="eu",
+        is_planet=is_planet,
         store=store,
         store_index=store_index,
         verbose=verbose,
@@ -481,13 +482,13 @@ def load_system_from_nasa(
     store_index: bool = True,
     verbose: bool = True,
     low_memory: bool = True,
-    controversial_set: bool = False,
-    default_set: bool = True,
+    controversial_set: Union[bool, None] = False,
+    default_set: Union[bool, None] = True,
     as_resokit: bool = False,
     exact_match: bool = True,
     check_binary: Union[bool, None] = True,
     soft: bool = False,
-) -> Union[ResokitDataFrame, StaticSystem]:
+) -> Union[ResokitDataFrame, StaticSystem, None]:
     """Load system from NASA.
 
     Parameters
@@ -508,10 +509,10 @@ def load_system_from_nasa(
         Whether to print information.
     low_memory : bool, optional. Default: True.
         Whether to avoid loading the whole dataset into memory.
-    controversial_set : bool, optional. Default: False.
+    controversial_set : bool, None, optional. Default: False.
         Whether to include controversial data.
         None to include all data.
-    default_set : bool, optional. Default: True.
+    default_set : bool, None, optional. Default: True.
         Whether to include default data.
         None to include all data.
     as_resokit : bool, optional. Default: False.
@@ -539,11 +540,10 @@ def load_system_from_nasa(
         Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
         or :py:class:`StaticSystem`.
     """
-    # Load the system from the database
     df, bin_type, _ = _load_system_from_db(
         name=name,
-        is_planet=is_planet,
         source="nasa",
+        is_planet=is_planet,
         store=store,
         store_index=store_index,
         verbose=verbose,
@@ -559,13 +559,33 @@ def load_system_from_nasa(
         obj = "Planet" if is_planet else "Star"
         raise ValueError(f"{obj} {name} not found in NASA database.")
 
-    # Filter controversial data
-    if controversial_set is not None:
-        df = df[df["pl_controv_flag"] == int(controversial_set)]
-
-    # Filter default data
-    if default_set is not None:
-        df = df[df["default_flag"] == int(default_set)]
+    # Filter controversial and/ or defalut data
+    single_syst = controversial_set is False and default_set is True
+    if controversial_set is not None or default_set is not None:
+        if controversial_set is not None:
+            df = df[df["pl_controv_flag"] == int(controversial_set)]
+        if default_set is not None:
+            df = df[df["default_flag"] == int(default_set)]
+        # Check if empty after filtering
+        if df.empty:
+            if soft:
+                return None
+            obj = "Planet" if is_planet else "Star"
+            raise ValueError(
+                f"{obj} {name} not found in NASA database, "
+                + "after filtering with "
+                + f"controversial_set={controversial_set} "
+                + f"and default_set={default_set}."
+            )
+        # In this case, there is no such thing as a "system", because
+        # each planet solution may be independant from other. So, we just
+        # return all solutions as a DataFrame.
+        if verbose and not single_syst:
+            print(
+                "Multiple solutions found for the search."
+                + " Returning all solutions.\n"
+                + " Binary systems are not supported in this case."
+            )
 
     # Convert the DataFrame to ResoKit format
     # Note: Metadata is set from default values
@@ -581,7 +601,7 @@ def load_system_from_nasa(
         metadata=meta,
     )
 
-    if as_resokit:  # Return ResoKit DataFrame
+    if as_resokit or not single_syst:  # Return ResoKit DataFrame
         return reso
 
     # Return StaticSystem
@@ -614,6 +634,7 @@ def load_from_binary(
     soft: bool = False,
     add_period: bool = True,
     verbose: bool = True,
+    rename: Union[str, None] = None,
 ) -> StaticBinaryStar:
     """Load a binary star system from the dataset.
 
@@ -633,6 +654,8 @@ def load_from_binary(
         If True, add the period of the binary system.
     verbose : bool, optional. Default is True.
         If True, print messages.
+    rename:  Union[str, None], optional. Default is None.
+        If not None, set this value as the name of the stars.
 
     Returns
     -------
@@ -664,6 +687,11 @@ def load_from_binary(
     # Add the period
     if add_period:
         row["P"] = calc_period(row["a"], row["star0_mass"], row["star1_mass"])
+
+    # Rename the stars if requested
+    if rename is not None:
+        row["star0_name"] = str(rename)
+        # Just the first, because then binary_row... will rename the second
 
     # Return as a pandas DataFrame if requested
     if as_pandas:

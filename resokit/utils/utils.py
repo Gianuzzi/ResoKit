@@ -18,7 +18,7 @@
 # =============================================================================
 
 from fractions import Fraction
-from typing import Tuple, Union
+from typing import Callable, Tuple, Union
 
 from numpy import pi, sqrt
 
@@ -42,7 +42,7 @@ def float_to_fraction(
     max_iter: int = None,
     max_error: float = None,
     as_fraction: bool = False,
-    stop_func: callable = None,
+    stop_func: Callable = None,
     verbose: bool = True,
 ) -> Union[Fraction, Tuple[int, int]]:
     """Calculate the continued fraction approximation of a value.
