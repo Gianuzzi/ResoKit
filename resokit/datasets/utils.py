@@ -852,6 +852,7 @@ def __parse_date(date_str: str, soft: bool = True) -> Union[datetime, bool]:
         The date string to parse.
         soft : bool, optional. Default: True.
         If True, return False if parsing fails instead of raising an error.
+
     Returns
     -------
     Union[datetime, bool]
@@ -1100,6 +1101,7 @@ def check_online_binary(source: str, verbose: bool = True) -> int:
             length += 1
     except requests.RequestException as e:
         if verbose:
+            print(f"Error: {e}")
             print(
                 " Could not parse the amount of lines in "
                 + f"online {source}-type binaries file."

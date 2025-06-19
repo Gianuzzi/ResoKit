@@ -19,6 +19,8 @@
 # IMPORTS
 # =============================================================================
 
+from pathlib import Path
+
 from .databases import clear_memory  # noqa
 from .databases import download_binary_dataset  # noqa
 from .databases import download_dataset  # noqa
@@ -31,8 +33,6 @@ from .utils import DATASETS_DIR  # noqa
 # =============================================================================
 # DIRECTORY SETUP
 # =============================================================================
-
-from pathlib import Path
 
 Path(DATASETS_DIR).mkdir(parents=True, exist_ok=True)
 

@@ -25,6 +25,7 @@ from typing import BinaryIO, List, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import attrs
+
 import pandas as pd
 
 from resokit.core import MetaData, ResokitDataFrame, df_to_resokit
@@ -32,11 +33,11 @@ from resokit.datasets.utils import (
     BINARIES_COLUMNS,
     BINARIES_FILENAMES,
     BINARIES_URLS,
+    DATASETS_DIR,
     DATASET_DTYPES,
     DATASET_FILENAMES,
     DATASET_URLS,
     DATASET_ZIPNAMES,
-    DATASETS_DIR,
     INDEX_COLUMNS,
     check_file_age,
     check_online_binary,
@@ -868,6 +869,7 @@ class DatasetManager:
         to_resokit: bool = True,
         parsed: bool = False,
     ) -> Union[pd.DataFrame, ResoKitDataset, None]:
+        """Load the index of a given source dataset."""
         if parsed:
             return self._parsed_indexes[source]
 
@@ -1105,7 +1107,8 @@ class DatasetManager:
                 extra = "parsed " if parsed else ""
                 if verbose:
                     print(
-                        f" No {extra}index columns stored in memory for {source}."
+                        f" No {extra}index columns stored "
+                        + f"in memory for {source}."
                     )
                 return None
             elif parsed:
@@ -1338,6 +1341,13 @@ class DatasetManager:
 
 
 class BinaryDatasetManager:
+    """Manager for the ResoKit binaries datasets.
+
+    This class manages the binaries datasets in memory and disk, allowing to
+    load, update, and check if they are outdated. It also provides methods to
+    download and store the datasets.
+    """
+
     def __init__(self):
         # -------------------- BINARY SYSTEMS DATASETS ----------------------
         self._data = {"s": pd.DataFrame(), "p": pd.DataFrame()}
@@ -1954,6 +1964,7 @@ def load_binary_dataset(
         If True, replace the unknown values with NaN.
     verbose : bool, optional. Default: True.
         If True, print the header and messages.
+
     Returns
     -------
     Union[pd.DataFrame, str]
@@ -2267,7 +2278,9 @@ def check_binary_outdated(
             return True
         raise error
 
-    assert isinstance(header, str)
+    assert isinstance(header, str), (
+        "Expected header to be a str, " + f"got {type(header)} instead."
+    )
     n_local = len(df) + len(header.splitlines())
     if n_local > 0 and verbose:
         print(f" Number of lines in stored dataset: {n_local}")

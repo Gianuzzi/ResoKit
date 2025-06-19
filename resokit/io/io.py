@@ -17,7 +17,6 @@
 # IMPORTS
 # =============================================================================
 
-from itertools import product
 from typing import List, Tuple, Union
 
 import pandas as pd
@@ -30,7 +29,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.datasets.databases import load_dataset, load_binary_dataset
+from resokit.datasets.databases import load_binary_dataset, load_dataset
 from resokit.utils.parser import DEFAULT_METADATA, find_best_match
 from resokit.utils.utils import calc_period
 
@@ -683,9 +682,9 @@ def load_from_binary(
         rename_columns=True,
         verbose=False,
     )
-    assert isinstance(
-        row, pd.DataFrame
-    ), "The binary dataset should be a pandas DataFrame."
+    assert isinstance(row, pd.DataFrame), (
+        "Expected row to be a DataFrame, " + f"got {type(row)} instead."
+    )
     row = row.loc[idx]  # Get the row with the index
 
     # Add the period
@@ -786,7 +785,10 @@ def check_if_binary(
         # 0: star0_name, 1: alternate_name
         for col in [0, 1]:
             series = df[col]
-            assert isinstance(series, pd.Series), ""
+            assert isinstance(series, pd.Series), (
+                "Expected series to be a pd.Series, "
+                + f"got {type(series)} instead."
+            )
             idx, values, ratio = find_best_match(
                 series, name=star_name, parse=True
             )
@@ -805,8 +807,9 @@ def check_if_binary(
                 # Check if multiple values
                 if len(values) > 1:
                     # In this case, it is probable we looked in
-                    # the alternate names and found that one of the alternate names
-                    # is the exact match. Nevertheless, we will check they all have
+                    # the alternate names and found that one of
+                    # the alternate names is the exact match.
+                    # Nevertheless, we will check they all have
                     # the same idx in index.
                     if len(set(idx)) != 1:
                         raise ValueError(
