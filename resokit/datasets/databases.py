@@ -1314,12 +1314,11 @@ class DatasetManager:
         source = source.lower()
         if files:
             if source in ["eu", "nasa"]:
-                for file in DATASET_FILENAMES[source]:
-                    file_path = DATASETS_DIR / file
-                    if file_path.exists():
-                        file_path.unlink()
-                        if verbose:
-                            print(f" Removed {file_path} from disk.")
+                file_path = DATASETS_DIR / DATASET_FILENAMES[source]
+                if file_path.exists():
+                    file_path.unlink()
+                    if verbose:
+                        print(f" Removed {file_path} from disk.")
             elif source == "both":
                 for key in ["eu", "nasa"]:
                     self.clear_memory(key, verbose, files=True)
@@ -1691,7 +1690,7 @@ class BinaryDatasetManager:
                 self._headers[source] = ""
                 if verbose:
                     print(f" Cleared memory for binaries type-{source}")
-            elif source == "binary":
+            elif source in ["both", "all"]:
                 for key in self._data:
                     self.clear_memory(key, verbose=verbose)
             else:
