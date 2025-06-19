@@ -49,11 +49,27 @@ except ImportError:
 # CONSTANTS
 # =============================================================================
 
+# Path to the datasets directory
+DATASETS_DIR = Path(os.path.expanduser(os.path.join("~", ".resokit_data")))
+
+# -------------------------- EU and NASA DATASETS -----------------------------
+
 # Name for the ZIP archive
-ZIP_FILENAME = "datasets.zip"
+DATASET_ZIPNAMES = {"eu": "exoplanet_eu.zip", "nasa": "nasa_exoplanets.zip"}
+
+# Filenames and URLs for the datasets
+DATASET_FILENAMES = {"eu": "exoplanet_eu.csv", "nasa": "nasa.csv"}
+DATASET_URLS = {
+    "eu": "https://exoplanet.eu/catalog/csv/",
+    "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?"
+    + "query=select+*+from+ps&format=csv",
+}
+
+# Index columns for each dataset
+INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
 
 # EU dtypes
-_EU_MAPPING = {
+EU_MAPPING = {
     "name": "object",
     "planet_status": "object",
     "mass": "float64",
@@ -155,7 +171,7 @@ _EU_MAPPING = {
 }
 
 # Nasa dtypes
-_NASA_MAPPING = {
+NASA_MAPPING = {
     "pl_name": "object",
     "pl_letter": "object",
     "hostname": "object",
@@ -513,7 +529,7 @@ _NASA_MAPPING = {
 }
 
 # Mapping of dataset names to their respective dtypes
-DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
+DATASET_DTYPES = MappingProxyType({"eu": EU_MAPPING, "nasa": NASA_MAPPING})
 
 # URL to query the dataset length
 QUERY_LENGTH_URL = {
@@ -521,9 +537,85 @@ QUERY_LENGTH_URL = {
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/index.html",
 }
 
+# --------------------------- BINARY SYSTEMS DATASETS --------------------------
+
+# No ZIP here, only txt
+
+# Filenames and URLs for the binaries datasets
+BINARIES_FILENAMES = {"p": "plan_circ.txt", "s": "plan_bin500aun.txt"}
+BINARIES_URLS = {
+    "p": "https://lesia.obspm.fr/perso/philippe-thebault/plan_circ.txt",
+    "s": "https://lesia.obspm.fr/perso/philippe-thebault/plan_bin500aun.txt",
+}
+
+# Columns of the binaries datasets
+BINARIES_COLUMNS = [
+    "star0_name",
+    "alternate_name",
+    "star0_mass",
+    "star1_mass",
+    "dist",
+    "disc_method",
+    "a",
+    "e",
+    "nplanets",
+    "planet_a",
+    "planet_e",
+    "planet_mass",
+    "planet_HW_crit",
+    "imut",
+]
+
+
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
+
+
+def check_file_age(
+    file_path: Union[str, Path],
+    zip_path: Union[str, Path, None],
+    verbose: bool = True,
+) -> int:
+    """Check the dataset file's age in days.
+
+    Parameters
+    ----------
+    file_path : str or Path, optional. Default: False.
+        Path to the file.
+    zip_path : str or Path or None, optional. Default: False.
+        Path to the ZIP archive.
+    verbose : bool, optional. Default: True.
+        If `True`, prints messages about the process.
+
+    Returns
+    -------
+    age : int
+        Age of the file in days.
+    """
+    file_path = Path(file_path)  # Convert to Path object
+    # Get the file's last modified date
+    if zip_path:
+        file_name = Path(file_path).name
+        with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
+            # Check if the file is in the ZIP archive
+            if file_name not in zipf.namelist():
+                raise FileNotFoundError(
+                    f"File {file_name} not found in {zip_path}."
+                )
+            # Get the file's last modified date
+            date_info = zipf.getinfo(file_name).date_time
+            creation = datetime(*date_info)
+    else:
+        creation = datetime.fromtimestamp(file_path.stat().st_mtime)
+
+    # Calculate age in days
+    age = (datetime.now() - creation).days
+
+    if verbose:
+        print(f" Last modified: {creation} ({age} days ago).")
+
+    return age
 
 
 def load_from_zip(
@@ -580,7 +672,8 @@ def load_from_zip(
         if verbose:  # Print message if verbose
             print(f"  Reading {file_name} " + f"directly from {zip_name}...")
         # Load directly from the .zip
-        dtypes = DATASET_DTYPES.get(source, None)
+        dtypes = None if source is None else DATASET_DTYPES.get(source, None)
+        skip_rows = 0 if skip_rows is None else skip_rows
         with zipf.open(file_name) as file:
             if custom_load is not None:
                 return custom_load(file)
@@ -750,8 +843,21 @@ def is_notebook() -> bool:
         return False  # Probably standard Python interpreter
 
 
-def __parse_date(date_str: str, soft: bool = True) -> datetime:
-    """Try different date formats to robustly parse the last update date."""
+def __parse_date(date_str: str, soft: bool = True) -> Union[datetime, bool]:
+    """Try different date formats to robustly parse the last update date.
+
+    Parameters
+    ----------
+    date_str : str
+        The date string to parse.
+        soft : bool, optional. Default: True.
+        If True, return False if parsing fails instead of raising an error.
+    Returns
+    -------
+    Union[datetime, bool]
+        Parsed date as a datetime object if successful,
+        or False if parsing fails and soft is True.
+    """
     # Full & abbreviated months
     date_formats = ["%B %d, %Y", "%b %d, %Y", "%b. %d, %Y", "%m/%d/%Y"]
 
@@ -769,7 +875,7 @@ def __parse_date(date_str: str, soft: bool = True) -> datetime:
 
 def check_online_dataset(
     source: str, verbose: bool = True
-) -> Tuple[int, datetime]:
+) -> Tuple[int, Union[int, None]]:
     """Query the length (count) of the dataset from the specified source.
 
     Parameters
@@ -785,6 +891,7 @@ def check_online_dataset(
         Amount of entries (rows) in the dataset.
     last_update : datetime
         Date of the last update of the dataset.
+    If no match is found, -1 is returned for length and None for last_update.
     """
     # Ensure requests and BeautifulSoup modules are imported
     global requests_imported, bs4_imported
@@ -801,45 +908,47 @@ def check_online_dataset(
 
     # Call subfunction
     if source == "eu":
-        npl_str, date_str = _check_online_eu(verbose=verbose)
+        length_str, date_str = _check_online_eu(verbose=verbose)
     elif source == "nasa":
-        npl_str, date_str = _check_online_nasa(verbose=verbose)
+        length_str, date_str = _check_online_nasa(verbose=verbose)
     else:
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
     # Parse the planets
     try:
         # Remove comma if present
-        npl = int(npl_str.replace(",", ""))
+        length = int(str(length_str).replace(",", ""))
     except ValueError:
         if verbose:
             print(
                 " Could not parse the amount of planets in "
                 + f"online {source} database."
             )
-        npl = -1
+        length = -1
 
     # Parse the Date
-    date = __parse_date(date_str, soft=True)
+    date = __parse_date(str(date_str), soft=True)
     if date is False:
         if verbose:
             print(" Could not parse the last update date.")
         date = None
-        days_ago = None
+        last_update = None
     else:
-        days_ago = (datetime.now() - date).days
+        last_update = (datetime.now() - date).days
 
     # Message
     if verbose:
-        if npl > 0:
-            print(f" Number of planets in online dataset: {npl}")
+        if length > 0:
+            print(f" Number of planets in online dataset: {length}")
         if date:
-            print(f" Last online update: {date} ({days_ago} days ago)")
+            print(f" Last online update: {date} ({last_update} days ago)")
 
-    return npl, days_ago
+    return length, last_update
 
 
-def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
+def _check_online_eu(
+    verbose: bool = True,
+) -> Tuple[Union[str, int], Union[str, None]]:
     """Query the length of the exoplanet.eu dataset.
 
     Parameters
@@ -849,10 +958,10 @@ def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
 
     Returns
     -------
-    length : int
+    length : str
         Amount of entries (rows) in the dataset.
         If no match is found, -1 is returned.
-    last_update : datetime
+    last_update : str
         Date of the last update of the dataset.
         If no match is found, None is returned.
     """
@@ -887,9 +996,9 @@ def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
             return -1, None
 
         # Parse extracted values
-        date_str, planet_count_str = match.groups()
+        last_update, length = match.groups()
 
-        return planet_count_str, date_str
+        return length, last_update
 
     except requests.exceptions.RequestException as e:
         if verbose:
@@ -898,7 +1007,9 @@ def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
     return -1, None
 
 
-def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
+def _check_online_nasa(
+    verbose: bool = True,
+) -> Tuple[Union[str, int], Union[str, None]]:
     """Query the length of the NASA dataset.
 
     Parameters
@@ -908,10 +1019,10 @@ def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
 
     Returns
     -------
-    length : int
+    length : str
         Amount of entries (rows) in the dataset.
         If no match is found, -1 is returned.
-    last_update : datetime
+    last_update : str
         Date of the last update of the dataset.
         If no match is found, None is returned.
     """
@@ -924,22 +1035,22 @@ def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
         # Extract the number of confirmed planets
         planet_count_div = soup.find("div", class_="stat")
         if planet_count_div:
-            planet_count_str = planet_count_div.text.strip()
+            length = int(planet_count_div.text.strip())
         else:
             if verbose:
                 print(" No match found in the extracted text.")
-            planet_count_str = -1
+            length = -1
 
         # Extract the last update date
         date_div = soup.find("div", class_="date")
         if date_div:
-            date_str = date_div.text.strip()
+            last_update = date_div.text.strip()
         else:
             if verbose:
                 print(" No match found in the extracted text.")
-            date_str = None
+            last_update = None
 
-        return planet_count_str, date_str
+        return length, last_update
 
     except requests.exceptions.RequestException as e:
         if verbose:

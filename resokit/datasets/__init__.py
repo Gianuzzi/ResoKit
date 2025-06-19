@@ -20,28 +20,29 @@
 # =============================================================================
 
 from .databases import clear_memory  # noqa
-from .databases import download  # noqa
-from .databases import download_binary  # noqa
-from .databases import load_binary  # noqa
-from .databases import load_eu  # noqa
-from .databases import load_nasa  # noqa
-from .databases import update_eu  # noqa
-from .databases import update_nasa  # noqa
+from .databases import download_binary_dataset  # noqa
+from .databases import download_dataset  # noqa
+from .databases import load_binary_dataset  # noqa
+from .databases import load_dataset  # noqa
 from .databases import check_outdated  # noqa
-from .utils import check_online_dataset  # noqa
+from .utils import DATASETS_DIR  # noqa
+
+# =============================================================================
+# DIRECTORY SETUP
+# =============================================================================
+
+from pathlib import Path
+
+Path(DATASETS_DIR).mkdir(parents=True, exist_ok=True)
+
 
 # Make the functions available at the package level
 
 __all__ = [
     "clear_memory",
-    "download",
-    "download_binary",
-    "load_from_binary",
-    "load_binary",
-    "load_eu",
-    "load_nasa",
-    "check_online_dataset",
+    "download_binary_dataset",
+    "download_dataset",
+    "load_binary_dataset",
+    "load_dataset",
     "check_outdated",
-    "update_eu",
-    "update_nasa",
 ]

@@ -30,7 +30,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.datasets.databases import load_binary, load_full
+from resokit.datasets.databases import load_dataset, load_binary_dataset
 from resokit.utils.parser import DEFAULT_METADATA, find_best_match
 from resokit.utils.utils import calc_period
 
@@ -112,7 +112,7 @@ def _search_system_index(
         raw_series = raw_df[column]  # Get the column
     elif not alternative_names:
         # Update the keyword arguments
-        parsed = load_full(
+        parsed = load_dataset(
             source=source,
             **{**load_kwargs, "only_index": "parsed", "verbose": False},
         )  # Load the parsed dataset (if it is in memory)
@@ -120,13 +120,13 @@ def _search_system_index(
             parse = None  # None mean parse only the name
             raw_series = parsed  # Because raw_series is already parsed
         else:  # Load the whole dataset
-            raw_series = load_full(
+            raw_series = load_dataset(
                 source=source,
                 **load_kwargs,
             )  # Will be stored and parsed next time
         raw_series = raw_series[column]  # Get the column
     else:  # Search in the alternate names
-        not_parsed = load_full(
+        not_parsed = load_dataset(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )  # Load the whole dataset (worst scenario)
@@ -140,7 +140,7 @@ def _search_system_index(
     # We have to get back the original values
     # If parse is None, then we have to compute the non parsed
     if not_parsed is None:
-        not_parsed = load_full(
+        not_parsed = load_dataset(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )
@@ -243,7 +243,7 @@ def _load_system_from_db(
 
     # Load the dataset
     if not low_memory:  # Load the whole dataset
-        raw_df = load_full(source=source, **load_kwargs)
+        raw_df = load_dataset(source=source, **load_kwargs)
     else:  # Will load only the index if possible
         raw_df = None
 
@@ -316,7 +316,7 @@ def _load_system_from_db(
 
     # Load the system
     if raw_df is None:  # Load only the system data
-        data = load_full(source=source, **{**load_kwargs, "only_rows": idx})
+        data = load_dataset(source=source, **{**load_kwargs, "only_rows": idx})
     else:
         data = raw_df.loc[idx]  # Load the system data from the raw dataset
 
@@ -677,12 +677,16 @@ def load_from_binary(
         raise ValueError(f"Star {name} not found in binary datasets.")
 
     # Extract the data
-    row = load_binary(
-        circumbinary=circumbinary,
+    row = load_binary_dataset(
+        which=circumbinary,
         from_memory=True,
         rename_columns=True,
         verbose=False,
-    ).loc[idx]
+    )
+    assert isinstance(
+        row, pd.DataFrame
+    ), "The binary dataset should be a pandas DataFrame."
+    row = row.loc[idx]  # Get the row with the index
 
     # Add the period
     if add_period:
@@ -720,7 +724,10 @@ def load_from_binary(
 
 
 def check_if_binary(
-    star_name: str, exact_match: bool = True, verbose: bool = True
+    star_name: str,
+    exact_match: bool = True,
+    verbose: bool = True,
+    soft: bool = True,
 ) -> Tuple[bool, bool, str, List[str], float]:
     """Check if a star is part of a binary system.
 
@@ -749,41 +756,56 @@ def check_if_binary(
             Ratio of the match.
     """
     maybe = False
-    for circumbinary, col in product([True, False], [0, 1]):
-        # 0: star0_name, 1: alternate_name
-        series = load_binary(
-            circumbinary=circumbinary,
-            from_memory=True,
-            rename_columns=False,
-            clean=False,
-            verbose=False,
-        )[col]
-        idx, values, ratio = find_best_match(
-            series, name=star_name, parse=True
-        )
-        if ratio > 0.99:  # Found a binary system
-            maybe = True
-            which = "circumbinary" if circumbinary else "circumstellar"
-            if exact_match and ratio < 1:
+    try:
+        for circumbinary, col in product([True, False], [0, 1]):
+            # 0: star0_name, 1: alternate_name
+            series = load_binary_dataset(
+                which=circumbinary,
+                from_memory=True,
+                rename_columns=False,
+                clean=False,
+                verbose=False,
+            )[col]
+            idx, values, ratio = find_best_match(
+                series, name=star_name, parse=True
+            )
+            if ratio > 0.99:  # Found a binary system
+                maybe = True
+                which = "circumbinary" if circumbinary else "circumstellar"
+                if exact_match and ratio < 1:
+                    if verbose:
+                        print(f" Found a very close binary match in: {values}")
+                        print(" Execute with exact_match=False to load it.")
+                    break
                 if verbose:
-                    print(f" Found a very close binary match in: {values}")
-                    print(" Execute with exact_match=False to load it.")
-                break
-            if verbose:
-                print(f" Binary system found in {values}, in {which} orbit.")
-            # Check if multiple values
-            if len(values) > 1:
-                # In this case, it is probable we looked in
-                # the alternate names and found that one of the alternate names
-                # is the exact match. Nevertheless, we will check they all have
-                # the same idx in index.
-                if len(set(idx)) != 1:
-                    raise ValueError(
-                        "Multiple values found, but different indexes."
+                    print(
+                        f" Binary system found in {values}, in {which} orbit."
                     )
-                return True, circumbinary, idx[0], values, ratio
+                # Check if multiple values
+                if len(values) > 1:
+                    # In this case, it is probable we looked in
+                    # the alternate names and found that one of the alternate names
+                    # is the exact match. Nevertheless, we will check they all have
+                    # the same idx in index.
+                    if len(set(idx)) != 1:
+                        raise ValueError(
+                            "Multiple values found, but different indexes."
+                        )
+                    return True, circumbinary, idx[0], values, ratio
 
-            return True, circumbinary, idx, values, ratio
+                return True, circumbinary, idx, values, ratio
+    except FileNotFoundError as error:
+        if soft:
+            if verbose:
+                print(
+                    " Unable to check."
+                    + " Txt files with binary datasets not found.\n"
+                    + " Try downloading with "
+                    + "resokit.datasets.download_binary"
+                    + "_dataset('both', to_file=True)"
+                )
+            return False, False, "", [], 0.0
+        raise error
     if verbose:
         aux = "could be" if maybe else "is not"
         print(f"Star {star_name} {aux} part of a binary system.")
