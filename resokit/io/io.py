@@ -756,22 +756,42 @@ def check_if_binary(
             Ratio of the match.
     """
     maybe = False
-    try:
-        for circumbinary, col in product([True, False], [0, 1]):
-            # 0: star0_name, 1: alternate_name
-            series = load_binary_dataset(
-                which=circumbinary,
+    df = pd.DataFrame()
+    for circumbinary in [True, False]:
+        which = "p" if circumbinary else "s"
+        try:
+            df = load_binary_dataset(
+                which=which,
                 from_memory=True,
                 rename_columns=False,
                 clean=False,
                 verbose=False,
-            )[col]
+            )
+        except FileNotFoundError as error:
+            maybe = True
+            if verbose:
+                print(
+                    f" Unable to check for {which}-tpye binary orbits."
+                    + " Txt file not found.\n"
+                    + " Try downloading with "
+                    + "resokit.datasets.download_binary"
+                    + f"_dataset('{which}', to_file=True)"
+                )
+            if circumbinary:  # Try both...
+                continue
+            if soft:
+                return False, False, "", [], 0.0
+            else:
+                raise error
+        # 0: star0_name, 1: alternate_name
+        for col in [0, 1]:
+            series = df[col]
+            assert isinstance(series, pd.Series), ""
             idx, values, ratio = find_best_match(
                 series, name=star_name, parse=True
             )
             if ratio > 0.99:  # Found a binary system
                 maybe = True
-                which = "circumbinary" if circumbinary else "circumstellar"
                 if exact_match and ratio < 1:
                     if verbose:
                         print(f" Found a very close binary match in: {values}")
@@ -779,7 +799,8 @@ def check_if_binary(
                     break
                 if verbose:
                     print(
-                        f" Binary system found in {values}, in {which} orbit."
+                        f" Binary system found in {values}, "
+                        + f"in {which}-type binary orbit."
                     )
                 # Check if multiple values
                 if len(values) > 1:
@@ -794,18 +815,7 @@ def check_if_binary(
                     return True, circumbinary, idx[0], values, ratio
 
                 return True, circumbinary, idx, values, ratio
-    except FileNotFoundError as error:
-        if soft:
-            if verbose:
-                print(
-                    " Unable to check."
-                    + " Txt files with binary datasets not found.\n"
-                    + " Try downloading with "
-                    + "resokit.datasets.download_binary"
-                    + "_dataset('both', to_file=True)"
-                )
-            return False, False, "", [], 0.0
-        raise error
+
     if verbose:
         aux = "could be" if maybe else "is not"
         print(f"Star {star_name} {aux} part of a binary system.")

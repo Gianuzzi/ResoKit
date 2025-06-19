@@ -1035,7 +1035,7 @@ def _check_online_nasa(
         # Extract the number of confirmed planets
         planet_count_div = soup.find("div", class_="stat")
         if planet_count_div:
-            length = int(planet_count_div.text.strip())
+            length = int(planet_count_div.text.strip().replace(",", ""))
         else:
             if verbose:
                 print(" No match found in the extracted text.")
@@ -1057,3 +1057,61 @@ def _check_online_nasa(
             print(f"Error fetching the webpage: {e}")
 
     return -1, None
+
+
+def check_online_binary(source: str, verbose: bool = True) -> int:
+    """Query the length (count) of the file from the specified source.
+
+    This function is kind of dumb, because it downloads the file (although
+    if does not parse it, just count the lines).
+
+    Parameters
+    ----------
+    source : str
+        Data source identifier ('p' or 's').
+    verbose : bool, optional. Default: True.
+        Print query information.
+
+    Returns
+    -------
+    length : int
+        Amount of entries (rows) in the file.
+        If no match is found, -1 is returned.
+    """
+    # Ensure requests module is imported
+    global requests_imported
+    requests_imported = assert_module_imported(requests_imported, "requests")
+
+    source = source.lower()  # Ensure lowercase
+    if source not in BINARIES_URLS:
+        raise ValueError(f"Invalid source: {source}. Must be 'p' or 's'.")
+
+    # Message
+    if verbose:
+        print(f"Checking online dataset from {source}-type binaries...")
+
+    # Call subfunction
+    url = BINARIES_URLS[source]
+    length = 0
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        for _ in response.iter_lines():
+            length += 1
+    except requests.RequestException as e:
+        if verbose:
+            print(
+                " Could not parse the amount of lines in "
+                + f"online {source}-type binaries file."
+            )
+        length = -1
+
+    # Message
+    if verbose:
+        if length > 0:
+            print(
+                " Number of lines (including header) "
+                + f"in online dataset: {length}"
+            )
+
+    return length

@@ -24,6 +24,7 @@ from .databases import download_binary_dataset  # noqa
 from .databases import download_dataset  # noqa
 from .databases import load_binary_dataset  # noqa
 from .databases import load_dataset  # noqa
+from .databases import check_binary_outdated  # noqa
 from .databases import check_outdated  # noqa
 from .utils import DATASETS_DIR  # noqa
 
@@ -44,5 +45,6 @@ __all__ = [
     "download_dataset",
     "load_binary_dataset",
     "load_dataset",
+    "check_binary_outdated",
     "check_outdated",
 ]

@@ -39,6 +39,7 @@ from resokit.datasets.utils import (
     DATASETS_DIR,
     INDEX_COLUMNS,
     check_file_age,
+    check_online_binary,
     check_online_dataset,
     load_from_zip,
     remove_from_zip,
@@ -1663,14 +1664,14 @@ class BinaryDatasetManager:
         """Clear stored binary data from memory and/or disk."""
         source = source.lower()
         if files:
-            if source in ["p", "s"]:
+            if source in BINARIES_FILENAMES:
                 file_path = DATASETS_DIR / BINARIES_FILENAMES[source]
                 if file_path.exists():
                     file_path.unlink()
                     if verbose:
                         print(f" Removed {file_path} from disk.")
             elif source in ["both", "all"]:
-                for key in ["p", "s"]:
+                for key in BINARIES_FILENAMES:
                     self.clear_memory(key, verbose=verbose, files=True)
             else:
                 raise ValueError("Invalid binary source.")
@@ -1714,7 +1715,7 @@ def load_dataset(
     verbose: bool = True,
     store: Union[bool, str] = False,
     store_index: Union[bool, str] = True,
-) -> Union[pd.DataFrame, ResokitDataFrame, ResoKitDataset]:
+) -> Union[pd.DataFrame, ResokitDataFrame, ResoKitDataset, None]:
     """Load the dataset from a specified source.
 
     The dataset is loaded from a ZIP archive or a CSV file, or from memory
@@ -2077,46 +2078,61 @@ def download_binary_dataset(
 
 
 def clear_memory(
-    source: str, verbose: bool = True, files: bool = False
+    which: str, verbose: bool = True, files: bool = False
 ) -> None:
     """Clear the memory for the specified dataset.
 
     Parameters
     ----------
-    source : str
-        Source of the dataset ('eu', 'nasa', 'datasets',
+    which : str
+        Which dataset ('eu', 'nasa', 'datasets',
         'p', 's', 'binary', 'all').
     verbose : bool, optional. Default: True.
         Whether to print informational messages.
     files : bool, optional. Default: False.
         If `True`, also removes the files from disk.
     """
-    source = source.lower()  # Ensure lowercase
-    if source in ["eu", "nasa"]:
-        _full_manager.clear_memory(source, verbose=verbose, files=files)
-    elif source in ["p", "s"]:
-        _binary_manager.clear_memory(source, verbose=verbose, files=files)
-    elif source == "datasets":
-        _full_manager.clear_memory("both", verbose=verbose, files=files)
-    elif source == "binary":
-        _binary_manager.clear_memory("both", verbose=verbose, files=files)
-    elif source == "all":
-        _full_manager.clear_memory("both", verbose=verbose, files=files)
-        _binary_manager.clear_memory("both", verbose=verbose, files=files)
+    which = which.lower()  # Ensure lowercase
+    if which in DATASET_FILENAMES:
+        _full_manager.clear_memory(source=which, verbose=verbose)
+        _full_manager.clear_memory(source=which, verbose=verbose, files=files)
+    elif which in BINARIES_FILENAMES:
+
+        _binary_manager.clear_memory(source=which, verbose=verbose)
+        _binary_manager.clear_memory(
+            source=which, verbose=verbose, files=files
+        )
+    elif which == "datasets":
+
+        _full_manager.clear_memory(source="both", verbose=verbose)
+        _full_manager.clear_memory(source="both", verbose=verbose, files=files)
+    elif which == "binary":
+
+        _binary_manager.clear_memory(source="both", verbose=verbose)
+        _binary_manager.clear_memory(
+            source="both", verbose=verbose, files=files
+        )
+    elif which == "all":
+        _full_manager.clear_memory(source="both", verbose=verbose)
+        _binary_manager.clear_memory(source="both", verbose=verbose)
+        _full_manager.clear_memory(source="both", verbose=verbose, files=files)
+        _binary_manager.clear_memory(
+            source="both", verbose=verbose, files=files
+        )
     else:
         raise ValueError(
-            f"Invalid source: {source}. Must be 'eu', 'nasa', 'p', 's', "
+            f"Invalid source: {which}. Must be 'eu', 'nasa', 'p', 's', "
             + "'binary', 'datasets', or 'all'."
         )
 
 
-def check_outdated(source: str, verbose: bool = True, soft=True) -> bool:
-    """Check if the stored dataset is outdated.
+def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
+    """Check if the specified stored dataset is outdated.
 
     Parameters
     ----------
-    source : str
-        Source of the dataset ('eu' or 'nasa').
+    which : str
+        Which dataset ('eu' or 'nasa').
     verbose : bool, optional. Default: True.
         Whether to print informational messages.
 
@@ -2125,17 +2141,23 @@ def check_outdated(source: str, verbose: bool = True, soft=True) -> bool:
     outdated : bool
         Whether the dataset is outdated.
     """
-    # Check if source is valid
-    source = source.lower()  # Ensure lowercase
-    if source not in DATASET_FILENAMES:
-        raise ValueError(f"Invalid source: {source}. Must be 'eu' or 'nasa'.")
+    # Check if which is valid
+    which = which.lower()  # Ensure lowercase
+    if which not in DATASET_FILENAMES:
+        if which in BINARIES_FILENAMES:
+            if verbose:
+                print(
+                    f"Use `check_binary_outdated('{which}') to check if"
+                    + "binary dataset is outdated."
+                )
+        raise ValueError(f"Invalid which: {which}. Must be 'eu' or 'nasa'.")
 
     if verbose:
-        print(f"Checking local dataset from {source}...")
+        print(f"Checking local dataset from {which}...")
 
     # Check if the dataset is stored
     try:
-        if source == "eu":
+        if which == "eu":
             df_stored = _full_manager.load(
                 "eu",
                 verbose=False,
@@ -2162,20 +2184,98 @@ def check_outdated(source: str, verbose: bool = True, soft=True) -> bool:
             df_stored = df_stored[df_stored["default_flag"] == 1]
     except FileNotFoundError as error:
         if verbose:
-            print(f"File for source {source} to check if outdated not found.")
+            print(f"File for source {which} to check if outdated not found.")
         if soft:
             return True
         raise error
+    assert isinstance(df_stored, pd.DataFrame), (
+        "Expected df_stored to be a pd.DataFrame, "
+        + f"got {type(df_stored)} instead."
+    )
     n_local = len(df_stored)
     if n_local > 0 and verbose:
         print(f" Number of planets in stored dataset: {n_local}")
-        if source == "nasa":
+        if which == "nasa":
             print("  (Including also non-default parameters set.)")
     elif verbose:
         print("Could not load the stored dataset. ")
 
     # Check if the dataset is outdated
-    n_online, _ = check_online_dataset(source=source, verbose=verbose)
+    n_online, _ = check_online_dataset(source=which, verbose=verbose)
+
+    if n_online == n_local:
+        if verbose:
+            print("Dataset is already up-to-date.")
+        return False
+    elif n_online <= 0:
+        if verbose:
+            print("Cannot check if the dataset is up-to-date. ")
+            print("The dataset could be outdated.")
+        return True
+    elif n_online < n_local:
+        if verbose:
+            print("The online dataset has less rows than the stored dataset. ")
+            print("This is unexpected.")
+        return False
+    # n_online > n_local
+    if verbose:
+        print("The online dataset has more rows than the stored dataset. ")
+        print("The dataset is outdated.")
+
+    return True
+
+
+def check_binary_outdated(
+    which: Union[str, bool], verbose: bool = True, soft=True
+) -> bool:
+    """Check if the specified stored bianry dataset is outdated.
+
+    Parameters
+    ----------
+    which : str, bool
+        Which dataset: 'p' (circumbinary) or 's' (single binary).
+        If True, circumbinary; if False, single binary.
+    verbose : bool, optional. Default: True.
+        Whether to print informational messages.
+
+    Returns
+    -------
+    outdated : bool
+        Whether the dataset is outdated.
+    """
+    # Check if which is valid
+    if isinstance(which, bool):
+        which = "p" if which is True else "s"
+    which = which.lower()  # Ensure lowercase
+    if which not in BINARIES_FILENAMES:
+        if which in DATASET_FILENAMES:
+            if verbose:
+                print(
+                    f"Use `check_outdated('{which}') to check if "
+                    + f"'{which}' dataset is outdated."
+                )
+        raise ValueError(f"Invalid which: {which}. Must be 'p' or 's'.")
+
+    # Check if the dataset is stored
+    try:
+        header = _binary_manager.load(source=which, ret_header=True)
+        df = _binary_manager.load(source=which, ret_header=False)
+    except FileNotFoundError as error:
+        if verbose:
+            print(f"File for source {which} to check if outdated not found.")
+        if soft:
+            return True
+        raise error
+
+    assert isinstance(header, str)
+    n_local = len(df) + len(header.splitlines())
+    if n_local > 0 and verbose:
+        print(f" Number of lines in stored dataset: {n_local}")
+    elif verbose:
+        print("Could not load the stored dataset. ")
+
+    # Check if the dataset is outdated
+    n_online = check_online_binary(source=which, verbose=verbose)
 
     if n_online == n_local:
         if verbose:
