@@ -45,6 +45,7 @@ from resokit.datasets.utils import (
     load_from_zip,
     remove_from_zip,
     request_dataset,
+    resolve_paths,
 )
 from resokit.utils.parser import DEFAULT_METADATA, parse_name, parse_to_iter
 
@@ -535,7 +536,7 @@ class DatasetManager:
             self._parsed_indexes[source] = parsed
 
             if verbose:
-                print(" Updated stored index in memory.")
+                print("Updated stored index in memory.")
 
         if index_only:
             return
@@ -555,7 +556,7 @@ class DatasetManager:
             if is_full:
                 self._is_fully_stored[source] = True
                 if verbose:
-                    print(" Stored dataset in memory.")
+                    print("Stored dataset in memory.")
             else:
                 new_to_store = new_df.index.to_list()
                 if verbose:
@@ -640,9 +641,9 @@ class DatasetManager:
         self,
         source: str,
         to_memory: bool = True,
-        to_file: Union[str, Path, bool, None] = False,
-        to_zip: Union[str, Path, bool, None] = True,
-        dir_path: Union[str, Path, None] = None,
+        to_file: Union[str, Path, bool] = True,
+        to_zip: Union[str, Path, bool] = True,
+        dir_path: Union[str, Path, bool, None] = True,
         overwrite: bool = False,
         check_online: bool = True,
         to_resokit: Union[bool, None] = None,
@@ -665,45 +666,42 @@ class DatasetManager:
 
         url = DATASET_URLS[source]
 
-        if dir_path is None:
-            dir_path = DATASETS_DIR
-        else:
-            dir_path = Path(dir_path)
+        bpaths, fpaths, zfpaths = resolve_paths(
+            to_file=to_file,
+            to_zip=to_zip,
+            dir_path=dir_path,
+            default_file=DATASET_FILENAMES[source],
+            default_zip=DATASET_ZIPNAMES[source],
+            default_dir=DATASETS_DIR,
+        )
 
-        if not dir_path.exists():
-            raise FileNotFoundError(f"Directory {dir_path} not found.")
+        for path in bpaths:
+            if not path.exists():
+                raise FileNotFoundError(f"Directory {path} not found.")
 
-        if to_file:
-            file_name = (
-                DATASET_FILENAMES[source] if to_file is True else to_file
-            )
-            file_path = dir_path / file_name
-            if file_path.exists() and not overwrite:
-                raise FileExistsError(
-                    f"File {file_path} already exists. "
-                    + "Set overwrite=True to force the download."
-                )
-        else:
-            file_path = None
-            file_name = DATASET_FILENAMES[source]
+        if not overwrite:
+            for file_path in fpaths:
+                if file_path.exists():
+                    raise FileExistsError(
+                        f"File {file_path} already exists. "
+                        + "Set overwrite=True to force the download."
+                    )
+            for zipf_path in zfpaths:
+                zip_path = zipf_path.parent
+                if zip_path.exists():
+                    raise FileExistsError(
+                        f"Zip file {zip_path} already exists. "
+                        + "Set overwrite=True to force the download."
+                    )
 
-        if to_zip:
-            zip_name = DATASET_ZIPNAMES[source] if to_zip is True else to_zip
-            zip_path = dir_path / zip_name
-            if zip_path.exists() and not overwrite:
-                raise FileExistsError(
-                    f"ZIP archive {zip_path} already exists. "
-                    + " Set overwrite=True to force the download."
-                )
-        else:
-            zip_path = None
-            zip_name = DATASET_ZIPNAMES[source]
+        save_file = len(fpaths) > 0
+        save_zip = len(zfpaths) > 0
 
         if (
             self._is_fully_stored[source]
             and not overwrite
-            and not to_file
-            and not to_zip
+            and not save_file
+            and not save_zip
         ):
             if verbose:
                 print(
@@ -721,7 +719,7 @@ class DatasetManager:
         if check_online:
             outdated = check_outdated(source, verbose=verbose)
             if not outdated:
-                if (to_file or to_zip) and verbose:
+                if (save_file or save_zip) and verbose:
                     print(
                         "To store the dataset in a file, load it and "
                         + "invoke the `to_file` method."
@@ -748,10 +746,11 @@ class DatasetManager:
         elif verbose:
             print(f" Data downloaded successfully. ({len(data)/1e6:.2f} MB)")
 
-        if zip_path is not None:
-            file_name = str(file_name)
+        for zipf_path in zfpaths:
+            file_name = zipf_path.name
+            zip_path = zipf_path.parent
             if not zip_path.exists() and verbose:
-                print(f" Creating the ZIP archive {zip_path}...")
+                print(f"Creating the ZIP archive {zip_path}...")
             else:
                 remove_from_zip(str(zip_path), file_name, verbose=verbose)
             with ZipFile(zip_path, "a", compression=ZIP_DEFLATED) as zipf:
@@ -759,9 +758,9 @@ class DatasetManager:
             if verbose:
                 print(f" Written {file_name} to {zip_path}.")
 
-        if file_path is not None:
+        for file_path in fpaths:
             if not file_path.exists() and verbose:
-                print(f" Creating the file {file_path}...")
+                print(f"Creating the file {file_path}...")
             with open(file_path, "wb") as f:
                 f.write(data)
             if verbose:
@@ -806,12 +805,17 @@ class DatasetManager:
                 as_resokit=to_resokit,
             )
 
-        if file_path and zip_path:
-            return file_path, zip_path
-        if file_path:
-            return file_path
-        if zip_path:
-            return zip_path
+        if len(fpaths) == 1:
+            fpaths = list(fpaths)[0]
+        if len(zfpaths) == 1:
+            zfpaths = list(zfpaths)[0]
+
+        if save_file and save_zip:
+            return fpaths, zfpaths
+        if save_file:
+            return fpaths
+        if save_zip:
+            return zfpaths
 
         return None
 
@@ -919,9 +923,9 @@ class DatasetManager:
         self,
         source: str,
         from_memory: bool = True,
-        from_zip: Union[str, bool] = True,
-        from_file: Union[str, bool] = False,
-        dir_path: Union[str, Path, bool] = True,
+        from_file: Union[str, Path, bool] = False,
+        from_zip: Union[str, Path, bool] = True,
+        dir_path: Union[str, Path, bool, None] = True,
         to_resokit: bool = True,
         to_df: bool = False,
         check_age: bool = False,
@@ -945,30 +949,30 @@ class DatasetManager:
                 + "from_memory, from_zip, or from_file."
             )
 
-        # Redefine dir path
-        if dir_path is None or dir_path is True:
-            # Default directory
-            dir_path = DATASETS_DIR
-        elif not dir_path:
-            # Assuming no file or ZIP required
-            from_zip = False
-            from_file = False
-        else:
-            # Convert to Path
-            dir_path = Path(dir_path)
+        bpaths, fpaths, zfpaths = resolve_paths(
+            to_file=from_file,
+            to_zip=from_zip,
+            dir_path=dir_path,
+            default_file=DATASET_FILENAMES[source],
+            default_zip=DATASET_ZIPNAMES[source],
+            default_dir=DATASETS_DIR,
+        )
 
-        # Flag for default path
-        default = False
+        if len(fpaths) + len(zfpaths) > 1:
+            raise ValueError(
+                "Could not resolve paths where to load the data. Got:\n"
+                + f"{fpaths},\n"
+                + f"{zfpaths}"
+            )
+        if len(bpaths) > 1:
+            raise ValueError(
+                "Could not resolve dir paths where to load the data. Got:\n"
+                + f"{bpaths}"
+            )
 
-        # Define paths and ZIP extraction flag
-        if from_zip is None or from_zip is True:
-            from_zip = DATASET_ZIPNAMES[source]
-            default = True  # Default ZIP
-
-        # Define file name
-        if from_file is None or from_file is True:
-            from_file = DATASET_FILENAMES[source]
-            default = True  # Default file
+        dir_path = list(bpaths)[0] if len(bpaths) > 0 else None
+        file_path = list(fpaths)[0] if len(fpaths) > 0 else None
+        zfip_path = list(zfpaths)[0] if len(zfpaths) > 0 else None
 
         # Check store_index
         if store and only_index:
@@ -1072,8 +1076,8 @@ class DatasetManager:
                     metadata=dict(self._datasets[source].metadata),
                 )
 
-            elif (not from_zip) and (
-                not from_file
+            elif (zfip_path is not None) and (
+                file_path is not None
             ):  # If no file or ZIP provided
                 raise ValueError(
                     "Some rows are not stored and no file or ZIP provided."
@@ -1164,16 +1168,10 @@ class DatasetManager:
             else:
                 print(" Loading the entire dataset...")
 
-        # Check dir_path
-        assert isinstance(dir_path, Path), (
-            "Expected dir_path to be a Path, "
-            + f"got {type(dir_path)} instead."
-        )
-
         # Load the dataset from the ZIP archive
-        if from_zip:
-            zip_path = dir_path / Path(from_zip)
-            file_name = from_file if from_file else DATASET_FILENAMES[source]
+        if zfip_path is not None:
+            file_name = zfip_path.name
+            zip_path = zfip_path.parent
             try:
                 data = load_from_zip(
                     zip_path=zip_path,
@@ -1183,16 +1181,19 @@ class DatasetManager:
                     usecols=usecols,
                     verbose=verbose,
                 )
-            except FileNotFoundError as err:
+            except FileNotFoundError:
                 msg = ""
                 # Check if it is the default path
-                if default:
+                if dir_path == DATASETS_DIR:
                     msg = (
                         "\n Try running "
                         + f"`resokit.datasets.download_dataset('{source}',"
-                        + "to_zip=True)` first to download the dataset."
+                        + " to_zip=True)` first to download the dataset."
                     )
-                raise FileNotFoundError(err.args[0] + msg)
+                zip_name = zip_path.name
+                raise FileNotFoundError(
+                    f"Zip file {zip_name} not found at {dir_path}." + msg
+                )
             age = check_file_age(
                 file_path=file_name,
                 zip_path=zip_path,
@@ -1201,8 +1202,7 @@ class DatasetManager:
             origin.append("zip")
 
         # Load the dataset from the file
-        elif from_file:
-            file_path = dir_path / Path(from_file)
+        elif file_path is not None:
             try:
                 data = pd.read_csv(
                     file_path,
@@ -1213,14 +1213,15 @@ class DatasetManager:
                 )
             except FileNotFoundError:
                 msg = ""
-                if default:
+                if dir_path == DATASETS_DIR:
                     msg = (
                         "\n Try running "
                         + f"`resokit.datasets.download_dataset('{source}',"
                         + " to_file=True)` first to download the dataset."
                     )
+                file_name = file_path.name
                 raise FileNotFoundError(
-                    f"File {file_path} not found at {dir_path}." + msg
+                    f"File {file_name} not found at {dir_path}." + msg
                 )
             age = check_file_age(
                 file_path=file_path,
@@ -1314,7 +1315,7 @@ class DatasetManager:
         source = source.lower()
         if files:
             if source in ["eu", "nasa"]:
-                file_path = DATASETS_DIR / DATASET_FILENAMES[source]
+                file_path = DATASETS_DIR / DATASET_ZIPNAMES[source]
                 if file_path.exists():
                     file_path.unlink()
                     if verbose:
@@ -1349,7 +1350,7 @@ class BinaryDatasetManager:
 
     def __init__(self):
         # -------------------- BINARY SYSTEMS DATASETS ----------------------
-        self._data = {"s": pd.DataFrame(), "p": pd.DataFrame()}
+        self._datasets = {"s": pd.DataFrame(), "p": pd.DataFrame()}
         self._headers = {"s": "", "p": ""}
 
     @staticmethod
@@ -1419,7 +1420,7 @@ class BinaryDatasetManager:
         source: str,
         from_memory: bool = True,
         from_file: Union[str, bool] = True,
-        dir_path: Union[str, Path, bool] = True,
+        dir_path: Union[str, Path, bool, None] = True,
         rename_columns: bool = True,
         ret_header: bool = False,
         inferr: bool = False,
@@ -1449,19 +1450,23 @@ class BinaryDatasetManager:
                 + "from_memory, or from_file."
             )
 
-        # Redefine dir path
-        if dir_path is None or dir_path is True:
-            dir_path = DATASETS_DIR
-        elif not dir_path:
-            # Assuming no file required
-            from_file = False
-        elif dir_path:
-            # Convert to Path
-            dir_path = Path(dir_path)
+        bpaths, fpaths, _ = resolve_paths(
+            to_file=from_file,
+            to_zip=False,
+            dir_path=dir_path,
+            default_file=BINARIES_FILENAMES[letter],
+            default_zip="False",
+            default_dir=DATASETS_DIR,
+        )
 
-        # Define file name
-        if from_file is None or from_file is True:
-            from_file = BINARIES_FILENAMES[letter]
+        if len(fpaths) > 1:
+            raise ValueError(
+                "Could not resolve paths where to load the data. Got:\n"
+                + f"{fpaths}"
+            )
+
+        dir_path = list(bpaths)[0] if len(bpaths) > 0 else None
+        file_path = list(fpaths)[0] if len(fpaths) > 0 else None
 
         # Default lines
         lines = []
@@ -1472,10 +1477,10 @@ class BinaryDatasetManager:
                 if verbose:
                     print(f"Loading the type-{letter} header from memory.")
                 return str(self._headers[letter])  # Return a copy
-            elif not self._data[letter].empty:
+            elif not self._datasets[letter].empty:
                 if verbose:
                     print(f"Loading the type-{letter} dataset from memory.")
-                df = self._data[letter].copy()
+                df = self._datasets[letter].copy()
                 # Clean if requested
                 if clean:
                     df.loc[df[7] > 98, 7] = pd.NA  # eccentricity
@@ -1486,16 +1491,12 @@ class BinaryDatasetManager:
                 return df
 
         # Load the dataset from the file
-        if from_file:
+        if file_path is not None:
+            file_name = file_path.name
             if verbose:
                 print(
-                    f"Loading the type-{letter} dataset from file {from_file}"
+                    f"Loading the type-{letter} dataset from file {file_name}"
                 )
-            assert isinstance(dir_path, Path), (
-                "Expected dir_path to be a Path, "
-                + f"got {type(dir_path)} instead."
-            )
-            file_path = dir_path / Path(from_file)
             with open(file_path, "r") as f:
                 lines = f.readlines()
 
@@ -1506,7 +1507,7 @@ class BinaryDatasetManager:
 
         # Store the data and header in memory
         self._headers[letter] = str(header)
-        self._data[letter] = data.copy(deep=True)
+        self._datasets[letter] = data.copy(deep=True)
         if verbose:
             print(f"Stored the type-{letter} dataset and header into memory.")
 
@@ -1528,10 +1529,10 @@ class BinaryDatasetManager:
     def download(
         self,
         source: str,
-        to_file: Union[str, Path, bool, None] = False,
-        dir_path: Union[str, Path, None] = None,
+        to_file: Union[str, Path, bool] = True,
+        dir_path: Union[str, Path, bool, None] = True,
         to_memory: bool = True,
-        return_data: bool = False,
+        return_data: bool = True,
         overwrite: bool = False,
         verbose: bool = True,
         chunk_size: int = 1024,
@@ -1563,7 +1564,7 @@ class BinaryDatasetManager:
             not to_file
             and to_memory
             and not return_data
-            and not self._data[letter].empty
+            and not self._datasets[letter].empty
             and not overwrite
         ):
             raise ValueError(
@@ -1574,36 +1575,26 @@ class BinaryDatasetManager:
         # Define URS
         url = BINARIES_URLS[letter]
 
-        # Redefine dir path
-        if dir_path is None or dir_path is True:
-            dir_path = DATASETS_DIR
-            # Default directory
-            dir_path = DATASETS_DIR
-        elif not dir_path:
-            # Assuming no file required
-            to_file = False
-        elif dir_path:
-            # Convert to Path
-            dir_path = Path(dir_path)
-            # Check if directory exists
-            if not dir_path.exists():
-                raise FileNotFoundError(f"Directory {dir_path} not found.")
+        bpaths, fpaths, _ = resolve_paths(
+            to_file=to_file,
+            to_zip=False,
+            dir_path=dir_path,
+            default_file=BINARIES_FILENAMES[source],
+            default_zip="False",
+            default_dir=DATASETS_DIR,
+        )
 
-        # Check if file exists
-        if to_file:
-            if to_file is True:
-                file_name = BINARIES_FILENAMES[letter]
-            else:
-                file_name = to_file
-            file_path = dir_path / Path(file_name)
-            if file_path.exists() and not overwrite:
-                raise FileExistsError(
-                    f"File {file_path} already exists.\n"
-                    + " Set overwrite=True to overwrite it."
-                )
-        else:
-            file_path = None
-            file_name = BINARIES_FILENAMES[letter]
+        for path in bpaths:
+            if not path.exists():
+                raise FileNotFoundError(f"Directory {path} not found.")
+
+        if not overwrite:
+            for file_path in fpaths:
+                if file_path.exists():
+                    raise FileExistsError(
+                        f"File {file_path} already exists. "
+                        + "Set overwrite=True to force the download."
+                    )
 
         # Download the dataset
         data = request_dataset(
@@ -1627,7 +1618,7 @@ class BinaryDatasetManager:
         df = pd.DataFrame()
 
         # Store the data in file
-        if file_path is not None:
+        for file_path in fpaths:
             if not file_path.exists() and verbose:
                 print(f" Creating the file {file_path}...")
             # Write the file
@@ -1647,7 +1638,7 @@ class BinaryDatasetManager:
             if to_memory:
                 # Store the data in memory
                 self._headers[letter] = header
-                self._data[letter] = df
+                self._datasets[letter] = df
                 if verbose:
                     print(f" Stored the type-{letter} dataset in memory.")
 
@@ -1662,8 +1653,10 @@ class BinaryDatasetManager:
             return df
 
         # Return the path
-        if file_path:
-            return file_path
+        if len(fpaths) > 0:
+            if len(fpaths) == 1:
+                return list(fpaths)[0]
+            return fpaths
 
         return
 
@@ -1685,13 +1678,13 @@ class BinaryDatasetManager:
             else:
                 raise ValueError("Invalid binary source.")
         else:
-            if source in self._data:
-                self._data[source] = pd.DataFrame()
+            if source in self._datasets:
+                self._datasets[source] = pd.DataFrame()
                 self._headers[source] = ""
                 if verbose:
                     print(f" Cleared memory for binaries type-{source}")
             elif source in ["both", "all"]:
-                for key in self._data:
+                for key in self._datasets:
                     self.clear_memory(key, verbose=verbose)
             else:
                 raise ValueError("Invalid binary source.")
@@ -1714,8 +1707,8 @@ def load_dataset(
     source: str,
     from_memory: bool = True,
     from_zip: Union[str, bool] = True,
-    from_file: Union[str, bool] = False,
-    dir_path: Union[str, Path, bool] = True,
+    from_file: Union[str, bool] = True,
+    dir_path: Union[str, Path, bool, None] = True,
     to_resokit: bool = True,
     to_df: bool = False,
     check_age: bool = False,
@@ -1750,15 +1743,15 @@ def load_dataset(
         If `True`, loads the dataset from memory if available.
     from_zip : str or Path or bool, optional. Default: True.
         Path to the ZIP archive to load the dataset.
-        If `True`, default ZIP filename is used. (datasets.zip)
+        If `True`, default ZIP filename is used.
         If `False`, the file is not loaded from the ZIP archive.
-    from_file : str or Path or bool, optional. Default: False.
+    from_file : str or Path or bool, optional. Default: True.
         Path to the file to load the dataset.
         If `True`, default filename is used.
         If `False`, the file is not loaded.
     dir_path : str, Path or bool, optional. Default: True.
         Directory path to load the dataset from.
-        If `True` or `None` the default directory is used. (resokit.datasets)
+        If `True` or `None` the default directory is used.
     to_resokit : bool, optional. Default: True.
         If `True`, returns the dataset including only the columns
         required by ResoKit.
@@ -1812,9 +1805,9 @@ def load_dataset(
 def download_dataset(
     source: str,
     to_memory: bool = True,
-    to_file: Union[str, Path, bool, None] = False,
-    to_zip: Union[str, Path, bool, None] = False,
-    dir_path: Union[str, Path, None] = None,
+    to_file: Union[str, Path, bool] = True,
+    to_zip: Union[str, Path, bool] = True,
+    dir_path: Union[str, Path, bool, None] = True,
     overwrite: bool = False,
     check_online: bool = True,
     to_resokit: Union[bool, None] = None,
@@ -1837,19 +1830,19 @@ def download_dataset(
     source : str
         Identifier for the data source ('eu' or 'nasa').
         If "all" or "both", downloads both datasets.
-    to_memory : bool, optional. Default: False.
+    to_memory : bool, optional. Default: True.
         If `True`, stores the dataset in memory.
-    to_file : str or Path or bool, optional. Default: False.
+    to_file : str or Path or bool, optional. Default: True.
         Path or str to the file to store the dataset.
         If `True`, default filename is used.
         If `False`, the file is not saved nor created.
-    to_zip : str or Path or bool, optional. Default: False.
+    to_zip : str or Path or bool, optional. Default: True.
         Path or str to the ZIP archive to store the dataset.
-        If `True`, default ZIP filename is used. (datasets.zip)
+        If `True`, default ZIP filename is used.
         If `False`, the file is not saved nor created in the ZIP archive.
-    dir_path : str or Path
+    dir_path : str or Path or bool or None. Default: True
         Directory path to save the dataset, or path to the ZIP archive.
-        If `None`, the default directory is used (resokit.datasets).
+        If `None` or `True` the default directory is used.
     overwrite : bool, optional. Default: False.
         If `True`, overwrites the file if it already exists.
         The memory stored Dataset and Index are always overwritten,
@@ -1949,7 +1942,7 @@ def load_binary_dataset(
         If `False`, the file is not loaded.
     dir_path : str, Path or bool, optional. Default: True.
         Directory path to load the dataset from.
-        If `True` or `None` the default directory is used. (resokit.datasets)
+        If `True` or `None` the default directory is used.
     rename_columns : bool, optional. Default: True.
         If True, rename the columns for human readability.
     ret_header : bool, optional. Default: False.
@@ -1993,10 +1986,10 @@ def load_binary_dataset(
 
 def download_binary_dataset(
     which: str,
-    to_file: Union[str, Path, bool, None] = False,
-    dir_path: Union[str, Path, None] = None,
+    to_file: Union[str, Path, bool] = True,
+    dir_path: Union[str, Path, bool, None] = True,
     to_memory: bool = True,
-    return_data: bool = False,
+    return_data: bool = True,
     overwrite: bool = False,
     verbose: bool = True,
     chunk_size: int = 1024,
@@ -2018,13 +2011,13 @@ def download_binary_dataset(
         'circumbinary' or 'c' or 'p' for the p-type circumbinaries dataset,
         'simple' or 's' for the s-type binaries dataset.
         If "all" or "both", downloads both datasets.
-    dir_path : str or Path
-        Directory path to save the dataset.
-        If `None`, the default directory is used (resokit.datasets).
-    to_file : str or Path or bool, optional. Default: False.
+    to_file : str or Path or bool, optional. Default: True.
         Path or str to the file to store the dataset.
         If `True`, default filename is used.
         If `False`, the file is not saved nor created.
+    dir_path : str or Path or bool or None. Default:True
+        Directory path to save the dataset.
+        If `None` or `True`, the default directory is used.
     to_memory : bool, optional. Default: True.
         If `True`, stores the dataset in memory.
     return_data : bool, optional. Default: True.
@@ -2104,27 +2097,18 @@ def clear_memory(
     """
     which = which.lower()  # Ensure lowercase
     if which in DATASET_FILENAMES:
-        _full_manager.clear_memory(source=which, verbose=verbose)
         _full_manager.clear_memory(source=which, verbose=verbose, files=files)
     elif which in BINARIES_FILENAMES:
-
-        _binary_manager.clear_memory(source=which, verbose=verbose)
         _binary_manager.clear_memory(
             source=which, verbose=verbose, files=files
         )
     elif which == "datasets":
-
-        _full_manager.clear_memory(source="both", verbose=verbose)
         _full_manager.clear_memory(source="both", verbose=verbose, files=files)
     elif which == "binary":
-
-        _binary_manager.clear_memory(source="both", verbose=verbose)
         _binary_manager.clear_memory(
             source="both", verbose=verbose, files=files
         )
     elif which == "all":
-        _full_manager.clear_memory(source="both", verbose=verbose)
-        _binary_manager.clear_memory(source="both", verbose=verbose)
         _full_manager.clear_memory(source="both", verbose=verbose, files=files)
         _binary_manager.clear_memory(
             source="both", verbose=verbose, files=files
@@ -2134,6 +2118,9 @@ def clear_memory(
             f"Invalid source: {which}. Must be 'eu', 'nasa', 'p', 's', "
             + "'binary', 'datasets', or 'all'."
         )
+
+    if files is True:
+        clear_memory(which=which, verbose=verbose, files=False)
 
 
 def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
@@ -2163,7 +2150,7 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
         raise ValueError(f"Invalid which: {which}. Must be 'eu' or 'nasa'.")
 
     if verbose:
-        print(f"Checking local dataset from {which}...")
+        print(f"Checking local dataset from '{which}' source...")
 
     # Check if the dataset is stored
     try:
@@ -2194,9 +2181,21 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
             df_stored = df_stored[df_stored["default_flag"] == 1]
     except FileNotFoundError as error:
         if verbose:
-            print(f"File for source {which} to check if outdated not found.")
+            print(
+                f"File from '{which}' source to check if outdated not found."
+            )
         if soft:
             return True
+        raise error
+    except ValueError as error:
+        if (
+            str(error)
+            == "Data not found in memory, and no file or ZIP provided."
+        ):
+            if verbose:
+                print("Unable to load data to check if outdated.")
+            if soft:
+                return True
         raise error
     assert isinstance(df_stored, pd.DataFrame), (
         "Expected df_stored to be a pd.DataFrame, "
@@ -2272,7 +2271,10 @@ def check_binary_outdated(
         df = _binary_manager.load(source=which, ret_header=False)
     except FileNotFoundError as error:
         if verbose:
-            print(f"File for source {which} to check if outdated not found.")
+            print(
+                f"File from '{which}'-type binary source "
+                + "to check if outdated not found."
+            )
         if soft:
             return True
         raise error

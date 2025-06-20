@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from types import MappingProxyType
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Set, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from pandas import DataFrame, read_csv
@@ -572,6 +572,114 @@ BINARIES_COLUMNS = [
 # =============================================================================
 
 
+def resolve_paths(
+    to_file: Union[bool, str, Path],
+    to_zip: Union[bool, str, Path],
+    dir_path: Union[bool, str, Path, None],
+    default_file: str,
+    default_zip: str,
+    default_dir: Path,
+) -> Tuple[Set[Path], Set[Path], Set[Path]]:
+    """
+    Normalize to_file, to_zip, and dir_path into full output file and zip paths.
+
+    Args:
+        to_file: File name or path (True = use default file name in dir_path).
+        to_zip: Zip name or path (True = use default zip name in dir_path).
+        dir_path: Base directory (True = use default_dir).
+        default_file: Default file name if to_file is True.
+        default_zip: Default zip name if to_zip is True.
+        default_dir: Default directory if dir_path is True.
+
+    Returns:
+        Tuple containing:
+            - Set of base directories (Path): physical directories containing files/zips
+            - Set of resolved file paths (Path)
+            - Set of resolved zip output paths (Path to file inside zip)
+    """
+    if to_file is True and to_zip is True and dir_path is True:
+        return (
+            set([default_dir]),
+            set(),
+            set([default_dir / default_zip / default_file]),
+        )
+
+    # Short-circuit: if to_file is explicitly False, return all empty
+    if to_file is False:
+        return set(), set(), set()
+
+    def parse_path_input(value, default_name) -> Tuple[Path, Path]:
+        if value is True:
+            return None, Path(default_name)
+        elif isinstance(value, (str, Path)):
+            value = Path(value)
+            if value.is_absolute() or value.parent != Path("."):
+                return value.parent.resolve(), value.name
+            else:
+                return None, value.name
+        elif value in [False, None]:
+            return None, None
+        else:
+            raise ValueError(f"Invalid path input: {value}")
+
+    # Parse inputs
+    file_dir, file_name = parse_path_input(to_file, default_file)
+    zip_dir, zip_name = parse_path_input(to_zip, default_zip)
+
+    # Resolve base directory
+    if dir_path is True:
+        base_dir = default_dir.resolve()
+    elif isinstance(dir_path, (str, Path)):
+        base_dir = Path(dir_path).resolve()
+    else:
+        base_dir = None
+
+    # If zip_dir is not provided and dir_path is, assume zip is in base_dir
+    if zip_dir is None and zip_name is not None and base_dir is not None:
+        zip_dir = base_dir
+
+    fpaths = set()
+    zfpaths = set()
+    base_paths = set()
+
+    # Resolve file path
+    if file_name:
+        # If user gave no file_dir and zip_dir == base_dir,
+        # skip adding file outside zip
+        if file_dir is None and zip_dir == base_dir and base_dir is not None:
+            pass  # Do not add to fpaths
+        elif file_dir is None and base_dir is None and zip_name is not None:
+            pass
+        else:
+            if file_dir:
+                full_file_path = file_dir / file_name
+            elif base_dir and not (zip_dir == base_dir):
+                full_file_path = base_dir / file_name
+            else:
+                full_file_path = Path(file_name)
+            fpaths.add(full_file_path)
+            base_paths.add(full_file_path.parent)
+
+    # Resolve zip file path (and zip-internal file path)
+    if zip_name:
+        if zip_dir:
+            zip_file_path = zip_dir / zip_name
+        elif base_dir:
+            zip_file_path = base_dir / zip_name
+        else:
+            zip_file_path = Path(zip_name)
+        if file_name:
+            full_zip_entry = zip_file_path / file_name
+        else:
+            full_zip_entry = zip_file_path
+        zfpaths.add(full_zip_entry)
+        base_paths.add(
+            zip_file_path.parent
+        )  # <-- Only the containing folder, not the zip itself
+
+    return base_paths, fpaths, zfpaths
+
+
 def check_file_age(
     file_path: Union[str, Path],
     zip_path: Union[str, Path, None],
@@ -664,13 +772,10 @@ def load_from_zip(
     if not zip_path.exists():
         raise FileNotFoundError(f"ZIP archive {zip_path} not found.")
 
-    # Define the zip nameload_from_zip(
-    zip_name = zip_path.name  # Name of the ZIP archive
-
     # Load the dataset from the ZIP archive
     with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
         if verbose:  # Print message if verbose
-            print(f"  Reading {file_name} " + f"directly from {zip_name}...")
+            print(f"  Reading {file_name} " + f"directly from {zip_path}...")
         # Load directly from the .zip
         dtypes = None if source is None else DATASET_DTYPES.get(source, None)
         skip_rows = 0 if skip_rows is None else skip_rows
@@ -918,7 +1023,7 @@ def check_online_dataset(
     # Parse the planets
     try:
         # Remove comma if present
-        length = int(str(length_str).replace(",", ""))
+        length = int(str(length_str).replace(",", "").replace(".", ""))
     except ValueError:
         if verbose:
             print(
@@ -949,7 +1054,7 @@ def check_online_dataset(
 
 def _check_online_eu(
     verbose: bool = True,
-) -> Tuple[Union[str, int], Union[str, None]]:
+) -> Tuple[str, Union[str, None]]:
     """Query the length of the exoplanet.eu dataset.
 
     Parameters
@@ -982,7 +1087,7 @@ def _check_online_eu(
         if text is None:
             if verbose:
                 print(" No 'Last update' text found on the webpage.")
-            return -1, None
+            return "-1", None
 
         # Extract the date and number of planets using regex
         aux = (
@@ -994,18 +1099,18 @@ def _check_online_eu(
         if not match:
             if verbose:
                 print(" No match found in the extracted text.")
-            return -1, None
+            return "-1", None
 
         # Parse extracted values
         last_update, length = match.groups()
 
-        return length, last_update
+        return str(length), last_update
 
     except requests.exceptions.RequestException as e:
         if verbose:
             print(f"Error fetching the webpage: {e}")
 
-    return -1, None
+    return "-1", None
 
 
 def _check_online_nasa(
@@ -1036,7 +1141,9 @@ def _check_online_nasa(
         # Extract the number of confirmed planets
         planet_count_div = soup.find("div", class_="stat")
         if planet_count_div:
-            length = int(planet_count_div.text.strip().replace(",", ""))
+            length = (
+                planet_count_div.text.strip().replace(",", "").replace(".", "")
+            )
         else:
             if verbose:
                 print(" No match found in the extracted text.")
@@ -1051,13 +1158,13 @@ def _check_online_nasa(
                 print(" No match found in the extracted text.")
             last_update = None
 
-        return length, last_update
+        return str(length), last_update
 
     except requests.exceptions.RequestException as e:
         if verbose:
             print(f"Error fetching the webpage: {e}")
 
-    return -1, None
+    return "-1", None
 
 
 def check_online_binary(source: str, verbose: bool = True) -> int:
