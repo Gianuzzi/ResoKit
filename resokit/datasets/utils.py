@@ -583,7 +583,8 @@ def resolve_paths(
     """
     Normalize to_file, to_zip, and dir_path into full output file and zip paths.
 
-    Args:
+    Parameters
+    ----------
         to_file: File name or path (True = use default file name in dir_path).
         to_zip: Zip name or path (True = use default zip name in dir_path).
         dir_path: Base directory (True = use default_dir).
@@ -591,9 +592,11 @@ def resolve_paths(
         default_zip: Default zip name if to_zip is True.
         default_dir: Default directory if dir_path is True.
 
-    Returns:
+    Returns
+    -------
         Tuple containing:
-            - Set of base directories (Path): physical directories containing files/zips
+            - Set of base directories (Path): physical directories containing
+               files/zips
             - Set of resolved file paths (Path)
             - Set of resolved zip output paths (Path to file inside zip)
     """
