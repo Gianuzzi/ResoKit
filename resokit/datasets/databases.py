@@ -2123,13 +2123,17 @@ def clear_memory(
         clear_memory(which=which, verbose=verbose, files=False)
 
 
-def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
+def check_outdated(
+    which: str = "both", verbose: bool = True, soft=True
+) -> Union[bool, Tuple[bool, bool]]:
     """Check if the specified stored dataset is outdated.
 
     Parameters
     ----------
-    which : str
+    which : str, optional. Default: 'both'
         Which dataset ('eu' or 'nasa').
+        If 'both', then both 'eu' and 'nasa'.
+        If 'all', then 'both' and both binaries too.
     verbose : bool, optional. Default: True.
         Whether to print informational messages.
 
@@ -2140,6 +2144,14 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
     """
     # Check if which is valid
     which = which.lower()  # Ensure lowercase
+    if which == "both":
+        eu = check_outdated(which="eu", verbose=verbose, soft=soft)
+        nasa = check_outdated(which="nasa", verbose=verbose, soft=soft)
+        return eu, nasa
+    if which == "all":
+        both = check_outdated(which="both", verbose=verbose, soft=soft)
+        binas = check_binary_outdated(which="both", verbose=verbose, soft=soft)
+        return both[0], both[1], binas[0], binas[1]
     if which not in DATASET_FILENAMES:
         if which in BINARIES_FILENAMES:
             if verbose:
@@ -2158,6 +2170,7 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
             df_stored = _full_manager.load(
                 "eu",
                 verbose=False,
+                from_file=True,
                 to_df=True,
                 only_index=True,
                 check_age=True,
@@ -2169,6 +2182,7 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
             df_stored = _full_manager.load(
                 "nasa",
                 verbose=False,
+                from_file=True,
                 to_df=True,
                 to_resokit=False,
                 check_age=True,
@@ -2187,7 +2201,7 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
     except FileNotFoundError as error:
         if verbose:
             print(
-                f"File from '{which}' source to check if outdated not found."
+                f" File from '{which}' source to check if outdated not found."
             )
         if soft:
             return True
@@ -2198,7 +2212,8 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
             == "Data not found in memory, and no file or ZIP provided."
         ):
             if verbose:
-                print("Unable to load data to check if outdated.")
+                print(" Unable to load data to check if outdated.")
+                print(" Try downloading/loading it first")
             if soft:
                 return True
         raise error
@@ -2212,7 +2227,7 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
         if which == "nasa":
             print("  (Including also non-default parameters set.)")
     elif verbose:
-        print("Could not load the stored dataset. ")
+        print(" Could not load the stored dataset. ")
 
     # Check if the dataset is outdated
     n_online, _ = check_online_dataset(source=which, verbose=verbose)
@@ -2241,13 +2256,14 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
 
 def check_binary_outdated(
     which: Union[str, bool], verbose: bool = True, soft=True
-) -> bool:
+) -> Union[bool, Tuple[bool, bool]]:
     """Check if the specified stored bianry dataset is outdated.
 
     Parameters
     ----------
     which : str, bool
         Which dataset: 'p' (circumbinary) or 's' (single binary).
+        If 'both' or 'all, both datasets are checked.
         If True, circumbinary; if False, single binary.
     verbose : bool, optional. Default: True.
         Whether to print informational messages.
@@ -2261,6 +2277,10 @@ def check_binary_outdated(
     if isinstance(which, bool):
         which = "p" if which is True else "s"
     which = which.lower()  # Ensure lowercase
+    if which in ["both", "all"]:
+        p = check_binary_outdated(which="p", verbose=verbose, soft=soft)
+        s = check_binary_outdated(which="s", verbose=verbose, soft=soft)
+        return p, s
     if which not in BINARIES_FILENAMES:
         if which in DATASET_FILENAMES:
             if verbose:
