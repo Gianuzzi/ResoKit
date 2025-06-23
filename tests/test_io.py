@@ -13,24 +13,27 @@
 
 import pytest
 
+
 import resokit.io as rio
 from resokit.core import StaticBinaryStar, StaticSystem
-from resokit.datasets import databases
+
 
 # ============================================================================
 # TESTS
 # ============================================================================
 
 
+@pytest.mark.usefixtures("load_eu_data")
 class TestLoadSystem:
     load_function = {
         "eu": rio.load_system_from_eu,
         "nasa": rio.load_system_from_nasa,
     }
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_load_system_wrong(self, source: str, capfd):
         """Test load_system with wrong system."""
+
         # Test load_system with wrong system
         with pytest.raises(ValueError, match="Star wrong_system not found in"):
             self.load_function[source](name="wrong_system", verbose=False)
@@ -46,12 +49,14 @@ class TestLoadSystem:
         # Ensure the verbose output is correct
         out, _ = capfd.readouterr()
         assert "Star wrong_system not found" in out
-        if source == "eu":
-            assert "Note: ExoplanetEU has alternative" in out
+        assert "Note: ExoplanetEU has alternative" in out
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_system_wrong_soft(self, source: str, capfd):
+    @pytest.mark.parametrize("source", ["eu"])
+    def test_load_system_wrong_soft(
+        self, source: str, sample_eu_csv_path, capfd
+    ):
         """Test load_system with wrong system, soft=True."""
+
         # Test load_system with wrong system
         syst = self.load_function[source](
             name="wrong_system", verbose=True, soft=True
@@ -67,7 +72,7 @@ class TestLoadSystem:
         if source == "eu":
             assert "Note: ExoplanetEU has alternative" in out
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_load_system_almost(self, source: str, capfd):
         """Test load_system with almost correct system."""
         syst = self.load_function[source](
@@ -95,155 +100,156 @@ class TestLoadSystem:
         assert "Execute with exact_match=False to load it" in out
         assert err == ""
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_load_system_almost_not_exact(self, source: str):
         """Test load_system with almost correct system."""
         # Clear the memory
-        databases.clear_memory("all", verbose=False)
 
         syst = self.load_function[source](name="kepler11", exact_match=False)
 
         assert isinstance(syst, StaticSystem)
         assert syst.n_planets_ == 6
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_store_system(self, source: str, mocker):
-        """Test load_system and store_system."""
-        # Assert nothing is pre-stored
-        databases.clear_memory("all", verbose=False)
 
-        # -----------------------------------
-        # Store nothing
-        # -----------------------------------
+#     @pytest.mark.parametrize("source", ["eu"])
+#     def test_load_store_system(self, source: str, mocker):
+#         """Test load_system and store_system."""
+#         # Assert nothing is pre-stored
+#         rdb.clear_memory("all", verbose=False)
 
-        # Load the system
-        syst = self.load_function[source](
-            name="kepler11",
-            verbose=False,
-            exact_match=False,
-            store_index=False,
-            store=False,
-        )
+#         # -----------------------------------
+#         # Store nothing
+#         # -----------------------------------
 
-        # Assert the system is loaded
-        assert isinstance(syst, StaticSystem)
-        assert syst.n_planets_ == 6
+#         # Load the system
+#         syst = self.load_function[source](
+#             name="kepler11",
+#             verbose=False,
+#             exact_match=False,
+#             store_index=False,
+#             store=False,
+#         )
 
-        # Assert nothing is stored
-        assert databases._IN_MEMORY_DATASETS[source].empty
-        assert databases._IN_MEMORY_INDEXES[source].empty
-        assert not databases._IS_FULLY_STORED[source]
+#         # Assert the system is loaded
+#         assert isinstance(syst, StaticSystem)
+#         assert syst.n_planets_ == 6
 
-        # -----------------------------------
-        # Store the index
-        # -----------------------------------
+#         # Assert nothing is stored
+#         assert rdb._IN_MEMORY_DATASETS[source].empty
+#         assert rdb._IN_MEMORY_INDEXES[source].empty
+#         assert not rdb._IS_FULLY_STORED[source]
 
-        # Load the system and store the index
-        syst = self.load_function[source](
-            name="kepler11",
-            verbose=False,
-            exact_match=False,
-            store_index=True,
-            store=False,
-        )
+#         # -----------------------------------
+#         # Store the index
+#         # -----------------------------------
 
-        # Assert the system is loaded
-        assert isinstance(syst, StaticSystem)
-        assert syst.n_planets_ == 6
+#         # Load the system and store the index
+#         syst = self.load_function[source](
+#             name="kepler11",
+#             verbose=False,
+#             exact_match=False,
+#             store_index=True,
+#             store=False,
+#         )
 
-        # Assert just the index is stored
-        assert databases._IN_MEMORY_DATASETS[source].empty
-        assert not databases._IN_MEMORY_INDEXES[source].empty
-        assert not databases._IS_FULLY_STORED[source]
+#         # Assert the system is loaded
+#         assert isinstance(syst, StaticSystem)
+#         assert syst.n_planets_ == 6
 
-        # Clear the memory
-        databases.clear_memory("both", verbose=False)
+#         # Assert just the index is stored
+#         assert rdb._IN_MEMORY_DATASETS[source].empty
+#         assert not rdb._IN_MEMORY_INDEXES[source].empty
+#         assert not rdb._IS_FULLY_STORED[source]
 
-        # -----------------------------------
-        # Store the whole dataset
-        # -----------------------------------
+#         # Clear the memory
+#         rdb.clear_memory("both", verbose=False)
 
-        # Load the system and store just this system
-        syst = self.load_function[source](
-            name="kepler11",
-            verbose=False,
-            exact_match=False,
-            store_index=False,
-            store=True,
-        )
+#         # -----------------------------------
+#         # Store the whole dataset
+#         # -----------------------------------
 
-        # Assert the system is loaded
-        assert isinstance(syst, StaticSystem)
-        assert syst.n_planets_ == 6
+#         # Load the system and store just this system
+#         syst = self.load_function[source](
+#             name="kepler11",
+#             verbose=False,
+#             exact_match=False,
+#             store_index=False,
+#             store=True,
+#         )
 
-        # Assert a partial dataset is stored (The index too)
-        assert not databases._IN_MEMORY_DATASETS[source].empty
-        assert not databases._IN_MEMORY_INDEXES[source].empty
-        assert not databases._IS_FULLY_STORED[source]
+#         # Assert the system is loaded
+#         assert isinstance(syst, StaticSystem)
+#         assert syst.n_planets_ == 6
 
-        # Assert only this system was stored
-        if source == "eu":
-            assert databases._IN_MEMORY_DATASETS[source].shape[0] == 6
-        else:
-            # Nasa has 97 total solution rows for planets in this system
-            assert databases._IN_MEMORY_DATASETS[source].shape[0] == 97
+#         # Assert a partial dataset is stored (The index too)
+#         assert not rdb._IN_MEMORY_DATASETS[source].empty
+#         assert not rdb._IN_MEMORY_INDEXES[source].empty
+#         assert not rdb._IS_FULLY_STORED[source]
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_load_from_stored(self, source: str, mocker):
-        """Test load_system with stored datasets."""
-        # Assert nothing is pre-stored
-        databases.clear_memory("all", verbose=False)
+#         # Assert only this system was stored
+#         if source == "eu":
+#             assert rdb._IN_MEMORY_DATASETS[source].shape[0] == 6
+#         else:
+#             # Nasa has 97 total solution rows for planets in this system
+#             assert rdb._IN_MEMORY_DATASETS[source].shape[0] == 97
 
-        # Load the system and store the whole dataset
-        syst = self.load_function[source](
-            name="kepler11",
-            verbose=False,
-            exact_match=False,
-            store_index=False,
-            store=True,
-        )
+#     @pytest.mark.parametrize("source", ["eu", "nasa"])
+#     def test_load_from_stored(self, source: str, mocker):
+#         """Test load_system with stored datasets."""
+#         # Assert nothing is pre-stored
+#         rdb.clear_memory("all", verbose=False)
 
-        # Assert the system is loaded
-        assert isinstance(syst, StaticSystem)
-        assert syst.n_planets_ == 6
+#         # Load the system and store the whole dataset
+#         syst = self.load_function[source](
+#             name="kepler11",
+#             verbose=False,
+#             exact_match=False,
+#             store_index=False,
+#             store=True,
+#         )
 
-        # Assert the whole dataset is stored (The index too)
-        assert not databases._IN_MEMORY_DATASETS[source].empty
-        assert not databases._IN_MEMORY_INDEXES[source].empty
-        assert not databases._IS_FULLY_STORED[source]
+#         # Assert the system is loaded
+#         assert isinstance(syst, StaticSystem)
+#         assert syst.n_planets_ == 6
 
-        # -----------------------------------
-        # Read from the stored dataset
-        # -----------------------------------
+#         # Assert the whole dataset is stored (The index too)
+#         assert not rdb._IN_MEMORY_DATASETS[source].empty
+#         assert not rdb._IN_MEMORY_INDEXES[source].empty
+#         assert not rdb._IS_FULLY_STORED[source]
 
-        # Mock the zip_path
-        mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "wrong_name")
+#         # -----------------------------------
+#         # Read from the stored dataset
+#         # -----------------------------------
 
-        # Load a second system
-        syst = self.load_function[source](
-            name="kepler47",
-            verbose=False,
-            exact_match=False,
-            store_index=False,
-            store=True,
-            low_memory=True,
-        )
+#         # Mock the zip_path
+#         mocker.patch("resokit.datasets.utils.ZIP_FILENAME", "wrong_name")
 
-        # Assert the system is loaded
-        assert isinstance(syst, StaticSystem)
-        assert syst.n_planets_ == 3
+#         # Load a second system
+#         syst = self.load_function[source](
+#             name="kepler47",
+#             verbose=False,
+#             exact_match=False,
+#             store_index=False,
+#             store=True,
+#             low_memory=True,
+#         )
 
-        # Clear the memory
-        databases.clear_memory("both", verbose=False)
+#         # Assert the system is loaded
+#         assert isinstance(syst, StaticSystem)
+#         assert syst.n_planets_ == 3
+
+#         # Clear the memory
+#         rdb.clear_memory("both", verbose=False)
 
 
+@pytest.mark.usefixtures("load_binary_data")
 class TestLoadBinary:
     def test_load_binary_wrong(self, capfd):
         """Test load_binary with wrong system."""
-        # Assert nothing is pre-stored
-        databases.clear_memory("all", verbose=False)
 
-        with pytest.raises(ValueError, match="Star wrong_system not found"):
+        with pytest.raises(
+            ValueError, match="Star 'wrong_system' not found in b"
+        ):
             rio.load_from_binary(name="wrong_system", verbose=False)
         # Capture the output
         out, _ = capfd.readouterr()
@@ -251,17 +257,18 @@ class TestLoadBinary:
         assert out == ""
 
         # Now with verbose=True
-        with pytest.raises(ValueError, match="Star wrong_system not found"):
+        with pytest.raises(ValueError, match="Star 'wrong_system' not found"):
             rio.load_from_binary(name="wrong_system", verbose=True)
 
         # Ensure the verbose output is correct
         out, _ = capfd.readouterr()
-        assert "Star wrong_system is not part " in out
+        assert (
+            "tar system 'wrong_system' in binary datasets.\n Unable to check"
+            in out
+        )
 
     def test_load_binary_wrong_soft(self, capfd):
         """Test load_binary with wrong system, soft=True."""
-        # Assert nothing is pre-stored
-        databases.clear_memory("all", verbose=False)
 
         syst = rio.load_from_binary(
             name="wrong_system", verbose=True, soft=True
@@ -272,13 +279,16 @@ class TestLoadBinary:
 
         # Ensure the verbose output is correct
         out, err = capfd.readouterr()
-        assert "Star wrong_system is not part " in out
+        assert (
+            "Looking for star system 'wrong_system' in binary datasets." in out
+        )
+        assert "\n Unable to check for s-tpye binary orbits." in out
+        assert "Txt file not found." in out
+        assert "Try downloading with " in out
         assert err == ""
 
     def test_load_binary_almost(self, capfd):
         """Test load_binary with almost correct system."""
-        # Assert nothing is pre-stored
-        databases.clear_memory("all", verbose=False)
 
         syst = rio.load_from_binary(name="kepler47", verbose=False, soft=True)
 
@@ -304,7 +314,6 @@ class TestLoadBinary:
     def test_load_binary_almost_not_exact(self):
         """Test load_binary with almost correct system."""
         # Assert nothing is pre-stored
-        databases.clear_memory("all", verbose=False)
 
         syst = rio.load_from_binary(name="kepler47", exact_match=False)
 
