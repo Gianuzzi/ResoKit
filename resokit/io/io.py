@@ -673,7 +673,7 @@ def load_from_binary(
     if not is_binary:
         if soft:
             return None
-        raise ValueError(f"Star {name} not found in binary datasets.")
+        raise ValueError(f"Star '{name}' not found in binary datasets.")
 
     # Extract the data
     row = load_binary_dataset(

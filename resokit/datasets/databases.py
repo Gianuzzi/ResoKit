@@ -932,7 +932,7 @@ class DatasetManager:
         only_index: bool = False,
         only_rows: Union[list, int] = False,
         verbose: bool = True,
-        store: Union[bool, str] = False,
+        store: Union[bool, str] = True,
         store_index: Union[bool, str] = True,
     ) -> Union[pd.DataFrame, ResokitDataFrame, ResoKitDataset, None]:
         """Load a dataset from memory, ZIP, or file."""
@@ -1579,7 +1579,7 @@ class BinaryDatasetManager:
             to_file=to_file,
             to_zip=False,
             dir_path=dir_path,
-            default_file=BINARIES_FILENAMES[source],
+            default_file=BINARIES_FILENAMES[letter],
             default_zip="False",
             default_dir=DATASETS_DIR,
         )
@@ -1715,7 +1715,7 @@ def load_dataset(
     only_index: bool = False,
     only_rows: Union[list, int] = False,
     verbose: bool = True,
-    store: Union[bool, str] = False,
+    store: Union[bool, str] = True,
     store_index: Union[bool, str] = True,
 ) -> Union[pd.DataFrame, ResokitDataFrame, ResoKitDataset, None]:
     """Load the dataset from a specified source.
@@ -1772,7 +1772,7 @@ def load_dataset(
         the first row (system) is 0.
     verbose : bool, optional. Default: True.
         If `True`, prints messages about the process.
-    store : bool, str, optional. Default: False.
+    store : bool, str, optional. Default: True.
         If `str`, then "f" or "y" or "s" or "o" overwrites the stored dataset.
         If `True`, stores the dataset in memory.
     store_index : bool, str, optional. Default: True.
@@ -2178,7 +2178,12 @@ def check_outdated(which: str, verbose: bool = True, soft=True) -> bool:
                 store_index=True,
             )
             # Keep only non controversial and default_flag
-            df_stored = df_stored[df_stored["default_flag"] == 1]
+            if "default_flag" in df_stored.columns:
+                df_stored = df_stored[df_stored["default_flag"] == 1]
+            elif verbose:
+                print(
+                    " Unable to select default solutions for outdated check."
+                )
     except FileNotFoundError as error:
         if verbose:
             print(
