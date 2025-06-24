@@ -645,6 +645,7 @@ class DatasetManager:
         to_zip: Union[str, Path, bool] = True,
         dir_path: Union[str, Path, bool, None] = True,
         overwrite: bool = False,
+        soft: bool = True,
         check_online: bool = True,
         to_resokit: Union[bool, None] = None,
         verbose: bool = True,
@@ -677,22 +678,34 @@ class DatasetManager:
 
         for path in bpaths:
             if not path.exists():
-                raise FileNotFoundError(f"Directory {path} not found.")
+                msg = f"Directory {path} not found."
+                if soft:
+                    print(msg)
+                    return None
+                raise FileNotFoundError(msg)
 
         if not overwrite:
             for file_path in fpaths:
                 if file_path.exists():
-                    raise FileExistsError(
+                    msg = (
                         f"File {file_path} already exists. "
                         + "Set overwrite=True to force the download."
                     )
+                    if soft:
+                        print(msg)
+                        return None
+                    raise FileExistsError(msg)
             for zipf_path in zfpaths:
                 zip_path = zipf_path.parent
                 if zip_path.exists():
-                    raise FileExistsError(
+                    msg = (
                         f"Zip file {zip_path} already exists. "
                         + "Set overwrite=True to force the download."
                     )
+                    if soft:
+                        print(msg)
+                        return None
+                    raise FileExistsError(msg)
 
         save_file = len(fpaths) > 0
         save_zip = len(zfpaths) > 0
@@ -1534,6 +1547,7 @@ class BinaryDatasetManager:
         to_memory: bool = True,
         return_data: bool = True,
         overwrite: bool = False,
+        soft: bool = True,
         verbose: bool = True,
         chunk_size: int = 1024,
         print_size: float = 0.00001,
@@ -1591,10 +1605,14 @@ class BinaryDatasetManager:
         if not overwrite:
             for file_path in fpaths:
                 if file_path.exists():
-                    raise FileExistsError(
+                    msg = (
                         f"File {file_path} already exists. "
                         + "Set overwrite=True to force the download."
                     )
+                    if soft:
+                        print(msg)
+                        return
+                    raise FileExistsError(msg)
 
         # Download the dataset
         data = request_dataset(
@@ -1809,6 +1827,7 @@ def download_dataset(
     to_zip: Union[str, Path, bool] = True,
     dir_path: Union[str, Path, bool, None] = True,
     overwrite: bool = False,
+    soft: bool = True,
     check_online: bool = True,
     to_resokit: Union[bool, None] = None,
     verbose: bool = True,
@@ -1847,6 +1866,9 @@ def download_dataset(
         If `True`, overwrites the file if it already exists.
         The memory stored Dataset and Index are always overwritten,
         independently of this parameter.
+    soft : bool, optiona. Default: True
+        If `True`, prints a message instead of raising an error, in
+        case of file existing and overwrite = `False`.
     check_online : bool, optional. Default: True.
         Whether to check if the dataset is already up-to-date.
     to_resokit : bool, dict, optional. Default: None.
@@ -1876,6 +1898,7 @@ def download_dataset(
             to_zip=to_zip,
             dir_path=dir_path,
             overwrite=overwrite,
+            soft=soft,
             check_online=check_online,
             to_resokit=to_resokit,
             verbose=verbose,
@@ -1889,6 +1912,7 @@ def download_dataset(
             to_zip=to_zip,
             dir_path=dir_path,
             overwrite=overwrite,
+            soft=soft,
             check_online=check_online,
             to_resokit=to_resokit,
             verbose=verbose,
@@ -1903,6 +1927,7 @@ def download_dataset(
         to_zip=to_zip,
         dir_path=dir_path,
         overwrite=overwrite,
+        soft=soft,
         check_online=check_online,
         to_resokit=to_resokit,
         verbose=verbose,
@@ -1991,6 +2016,7 @@ def download_binary_dataset(
     to_memory: bool = True,
     return_data: bool = True,
     overwrite: bool = False,
+    soft: bool = True,
     verbose: bool = True,
     chunk_size: int = 1024,
     print_size: float = 0.00001,
@@ -2025,6 +2051,9 @@ def download_binary_dataset(
     overwrite : bool, optional. Default: False.
         If `True`, overwrites the file if it already exists.
         It also overwrites the stored dataset in memory.
+    soft : bool, optiona. Default: True
+        If `True`, prints a message instead of raising an error, in
+        case of file existing and overwrite = `False`.
     verbose : bool, optional. Default: True.
         If `True`, displays messages about the download process.
     chunk_size : int, optional. Default: 1024.
@@ -2048,6 +2077,7 @@ def download_binary_dataset(
             to_memory=to_memory,
             return_data=return_data,
             overwrite=overwrite,
+            soft=soft,
             verbose=verbose,
             chunk_size=chunk_size,
             print_size=print_size,
@@ -2059,6 +2089,7 @@ def download_binary_dataset(
             to_memory=to_memory,
             return_data=return_data,
             overwrite=overwrite,
+            soft=soft,
             verbose=verbose,
             chunk_size=chunk_size,
             print_size=print_size,
@@ -2071,6 +2102,7 @@ def download_binary_dataset(
         to_memory=to_memory,
         return_data=return_data,
         overwrite=overwrite,
+        soft=soft,
         verbose=verbose,
         chunk_size=chunk_size,
         print_size=print_size,
