@@ -3092,8 +3092,8 @@ class StaticSystem:
         draw_mmr : bool, float, optional. Default = True
             If True, draws the 2-body-mmrs and 3-body-mmrs curves in the area.
             If label is not False, it will write the mmrs labels as well.
-            If draw_mmr is a float, this argument is set as the displacement factor:
-            xmax = xlim_max = max(2b-MMR) * (1 + factor).
+            If `draw_mmr` is a float, this argument is set as the displacement
+            factor: xmax = xlim_max = max(2b-MMR) * (1 + factor).
             Default factor: 0.05
         **kwargs : dict
             Additional keyword arguments for the :py:func:`plt.errorbar`
