@@ -653,6 +653,9 @@ def resolve_paths(
             pass  # Do not add to fpaths
         elif file_dir is None and base_dir is None and zip_name is not None:
             pass
+        elif file_dir and (file_dir.name.endswith(".zip")):
+            full_zfile_path = file_dir / file_name
+            zfpaths.add(full_zfile_path)
         else:
             if file_dir:
                 full_file_path = file_dir / file_name

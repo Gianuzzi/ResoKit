@@ -1706,8 +1706,8 @@ _binary_manager = BinaryDatasetManager()
 def load_dataset(
     source: str,
     from_memory: bool = True,
-    from_zip: Union[str, bool] = True,
-    from_file: Union[str, bool] = True,
+    from_zip: Union[str, Path, bool] = True,
+    from_file: Union[str, Path, bool] = True,
     dir_path: Union[str, Path, bool, None] = True,
     to_resokit: bool = True,
     to_df: bool = False,

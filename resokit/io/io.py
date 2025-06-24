@@ -17,6 +17,7 @@
 # IMPORTS
 # =============================================================================
 
+from pathlib import Path
 from typing import List, Tuple, Union
 
 import pandas as pd
@@ -160,6 +161,7 @@ def _load_system_from_db(
     name: str,
     source: str,
     is_planet: bool = False,
+    file_path: Union[str, Path, bool] = True,
     store: bool = False,
     store_index: bool = True,
     verbose: bool = True,
@@ -178,6 +180,10 @@ def _load_system_from_db(
         Source of the dataset. Either 'eu' or 'nasa'.
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
+    file_path : str, Path, bool, optional. Default: True
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
     store : bool, optional. Default: False.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
@@ -229,6 +235,17 @@ def _load_system_from_db(
         if verbose:
             print(" Searching for alternative names.")
 
+    # Hard work: Define from_zip and from_file
+    from_file = file_path
+    from_zip = True
+    if isinstance(file_path, (str, Path)):
+        file_path = Path(file_path)
+        if file_path.name.endswith("zip"):
+            from_zip = file_path
+            from_file = True
+        elif file_path.resolve().parent.name.endswith("zip"):
+            from_zip = False
+
     # Define the keyword arguments
     load_kwargs = {
         "store": store,
@@ -238,6 +255,8 @@ def _load_system_from_db(
         "only_rows": None,
         "only_index": False,
         "to_df": True,
+        "from_file": from_file,
+        "from_zip": from_zip,
     }
 
     # Load the dataset
@@ -355,11 +374,12 @@ def _load_system_from_db(
 def load_system_from_eu(
     name: str,
     is_planet: bool = False,
+    file_path: Union[str, Path, bool] = True,
     drop: bool = True,
-    store: bool = False,
+    store: bool = True,
     store_index: bool = True,
     verbose: bool = True,
-    low_memory: bool = True,
+    low_memory: bool = False,
     as_resokit: bool = False,
     alternative_names: bool = False,
     exact_match: bool = True,
@@ -375,16 +395,20 @@ def load_system_from_eu(
         (Remember case sensitivity)
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
+    file_path : str, Path, bool, optional. Default: True
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
     drop : bool, optional. Default: True.
         Whether to drop extra columns.
-    store : bool, optional. Default: False.
+    store : bool, optional. Default: True.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
         Whether to store the whole dataset index in memory.
         Automatically set to True if store is True.
     verbose : bool, optional. Default: True.
         Whether to print information.
-    low_memory : bool, optional. Default: True.
+    low_memory : bool, optional. Default: False.
         Whether to avoid loading the whole dataset into memory.
     as_resokit : bool, optional. Default: False.
         Whether to return the dataset in ResoKit format.
@@ -418,6 +442,7 @@ def load_system_from_eu(
         name=name,
         source="eu",
         is_planet=is_planet,
+        file_path=file_path,
         store=store,
         store_index=store_index,
         verbose=verbose,
@@ -476,11 +501,12 @@ def load_system_from_eu(
 def load_system_from_nasa(
     name: str,
     is_planet: bool = False,
+    file_path: Union[str, Path, bool] = True,
     drop: bool = True,
-    store: bool = False,
+    store: bool = True,
     store_index: bool = True,
     verbose: bool = True,
-    low_memory: bool = True,
+    low_memory: bool = False,
     controversial_set: Union[bool, None] = False,
     default_set: Union[bool, None] = True,
     as_resokit: bool = False,
@@ -497,16 +523,20 @@ def load_system_from_nasa(
         (Remember case sensitivity)
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
+    file_path : str, Path, bool, optional. Default: True
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
     drop : bool, optional. Default: True.
         Whether to drop extra columns.
-    store : bool, optional. Default: False.
+    store : bool, optional. Default: True.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
         Whether to store the whole dataset index in memory.
         Automatically set to True if store is True.
     verbose : bool, optional. Default: True.
         Whether to print information.
-    low_memory : bool, optional. Default: True.
+    low_memory : bool, optional. Default: False.
         Whether to avoid loading the whole dataset into memory.
     controversial_set : bool, None, optional. Default: False.
         Whether to include controversial data.
@@ -543,6 +573,7 @@ def load_system_from_nasa(
         name=name,
         source="nasa",
         is_planet=is_planet,
+        file_path=file_path,
         store=store,
         store_index=store_index,
         verbose=verbose,
