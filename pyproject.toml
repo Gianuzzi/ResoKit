@@ -34,12 +34,13 @@ dependencies = [
   "pandas",
   "scipy",
   "requests",
+  "beautifulsoup4",
 ]
 
 [project.optional-dependencies]
-query = ["astropy", "beautifulsoup4"]
+query = ["astropy"]
 reb = ["rebound"]
-all = ["astropy", "beautifulsoup4", "rebound"]
+all = ["astropy", "rebound"]
 
 [tool.setuptools]
 include-package-data = true
