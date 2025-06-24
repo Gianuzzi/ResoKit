@@ -304,7 +304,6 @@ class TestStaticSystem:
         # Assert is the same as the first planet
         assert pl1 == syst.planets[0]
 
-
     def test_static_system_get_item(self):
         """Test StaticSystem class get_item method."""
         syst = self.load_function["eu"](
@@ -364,7 +363,7 @@ class TestStaticSystem:
 
     def test_static_system_period_ratios(self):
         """Test StaticSystem class period_ratios method."""
-        syst = self.load_function['eu'](
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -382,7 +381,7 @@ class TestStaticSystem:
 
     def test_static_system_pair_ratio(self):
         """Test StaticSystem class period_ratios method."""
-        syst = self.load_function['eu'](
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -402,7 +401,7 @@ class TestStaticSystem:
     @pytest.mark.parametrize("force", [True, False])
     def test_estimate_mass(self, model, force):
         """Test StaticSystem class estimate_mass method."""
-        syst = self.load_function['eu'](
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
         multivariate = (
@@ -447,7 +446,7 @@ class TestStaticSystem:
     @pytest.mark.parametrize("force", [True, False])
     def test_estimate_radius(self, model, force):
         """Test StaticSystem class estimate_radius method."""
-        syst = self.load_function['eu'](
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
         bivariate = 0.99 if model == "o20" else None
