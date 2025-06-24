@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from types import MappingProxyType
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, Set, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from pandas import DataFrame, read_csv
@@ -49,11 +49,27 @@ except ImportError:
 # CONSTANTS
 # =============================================================================
 
+# Path to the datasets directory
+DATASETS_DIR = Path(os.path.expanduser(os.path.join("~", ".resokit_data")))
+
+# -------------------------- EU and NASA DATASETS -----------------------------
+
 # Name for the ZIP archive
-ZIP_FILENAME = "datasets.zip"
+DATASET_ZIPNAMES = {"eu": "exoplanet_eu.zip", "nasa": "nasa_exoplanets.zip"}
+
+# Filenames and URLs for the datasets
+DATASET_FILENAMES = {"eu": "exoplanet_eu.csv", "nasa": "nasa.csv"}
+DATASET_URLS = {
+    "eu": "https://exoplanet.eu/catalog/csv/",
+    "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?"
+    + "query=select+*+from+ps&format=csv",
+}
+
+# Index columns for each dataset
+INDEX_COLUMNS = {"eu": ["name", "star_name"], "nasa": ["pl_name", "hostname"]}
 
 # EU dtypes
-_EU_MAPPING = {
+EU_MAPPING = {
     "name": "object",
     "planet_status": "object",
     "mass": "float64",
@@ -155,7 +171,7 @@ _EU_MAPPING = {
 }
 
 # Nasa dtypes
-_NASA_MAPPING = {
+NASA_MAPPING = {
     "pl_name": "object",
     "pl_letter": "object",
     "hostname": "object",
@@ -513,7 +529,7 @@ _NASA_MAPPING = {
 }
 
 # Mapping of dataset names to their respective dtypes
-DATASET_DTYPES = MappingProxyType({"eu": _EU_MAPPING, "nasa": _NASA_MAPPING})
+DATASET_DTYPES = MappingProxyType({"eu": EU_MAPPING, "nasa": NASA_MAPPING})
 
 # URL to query the dataset length
 QUERY_LENGTH_URL = {
@@ -521,9 +537,199 @@ QUERY_LENGTH_URL = {
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/index.html",
 }
 
+# --------------------------- BINARY SYSTEMS DATASETS --------------------------
+
+# No ZIP here, only txt
+
+# Filenames and URLs for the binaries datasets
+BINARIES_FILENAMES = {"p": "plan_circ.txt", "s": "plan_bin500aun.txt"}
+BINARIES_URLS = {
+    "p": "https://lesia.obspm.fr/perso/philippe-thebault/plan_circ.txt",
+    "s": "https://lesia.obspm.fr/perso/philippe-thebault/plan_bin500aun.txt",
+}
+
+# Columns of the binaries datasets
+BINARIES_COLUMNS = [
+    "star0_name",
+    "alternate_name",
+    "star0_mass",
+    "star1_mass",
+    "dist",
+    "disc_method",
+    "a",
+    "e",
+    "nplanets",
+    "planet_a",
+    "planet_e",
+    "planet_mass",
+    "planet_HW_crit",
+    "imut",
+]
+
+
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
+
+
+def resolve_paths(
+    to_file: Union[bool, str, Path],
+    to_zip: Union[bool, str, Path],
+    dir_path: Union[bool, str, Path, None],
+    default_file: str,
+    default_zip: str,
+    default_dir: Path,
+) -> Tuple[Set[Path], Set[Path], Set[Path]]:
+    """
+    Normalize to_file, to_zip, and dir_path into full output file and zip paths.
+
+    Parameters
+    ----------
+        to_file: File name or path (True = use default file name in dir_path).
+        to_zip: Zip name or path (True = use default zip name in dir_path).
+        dir_path: Base directory (True = use default_dir).
+        default_file: Default file name if to_file is True.
+        default_zip: Default zip name if to_zip is True.
+        default_dir: Default directory if dir_path is True.
+
+    Returns
+    -------
+        Tuple containing:
+            - Set of base directories (Path): physical directories containing
+               files/zips
+            - Set of resolved file paths (Path)
+            - Set of resolved zip output paths (Path to file inside zip)
+    """
+    if to_file is True and to_zip is True and dir_path is True:
+        return (
+            set([default_dir]),
+            set(),
+            set([default_dir / default_zip / default_file]),
+        )
+
+    # Short-circuit: if to_file is explicitly False, return all empty
+    if to_file is False:
+        return set(), set(), set()
+
+    def parse_path_input(value, default_name) -> Tuple[Path, Path]:
+        if value is True:
+            return None, Path(default_name)
+        elif isinstance(value, (str, Path)):
+            value = Path(value)
+            if value.is_absolute() or value.parent != Path("."):
+                return value.parent.resolve(), value.name
+            else:
+                return None, value.name
+        elif value in [False, None]:
+            return None, None
+        else:
+            raise ValueError(f"Invalid path input: {value}")
+
+    # Parse inputs
+    file_dir, file_name = parse_path_input(to_file, default_file)
+    zip_dir, zip_name = parse_path_input(to_zip, default_zip)
+
+    # Resolve base directory
+    if dir_path is True:
+        base_dir = default_dir.resolve()
+    elif isinstance(dir_path, (str, Path)):
+        base_dir = Path(dir_path).resolve()
+    else:
+        base_dir = None
+
+    # If zip_dir is not provided and dir_path is, assume zip is in base_dir
+    if zip_dir is None and zip_name is not None and base_dir is not None:
+        zip_dir = base_dir
+
+    fpaths = set()
+    zfpaths = set()
+    base_paths = set()
+
+    # Resolve file path
+    if file_name:
+        # If user gave no file_dir and zip_dir == base_dir,
+        # skip adding file outside zip
+        if file_dir is None and zip_dir == base_dir and base_dir is not None:
+            pass  # Do not add to fpaths
+        elif file_dir is None and base_dir is None and zip_name is not None:
+            pass
+        elif file_dir and (file_dir.name.endswith(".zip")):
+            full_zfile_path = file_dir / file_name
+            zfpaths.add(full_zfile_path)
+        else:
+            if file_dir:
+                full_file_path = file_dir / file_name
+            elif base_dir and not (zip_dir == base_dir):
+                full_file_path = base_dir / file_name
+            else:
+                full_file_path = Path(file_name)
+            fpaths.add(full_file_path)
+            base_paths.add(full_file_path.parent)
+
+    # Resolve zip file path (and zip-internal file path)
+    if zip_name:
+        if zip_dir:
+            zip_file_path = zip_dir / zip_name
+        elif base_dir:
+            zip_file_path = base_dir / zip_name
+        else:
+            zip_file_path = Path(zip_name)
+        if file_name:
+            full_zip_entry = zip_file_path / file_name
+        else:
+            full_zip_entry = zip_file_path
+        zfpaths.add(full_zip_entry)
+        base_paths.add(
+            zip_file_path.parent
+        )  # <-- Only the containing folder, not the zip itself
+
+    return base_paths, fpaths, zfpaths
+
+
+def check_file_age(
+    file_path: Union[str, Path],
+    zip_path: Union[str, Path, None],
+    verbose: bool = True,
+) -> int:
+    """Check the dataset file's age in days.
+
+    Parameters
+    ----------
+    file_path : str or Path, optional. Default: False.
+        Path to the file.
+    zip_path : str or Path or None, optional. Default: False.
+        Path to the ZIP archive.
+    verbose : bool, optional. Default: True.
+        If `True`, prints messages about the process.
+
+    Returns
+    -------
+    age : int
+        Age of the file in days.
+    """
+    file_path = Path(file_path)  # Convert to Path object
+    # Get the file's last modified date
+    if zip_path:
+        file_name = Path(file_path).name
+        with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
+            # Check if the file is in the ZIP archive
+            if file_name not in zipf.namelist():
+                raise FileNotFoundError(
+                    f"File {file_name} not found in {zip_path}."
+                )
+            # Get the file's last modified date
+            date_info = zipf.getinfo(file_name).date_time
+            creation = datetime(*date_info)
+    else:
+        creation = datetime.fromtimestamp(file_path.stat().st_mtime)
+
+    # Calculate age in days
+    age = (datetime.now() - creation).days
+
+    if verbose:
+        print(f" Last modified: {creation} ({age} days ago).")
+
+    return age
 
 
 def load_from_zip(
@@ -572,15 +778,13 @@ def load_from_zip(
     if not zip_path.exists():
         raise FileNotFoundError(f"ZIP archive {zip_path} not found.")
 
-    # Define the zip nameload_from_zip(
-    zip_name = zip_path.name  # Name of the ZIP archive
-
     # Load the dataset from the ZIP archive
     with ZipFile(zip_path, "r") as zipf:  # Open the ZIP archive
         if verbose:  # Print message if verbose
-            print(f"  Reading {file_name} " + f"directly from {zip_name}...")
+            print(f"  Reading {file_name} " + f"directly from {zip_path}...")
         # Load directly from the .zip
-        dtypes = DATASET_DTYPES.get(source, None)
+        dtypes = None if source is None else DATASET_DTYPES.get(source, None)
+        skip_rows = 0 if skip_rows is None else skip_rows
         with zipf.open(file_name) as file:
             if custom_load is not None:
                 return custom_load(file)
@@ -750,8 +954,22 @@ def is_notebook() -> bool:
         return False  # Probably standard Python interpreter
 
 
-def __parse_date(date_str: str, soft: bool = True) -> datetime:
-    """Try different date formats to robustly parse the last update date."""
+def __parse_date(date_str: str, soft: bool = True) -> Union[datetime, bool]:
+    """Try different date formats to robustly parse the last update date.
+
+    Parameters
+    ----------
+    date_str : str
+        The date string to parse.
+        soft : bool, optional. Default: True.
+        If True, return False if parsing fails instead of raising an error.
+
+    Returns
+    -------
+    Union[datetime, bool]
+        Parsed date as a datetime object if successful,
+        or False if parsing fails and soft is True.
+    """
     # Full & abbreviated months
     date_formats = ["%B %d, %Y", "%b %d, %Y", "%b. %d, %Y", "%m/%d/%Y"]
 
@@ -769,7 +987,7 @@ def __parse_date(date_str: str, soft: bool = True) -> datetime:
 
 def check_online_dataset(
     source: str, verbose: bool = True
-) -> Tuple[int, datetime]:
+) -> Tuple[int, Union[int, None]]:
     """Query the length (count) of the dataset from the specified source.
 
     Parameters
@@ -785,6 +1003,7 @@ def check_online_dataset(
         Amount of entries (rows) in the dataset.
     last_update : datetime
         Date of the last update of the dataset.
+    If no match is found, -1 is returned for length and None for last_update.
     """
     # Ensure requests and BeautifulSoup modules are imported
     global requests_imported, bs4_imported
@@ -801,45 +1020,47 @@ def check_online_dataset(
 
     # Call subfunction
     if source == "eu":
-        npl_str, date_str = _check_online_eu(verbose=verbose)
+        length_str, date_str = _check_online_eu(verbose=verbose)
     elif source == "nasa":
-        npl_str, date_str = _check_online_nasa(verbose=verbose)
+        length_str, date_str = _check_online_nasa(verbose=verbose)
     else:
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
     # Parse the planets
     try:
         # Remove comma if present
-        npl = int(npl_str.replace(",", ""))
+        length = int(str(length_str).replace(",", "").replace(".", ""))
     except ValueError:
         if verbose:
             print(
                 " Could not parse the amount of planets in "
                 + f"online {source} database."
             )
-        npl = -1
+        length = -1
 
     # Parse the Date
-    date = __parse_date(date_str, soft=True)
+    date = __parse_date(str(date_str), soft=True)
     if date is False:
         if verbose:
             print(" Could not parse the last update date.")
         date = None
-        days_ago = None
+        last_update = None
     else:
-        days_ago = (datetime.now() - date).days
+        last_update = (datetime.now() - date).days
 
     # Message
     if verbose:
-        if npl > 0:
-            print(f" Number of planets in online dataset: {npl}")
+        if length > 0:
+            print(f" Number of planets in online dataset: {length}")
         if date:
-            print(f" Last online update: {date} ({days_ago} days ago)")
+            print(f" Last online update: {date} ({last_update} days ago)")
 
-    return npl, days_ago
+    return length, last_update
 
 
-def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
+def _check_online_eu(
+    verbose: bool = True,
+) -> Tuple[str, Union[str, None]]:
     """Query the length of the exoplanet.eu dataset.
 
     Parameters
@@ -849,10 +1070,10 @@ def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
 
     Returns
     -------
-    length : int
+    length : str
         Amount of entries (rows) in the dataset.
         If no match is found, -1 is returned.
-    last_update : datetime
+    last_update : str
         Date of the last update of the dataset.
         If no match is found, None is returned.
     """
@@ -872,7 +1093,7 @@ def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
         if text is None:
             if verbose:
                 print(" No 'Last update' text found on the webpage.")
-            return -1, None
+            return "-1", None
 
         # Extract the date and number of planets using regex
         aux = (
@@ -884,21 +1105,23 @@ def _check_online_eu(verbose: bool = True) -> Tuple[str, str]:
         if not match:
             if verbose:
                 print(" No match found in the extracted text.")
-            return -1, None
+            return "-1", None
 
         # Parse extracted values
-        date_str, planet_count_str = match.groups()
+        last_update, length = match.groups()
 
-        return planet_count_str, date_str
+        return str(length), last_update
 
     except requests.exceptions.RequestException as e:
         if verbose:
             print(f"Error fetching the webpage: {e}")
 
-    return -1, None
+    return "-1", None
 
 
-def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
+def _check_online_nasa(
+    verbose: bool = True,
+) -> Tuple[Union[str, int], Union[str, None]]:
     """Query the length of the NASA dataset.
 
     Parameters
@@ -908,10 +1131,10 @@ def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
 
     Returns
     -------
-    length : int
+    length : str
         Amount of entries (rows) in the dataset.
         If no match is found, -1 is returned.
-    last_update : datetime
+    last_update : str
         Date of the last update of the dataset.
         If no match is found, None is returned.
     """
@@ -924,25 +1147,86 @@ def _check_online_nasa(verbose: bool = True) -> Tuple[str, str]:
         # Extract the number of confirmed planets
         planet_count_div = soup.find("div", class_="stat")
         if planet_count_div:
-            planet_count_str = planet_count_div.text.strip()
+            length = (
+                planet_count_div.text.strip().replace(",", "").replace(".", "")
+            )
         else:
             if verbose:
                 print(" No match found in the extracted text.")
-            planet_count_str = -1
+            length = -1
 
         # Extract the last update date
         date_div = soup.find("div", class_="date")
         if date_div:
-            date_str = date_div.text.strip()
+            last_update = date_div.text.strip()
         else:
             if verbose:
                 print(" No match found in the extracted text.")
-            date_str = None
+            last_update = None
 
-        return planet_count_str, date_str
+        return str(length), last_update
 
     except requests.exceptions.RequestException as e:
         if verbose:
             print(f"Error fetching the webpage: {e}")
 
-    return -1, None
+    return "-1", None
+
+
+def check_online_binary(source: str, verbose: bool = True) -> int:
+    """Query the length (count) of the file from the specified source.
+
+    This function is kind of dumb, because it downloads the file (although
+    if does not parse it, just count the lines).
+
+    Parameters
+    ----------
+    source : str
+        Data source identifier ('p' or 's').
+    verbose : bool, optional. Default: True.
+        Print query information.
+
+    Returns
+    -------
+    length : int
+        Amount of entries (rows) in the file.
+        If no match is found, -1 is returned.
+    """
+    # Ensure requests module is imported
+    global requests_imported
+    requests_imported = assert_module_imported(requests_imported, "requests")
+
+    source = source.lower()  # Ensure lowercase
+    if source not in BINARIES_URLS:
+        raise ValueError(f"Invalid source: {source}. Must be 'p' or 's'.")
+
+    # Message
+    if verbose:
+        print(f"Checking online dataset from {source}-type binaries...")
+
+    # Call subfunction
+    url = BINARIES_URLS[source]
+    length = 0
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        for _ in response.iter_lines():
+            length += 1
+    except requests.RequestException as e:
+        if verbose:
+            print(f"Error: {e}")
+            print(
+                " Could not parse the amount of lines in "
+                + f"online {source}-type binaries file."
+            )
+        length = -1
+
+    # Message
+    if verbose:
+        if length > 0:
+            print(
+                " Number of lines (including header) "
+                + f"in online dataset: {length}"
+            )
+
+    return length

@@ -17,7 +17,7 @@
 # IMPORTS
 # =============================================================================
 
-from itertools import product
+from pathlib import Path
 from typing import List, Tuple, Union
 
 import pandas as pd
@@ -30,7 +30,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.datasets.databases import load_binary, load_full
+from resokit.datasets.databases import load_binary_dataset, load_dataset
 from resokit.utils.parser import DEFAULT_METADATA, find_best_match
 from resokit.utils.utils import calc_period
 
@@ -112,7 +112,7 @@ def _search_system_index(
         raw_series = raw_df[column]  # Get the column
     elif not alternative_names:
         # Update the keyword arguments
-        parsed = load_full(
+        parsed = load_dataset(
             source=source,
             **{**load_kwargs, "only_index": "parsed", "verbose": False},
         )  # Load the parsed dataset (if it is in memory)
@@ -120,13 +120,13 @@ def _search_system_index(
             parse = None  # None mean parse only the name
             raw_series = parsed  # Because raw_series is already parsed
         else:  # Load the whole dataset
-            raw_series = load_full(
+            raw_series = load_dataset(
                 source=source,
                 **load_kwargs,
             )  # Will be stored and parsed next time
         raw_series = raw_series[column]  # Get the column
     else:  # Search in the alternate names
-        not_parsed = load_full(
+        not_parsed = load_dataset(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )  # Load the whole dataset (worst scenario)
@@ -140,7 +140,7 @@ def _search_system_index(
     # We have to get back the original values
     # If parse is None, then we have to compute the non parsed
     if not_parsed is None:
-        not_parsed = load_full(
+        not_parsed = load_dataset(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )
@@ -161,6 +161,7 @@ def _load_system_from_db(
     name: str,
     source: str,
     is_planet: bool = False,
+    file_path: Union[str, Path, bool] = True,
     store: bool = False,
     store_index: bool = True,
     verbose: bool = True,
@@ -179,6 +180,10 @@ def _load_system_from_db(
         Source of the dataset. Either 'eu' or 'nasa'.
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
+    file_path : str, Path, bool, optional. Default: True
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
     store : bool, optional. Default: False.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
@@ -230,6 +235,17 @@ def _load_system_from_db(
         if verbose:
             print(" Searching for alternative names.")
 
+    # Hard work: Define from_zip and from_file
+    from_file = file_path
+    from_zip = True
+    if isinstance(file_path, (str, Path)):
+        file_path = Path(file_path)
+        if file_path.name.endswith("zip"):
+            from_zip = file_path
+            from_file = True
+        elif file_path.resolve().parent.name.endswith("zip"):
+            from_zip = False
+
     # Define the keyword arguments
     load_kwargs = {
         "store": store,
@@ -239,11 +255,13 @@ def _load_system_from_db(
         "only_rows": None,
         "only_index": False,
         "to_df": True,
+        "from_file": from_file,
+        "from_zip": from_zip,
     }
 
     # Load the dataset
     if not low_memory:  # Load the whole dataset
-        raw_df = load_full(source=source, **load_kwargs)
+        raw_df = load_dataset(source=source, **load_kwargs)
     else:  # Will load only the index if possible
         raw_df = None
 
@@ -316,7 +334,7 @@ def _load_system_from_db(
 
     # Load the system
     if raw_df is None:  # Load only the system data
-        data = load_full(source=source, **{**load_kwargs, "only_rows": idx})
+        data = load_dataset(source=source, **{**load_kwargs, "only_rows": idx})
     else:
         data = raw_df.loc[idx]  # Load the system data from the raw dataset
 
@@ -356,11 +374,12 @@ def _load_system_from_db(
 def load_system_from_eu(
     name: str,
     is_planet: bool = False,
+    file_path: Union[str, Path, bool] = True,
     drop: bool = True,
-    store: bool = False,
+    store: bool = True,
     store_index: bool = True,
     verbose: bool = True,
-    low_memory: bool = True,
+    low_memory: bool = False,
     as_resokit: bool = False,
     alternative_names: bool = False,
     exact_match: bool = True,
@@ -376,16 +395,20 @@ def load_system_from_eu(
         (Remember case sensitivity)
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
+    file_path : str, Path, bool, optional. Default: True
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
     drop : bool, optional. Default: True.
         Whether to drop extra columns.
-    store : bool, optional. Default: False.
+    store : bool, optional. Default: True.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
         Whether to store the whole dataset index in memory.
         Automatically set to True if store is True.
     verbose : bool, optional. Default: True.
         Whether to print information.
-    low_memory : bool, optional. Default: True.
+    low_memory : bool, optional. Default: False.
         Whether to avoid loading the whole dataset into memory.
     as_resokit : bool, optional. Default: False.
         Whether to return the dataset in ResoKit format.
@@ -419,6 +442,7 @@ def load_system_from_eu(
         name=name,
         source="eu",
         is_planet=is_planet,
+        file_path=file_path,
         store=store,
         store_index=store_index,
         verbose=verbose,
@@ -477,11 +501,12 @@ def load_system_from_eu(
 def load_system_from_nasa(
     name: str,
     is_planet: bool = False,
+    file_path: Union[str, Path, bool] = True,
     drop: bool = True,
-    store: bool = False,
+    store: bool = True,
     store_index: bool = True,
     verbose: bool = True,
-    low_memory: bool = True,
+    low_memory: bool = False,
     controversial_set: Union[bool, None] = False,
     default_set: Union[bool, None] = True,
     as_resokit: bool = False,
@@ -498,16 +523,20 @@ def load_system_from_nasa(
         (Remember case sensitivity)
     is_planet : bool, optional. Default: False.
         Whether to search for a planet or a star.
+    file_path : str, Path, bool, optional. Default: True
+        Path to the file to load the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not loaded.
     drop : bool, optional. Default: True.
         Whether to drop extra columns.
-    store : bool, optional. Default: False.
+    store : bool, optional. Default: True.
         Whether to store the whole dataset in memory.
     store_index : bool, optional. Default: True.
         Whether to store the whole dataset index in memory.
         Automatically set to True if store is True.
     verbose : bool, optional. Default: True.
         Whether to print information.
-    low_memory : bool, optional. Default: True.
+    low_memory : bool, optional. Default: False.
         Whether to avoid loading the whole dataset into memory.
     controversial_set : bool, None, optional. Default: False.
         Whether to include controversial data.
@@ -544,6 +573,7 @@ def load_system_from_nasa(
         name=name,
         source="nasa",
         is_planet=is_planet,
+        file_path=file_path,
         store=store,
         store_index=store_index,
         verbose=verbose,
@@ -674,15 +704,19 @@ def load_from_binary(
     if not is_binary:
         if soft:
             return None
-        raise ValueError(f"Star {name} not found in binary datasets.")
+        raise ValueError(f"Star '{name}' not found in binary datasets.")
 
     # Extract the data
-    row = load_binary(
-        circumbinary=circumbinary,
+    row = load_binary_dataset(
+        which=circumbinary,
         from_memory=True,
         rename_columns=True,
         verbose=False,
-    ).loc[idx]
+    )
+    assert isinstance(row, pd.DataFrame), (
+        "Expected row to be a DataFrame, " + f"got {type(row)} instead."
+    )
+    row = row.loc[idx]  # Get the row with the index
 
     # Add the period
     if add_period:
@@ -720,7 +754,10 @@ def load_from_binary(
 
 
 def check_if_binary(
-    star_name: str, exact_match: bool = True, verbose: bool = True
+    star_name: str,
+    exact_match: bool = True,
+    verbose: bool = True,
+    soft: bool = True,
 ) -> Tuple[bool, bool, str, List[str], float]:
     """Check if a star is part of a binary system.
 
@@ -749,41 +786,70 @@ def check_if_binary(
             Ratio of the match.
     """
     maybe = False
-    for circumbinary, col in product([True, False], [0, 1]):
-        # 0: star0_name, 1: alternate_name
-        series = load_binary(
-            circumbinary=circumbinary,
-            from_memory=True,
-            rename_columns=False,
-            clean=False,
-            verbose=False,
-        )[col]
-        idx, values, ratio = find_best_match(
-            series, name=star_name, parse=True
-        )
-        if ratio > 0.99:  # Found a binary system
+    df = pd.DataFrame()
+    for circumbinary in [True, False]:
+        which = "p" if circumbinary else "s"
+        try:
+            df = load_binary_dataset(
+                which=which,
+                from_memory=True,
+                rename_columns=False,
+                clean=False,
+                verbose=False,
+            )
+        except FileNotFoundError as error:
             maybe = True
-            which = "circumbinary" if circumbinary else "circumstellar"
-            if exact_match and ratio < 1:
-                if verbose:
-                    print(f" Found a very close binary match in: {values}")
-                    print(" Execute with exact_match=False to load it.")
-                break
             if verbose:
-                print(f" Binary system found in {values}, in {which} orbit.")
-            # Check if multiple values
-            if len(values) > 1:
-                # In this case, it is probable we looked in
-                # the alternate names and found that one of the alternate names
-                # is the exact match. Nevertheless, we will check they all have
-                # the same idx in index.
-                if len(set(idx)) != 1:
-                    raise ValueError(
-                        "Multiple values found, but different indexes."
+                print(
+                    f" Unable to check for {which}-tpye binary orbits."
+                    + " Txt file not found.\n"
+                    + " Try downloading with "
+                    + "resokit.datasets.download_binary"
+                    + f"_dataset('{which}', to_file=True)"
+                )
+            if circumbinary:  # Try both...
+                continue
+            if soft:
+                return False, False, "", [], 0.0
+            else:
+                raise error
+        # 0: star0_name, 1: alternate_name
+        for col in [0, 1]:
+            series = df[col]
+            assert isinstance(series, pd.Series), (
+                "Expected series to be a pd.Series, "
+                + f"got {type(series)} instead."
+            )
+            idx, values, ratio = find_best_match(
+                series, name=star_name, parse=True
+            )
+            if ratio > 0.99:  # Found a binary system
+                maybe = True
+                if exact_match and ratio < 1:
+                    if verbose:
+                        print(f" Found a very close binary match in: {values}")
+                        print(" Execute with exact_match=False to load it.")
+                    break
+                if verbose:
+                    print(
+                        f" Binary system found in {values}, "
+                        + f"in {which}-type binary orbit."
                     )
-                return True, circumbinary, idx[0], values, ratio
+                # Check if multiple values
+                if len(values) > 1:
+                    # In this case, it is probable we looked in
+                    # the alternate names and found that one of
+                    # the alternate names is the exact match.
+                    # Nevertheless, we will check they all have
+                    # the same idx in index.
+                    if len(set(idx)) != 1:
+                        raise ValueError(
+                            "Multiple values found, but different indexes."
+                        )
+                    return True, circumbinary, idx[0], values, ratio
 
-            return True, circumbinary, idx, values, ratio
+                return True, circumbinary, idx, values, ratio
+
     if verbose:
         aux = "could be" if maybe else "is not"
         print(f"Star {star_name} {aux} part of a binary system.")

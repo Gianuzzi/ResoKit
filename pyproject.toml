@@ -1,3 +1,59 @@
+[build-system]
+requires = ["setuptools>=42", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resokit"
+dynamic = ["version"]
+authors = [
+  {name = "Emmanuel Gianuzzi", email = "egianuzzi@unc.edu.ar"},
+  {name = "Matías Cerioni"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+description = "Miscellaneous tools for the analysis of planetary systems."
+keywords = ["resokit", "planetary systems", "resonances", "databases"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+]
+urls = {Homepage = "https://github.com/Gianuzzi/resokit"}
+dependencies = [
+  "attrs",
+  "numpy",
+  "matplotlib",
+  "pandas",
+  "scipy",
+  "requests",
+  "beautifulsoup4",
+]
+
+[project.optional-dependencies]
+query = ["astropy"]
+reb = ["rebound"]
+all = ["astropy", "rebound"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["resokit", "resokit.*"]
+namespaces = false
+
+[tool.setuptools_scm]
+write_to = "resokit/_version.py"
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+
 [tool.black]
 line-length = 79
-target-version = ['py310', 'py311', 'py312']
+target-version = ['py310', 'py311', 'py312', 'py313']

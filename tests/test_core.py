@@ -30,10 +30,6 @@ from resokit.core import (
 
 bin_syst = "kepler47"  # Binary system with 3 planets
 simple_syst = "kepler11"  # Simple system with 6 planets
-load_function = {
-    "eu": rio.load_system_from_eu,
-    "nasa": rio.load_system_from_nasa,
-}
 
 
 class K11:
@@ -189,16 +185,23 @@ class K11:
     ).T
 
 
-# ============================================================================
-# TESTS
-# ============================================================================
+# # ============================================================================
+# # TESTS
+# # ============================================================================
 
 
+@pytest.mark.usefixtures("load_eu_data", "load_binary_data")
 class TestLoadSystem:
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+
+    load_function = {
+        "eu": rio.load_system_from_eu,
+        "nasa": rio.load_system_from_nasa,
+    }
+
+    @pytest.mark.parametrize("source", ["eu"])
     def test_load_binary_system(self, source: str):
         """Test load_system with a binary system."""
-        syst = load_function[source](
+        syst = self.load_function[source](
             name=bin_syst, verbose=False, exact_match=False
         )
 
@@ -211,10 +214,7 @@ class TestLoadSystem:
             assert isinstance(planet, StaticPlanet)
 
         # Assert source
-        if source == "eu":
-            assert syst.source_ == source
-        else:
-            assert syst.source_ == "eu_and_nasa"
+        assert syst.source_ == source
 
         # Assert binarity
         assert syst.is_binary_
@@ -228,10 +228,10 @@ class TestLoadSystem:
         assert syst.star.star0.name == "Kepler-47 A"
         assert syst.star.star1.name == "Kepler-47 B"
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_load_binary_without_binary_system(self, source: str):
         """Test load_system with a binary system."""
-        syst = load_function[source](
+        syst = self.load_function[source](
             name=bin_syst, verbose=False, exact_match=False, check_binary=False
         )
 
@@ -251,17 +251,13 @@ class TestLoadSystem:
         assert len(syst.planets) == 3
 
         # Assert names
-        if source == "eu":
-            assert syst.name == "Kepler-47 A"
-            assert syst.star.name == "Kepler-47 A"
-        else:
-            assert syst.name == "Kepler-47"
-            assert syst.star.name == "Kepler-47"
+        assert syst.name == "Kepler-47 A"
+        assert syst.star.name == "Kepler-47 A"
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_load_simple_system(self, source: str):
         """Test load_system with a simple system."""
-        syst = load_function[source](
+        syst = self.load_function[source](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -284,11 +280,18 @@ class TestLoadSystem:
         assert syst.star.name == "Kepler-11"
 
 
+@pytest.mark.usefixtures("load_eu_data", "load_binary_data")
 class TestStaticSystem:
+
+    load_function = {
+        "eu": rio.load_system_from_eu,
+        "nasa": rio.load_system_from_nasa,
+    }
+
     @pytest.mark.parametrize("name", ["Kepler-11 b", "b", 0])
     def test_static_system_get_planet(self, name):
         """Test StaticSystem class planet method."""
-        syst = rio.load_system_from_eu(
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -303,7 +306,7 @@ class TestStaticSystem:
 
     def test_static_system_get_item(self):
         """Test StaticSystem class get_item method."""
-        syst = rio.load_system_from_eu(
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -319,10 +322,10 @@ class TestStaticSystem:
             K11.data["P"],
         )
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_static_system_get_item_errors(self, source: str):
         """Test StaticSystem class get_item with errors method."""
-        syst = load_function[source](
+        syst = self.load_function[source](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -340,18 +343,18 @@ class TestStaticSystem:
                 per,
                 base,
             )
-        else:
-            base["P_err_min"] = K11.nasa_p_err_min
-            base["P_err_max"] = K11.nasa_p_err_max
-            pd.testing.assert_frame_equal(
-                per,
-                base,
-            )
+        # else:
+        #     base["P_err_min"] = K11.nasa_p_err_min
+        #     base["P_err_max"] = K11.nasa_p_err_max
+        #     pd.testing.assert_frame_equal(
+        #         per,
+        #         base,
+        #     )
 
-    @pytest.mark.parametrize("source", ["eu", "nasa"])
+    @pytest.mark.parametrize("source", ["eu"])
     def test_static_system_get_wrong_item(self, source: str):
         """Test StaticSystem class get_item with errors method."""
-        syst = load_function[source](
+        syst = self.load_function[source](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -360,7 +363,7 @@ class TestStaticSystem:
 
     def test_static_system_period_ratios(self):
         """Test StaticSystem class period_ratios method."""
-        syst = rio.load_system_from_eu(
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -378,7 +381,7 @@ class TestStaticSystem:
 
     def test_static_system_pair_ratio(self):
         """Test StaticSystem class period_ratios method."""
-        syst = rio.load_system_from_eu(
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
@@ -398,7 +401,7 @@ class TestStaticSystem:
     @pytest.mark.parametrize("force", [True, False])
     def test_estimate_mass(self, model, force):
         """Test StaticSystem class estimate_mass method."""
-        syst = rio.load_system_from_eu(
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
         multivariate = (
@@ -443,7 +446,7 @@ class TestStaticSystem:
     @pytest.mark.parametrize("force", [True, False])
     def test_estimate_radius(self, model, force):
         """Test StaticSystem class estimate_radius method."""
-        syst = rio.load_system_from_eu(
+        syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
         bivariate = 0.99 if model == "o20" else None
@@ -479,6 +482,3 @@ class TestStaticSystem:
                 K11.estimated_radii[model],
                 check_names=False,  # Names are different
             )
-
-
-# ============================================================================

@@ -44,6 +44,7 @@ from resokit.units import (
     Rj2Re,
 )
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
+from resokit.utils.mmr import plot_mmrs
 from resokit.utils.parser import (
     DEFAULT_METADATA,
     MAPPINGS,
@@ -3057,6 +3058,7 @@ class StaticSystem:
         error: bool = False,
         ax: plt.Axes = None,
         label: Union[str, list, bool] = True,
+        draw_mmr: Union[bool, float] = True,
         **kwargs,
     ) -> plt.Axes:
         r"""Plot consecutive triplets of planets in the period ratio space.
@@ -3087,6 +3089,12 @@ class StaticSystem:
             Label for the data plotted.
             If True, will (try to) concatenate each three planets suffixes to
             create triplets labels.
+        draw_mmr : bool, float, optional. Default = True
+            If True, draws the 2-body-mmrs and 3-body-mmrs curves in the area.
+            If label is not False, it will write the mmrs labels as well.
+            If `draw_mmr` is a float, this argument is set as the displacement
+            factor: xmax = xlim_max = max(2b-MMR) * (1 + factor).
+            Default factor: 0.05
         **kwargs : dict
             Additional keyword arguments for the :py:func:`plt.errorbar`
             function.
@@ -3149,6 +3157,8 @@ class StaticSystem:
         fmt = kwargs.pop("fmt", "o")
 
         # Plot each triplet
+        xmin = ymin = 1e6
+        xmax = ymax = -1e6
         for trip, (i, j, k) in enumerate(triplets):
             if label is True and not use_suffix:
                 label_aux = "".join([str(i), str(j), str(k)])
@@ -3170,6 +3180,24 @@ class StaticSystem:
                 label=label_aux,
                 fmt=fmt,
                 **kwargs,
+            )
+            xmin = min(xmin, x)
+            xmax = max(xmax, x)
+            ymin = min(ymin, y)
+            ymax = max(ymax, y)
+        # Draw MMR
+        if draw_mmr:
+            factor = abs(draw_mmr) if isinstance(draw_mmr, float) else 0.05
+            xmin = xmin * (1 - factor)
+            xmax = xmax * (1 + factor)
+            ymin = ymin * (1 - factor)
+            ymax = ymax * (1 + factor)
+            ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
+            plot_mmrs(
+                ax=ax,
+                label_2mmrs=label is not False,
+                label_mmrs=label is not False,
             )
 
         return ax
