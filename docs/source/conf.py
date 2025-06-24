@@ -61,6 +61,14 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
+html_context = {
+    "display_github": True,
+    "github_user": "Gianuzzi",
+    "github_repo": "ResoKit",
+    "github_version": "ema",  # Version
+    "conf_py_path": "/docs/source/",  # Path in the checkout to the docs root
+}
+
 
 # -- Options for nbsphinx output -------------------------------------------------
 nbsphinx_prompt_width = "0pt"
