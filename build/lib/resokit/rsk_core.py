@@ -6,7 +6,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import attrs
-from .tools import rmm
+from tools import rmm
 
 
 # =============================================================================
@@ -314,7 +314,7 @@ class DynamicSystem:
         pl3 = self.planets[i3]
 
         _3pmmr_ang = pl1.lam*k1 + pl2.lam*k2 + pl3.lam*k3 \
-                   - np.dot(vp_coefs,[pl1.varpi,pl2.varpi,pl3.varpi])
+                   + np.dot(vp_coefs,[pl1.varpi,pl2.varpi,pl3.varpi])
         return(_3pmmr_ang)
     
     def _plot_or_scatter_resangs(self,ax,method,which_resang,**any_kw):

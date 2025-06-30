@@ -1,11 +1,15 @@
 LICENSE
 README.md
+README.rst
+setup.py
 resokit/__init__.py
-resokit/core.py
-resokit/io.py
+resokit/rsk_core.py
+resokit/rsk_io.py
+resokit/use_case.py
 resokit.egg-info/PKG-INFO
 resokit.egg-info/SOURCES.txt
 resokit.egg-info/dependency_links.txt
+resokit.egg-info/requires.txt
 resokit.egg-info/top_level.txt
 resokit/datasets/__init__.py
 resokit/tools/__init__.py

@@ -162,7 +162,6 @@ def load_integration(
     if "ibody" in names:
         _npl_from_table = np.max(data["ibody"].values)
         if npl != _npl_from_table:
-            print(data)
             raise Exception("number of planets mismatch")
 
     # add ibody column if not there
