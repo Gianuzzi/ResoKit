@@ -546,6 +546,8 @@ def load_system_from_nasa(
         None to include all data.
     as_resokit : bool, optional. Default: False.
         Whether to return the dataset in ResoKit format.
+        If the output is not a single system, a ResoKitDataframe
+        will be returned.
     exact_match : bool, optional. Default: True.
         Whether to search for an exact match. If `True`
         `verbose=True`, suggestions will be printed in case
@@ -632,6 +634,10 @@ def load_system_from_nasa(
     )
 
     if as_resokit or not single_syst:  # Return ResoKit DataFrame
+        # Add system set in the case of multiple solutions
+        if not single_syst and not is_planet:
+            values = pd.factorize(reso['reference'])[0]
+            reso.set_column("solution_set", values, silent=True)
         return reso
 
     # Return StaticSystem

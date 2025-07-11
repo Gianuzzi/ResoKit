@@ -270,6 +270,16 @@ class ResokitDataFrame:
 
         return html
 
+    def set_column(self, name: str, value: Any, silent: bool = False) -> None:
+        if not silent:
+            if name in self.columns_:
+                print("Warning: Adding new column to ResoKitDataFrame.")
+            else:
+                print("WARNING: Editing existing column of ResoKitDataFrame.")
+        
+        self.data[name] = value
+        return
+
     def plot(
         self,
         x: str,

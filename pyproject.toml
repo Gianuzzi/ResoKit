@@ -7,7 +7,7 @@ name = "resokit"
 dynamic = ["version"]
 authors = [
   {name = "Emmanuel Gianuzzi", email = "egianuzzi@unc.edu.ar"},
-  {name = "Matías Cerioni"}
+  {name = "Matías Cerioni", email = "matias.cerioni@unc.edu.ar"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
