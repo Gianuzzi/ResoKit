@@ -270,15 +270,43 @@ class ResokitDataFrame:
 
         return html
 
-    def set_column(self, name: str, value: Any, silent: bool = False) -> None:
+    def set_column(
+        self,
+        name: str,
+        value: Any,
+        inplace: bool = False,
+        silent: bool = False,
+    ) -> "ResokitDataFrame":
+        """Set the value of a column in the associated DataFrame.
+
+        Parameters
+        ----------
+        name : str
+            Name of the column to set.
+            It is created if non existing.
+        value : Any
+            The value to be set at the colum. May be any object supported
+            by the setting method df[name] = value of a df DataFrame.
+        inplace : bool, optional. Default: False
+            If False, a copy of the ResokitDataFrame with the column
+            set is returned.
+        silent : bool, optional. Default: False
+            Whether to not print a warning message when setting a column.
+
+        Returns
+        -------
+        ResokitDataFrame
+            A copy of the ResokitDataFrame with the column set.
+        """
         if not silent:
             if name in self.columns_:
                 print("Warning: Adding new column to ResoKitDataFrame.")
             else:
                 print("WARNING: Editing existing column of ResoKitDataFrame.")
-        
-        self.data[name] = value
-        return
+
+        df = self if inplace else self.copy()
+        df.data[name] = value
+        return df
 
     def plot(
         self,

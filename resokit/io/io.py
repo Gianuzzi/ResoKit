@@ -636,8 +636,8 @@ def load_system_from_nasa(
     if as_resokit or not single_syst:  # Return ResoKit DataFrame
         # Add system set in the case of multiple solutions
         if not single_syst and not is_planet:
-            values = pd.factorize(reso['reference'])[0]
-            reso.set_column("solution_set", values, silent=True)
+            values = pd.factorize(reso["reference"])[0]
+            reso.set_column("solution_set", values, silent=True, inplace=True)
         return reso
 
     # Return StaticSystem
