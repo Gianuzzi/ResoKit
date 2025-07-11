@@ -26,7 +26,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from resokit.units import M_EAR, Mj2Me, Ms2Me, R_EAR
+from resokit.units import convert
 
 # =============================================================================
 # FUNCTIONS
@@ -155,8 +155,10 @@ def chen_kipp_2017_radius(mass: float) -> Tuple[float, tuple, tuple, tuple]:
     x0 = (1.0, 0.0)
     # Transition mass
     m1_tr = 2.04
-    m2_tr = 0.414 * Mj2Me  # 0.414 Jupiter masses
-    m3_tr = 0.08 * Ms2Me  # 0.08 Solar masses
+    m2_tr = convert(
+        0.414, from_units="mj", to_units="me"
+    )  # 0.414 Jupiter masses
+    m3_tr = convert(0.08, from_units="ms", to_units="me")  # 0.08 Solar masses
 
     if mass < m1_tr:  # First branch
         return power_law(mass, c1[0], s1[0], x0[0]), c1, s1, x0
@@ -361,8 +363,10 @@ def otegi_2020_radius(
     elif mass > 40:  # Large subdense planet
         return power_law(mass, c2[0], s2[0], x0[0]), c2, s2, x0
 
-    # If density is not set
-    scaled_dens = dens_cut / (M_EAR / R_EAR**3)  # dens [M_ear R_ear^-3]
+    # In density not set... Get dens_cut in [M_ear R_ear^-3]
+    scaled_dens = convert(
+        dens_cut, from_units=("kg", "m"), to_units=("me", "re"), power=(1, -3)
+    )
 
     # Try both branches
     radius1 = power_law(mass, c1[0], s1[0], x0[0])
@@ -478,8 +482,10 @@ def otegi_2020_mass(
     elif radius > 3.1:  # Large subdense planet
         return power_law(radius, c2[0], s2[0], x0[0]), c2, s2, x0
 
-    # If density is not set
-    scaled_dens = dens_cut / (M_EAR / R_EAR**3)  # dens [M_ear R_ear^-3]
+    # In density not set... Get dens_cut in [M_ear R_ear^-3]
+    scaled_dens = convert(
+        dens_cut, from_units=("kg", "m"), to_units=("me", "re"), power=(1, -3)
+    )
 
     # Try both branches
     mass1 = power_law(radius, c1[0], s1[0], x0[0])

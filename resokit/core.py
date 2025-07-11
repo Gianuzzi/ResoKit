@@ -30,19 +30,7 @@ from numpy.random import default_rng
 
 import pandas as pd
 
-from resokit.units import (
-    AU,
-    DEG2RAD,
-    M_JUP,
-    M_SUN,
-    Me2Mj,
-    Mj2Me,
-    Mj2Ms,
-    R_JUP,
-    R_SUN,
-    Re2Rj,
-    Rj2Re,
-)
+from resokit.units import CGS, convert
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.mmr import plot_mmrs
 from resokit.utils.parser import (
@@ -959,15 +947,19 @@ class StaticPlanet(StaticBody):
             If `err_method=-1` (default), the errors are not returned.
         """
         # Get planet radius and convert to Earth radii
-        radius = float(self["radius"] * Rj2Re)
+        radius = convert(self["radius"], from_units="rj", to_units="re")
 
         radius_err_min = 0.0
         radius_err_max = 0.0
         # Get the errors and convert to Earth radii, if needed (and available)
         ret_err = True
         if kwargs.get("err_method", -1) in [1, 2]:
-            radius_err_min = float(self["radius_err_min"] * Rj2Re)
-            radius_err_max = float(self["radius_err_max"] * Rj2Re)
+            radius_err_min = convert(
+                self["radius_err_min"], from_units="rj", to_units="re"
+            )
+            radius_err_max = convert(
+                self["radius_err_max"], from_units="rj", to_units="re"
+            )
         elif kwargs.get("err_method", -1) == -1:
             ret_err = False
             kwargs["err_method"] = 0  # Set to 0 for the function
@@ -986,9 +978,13 @@ class StaticPlanet(StaticBody):
         )
 
         # Convert mass and errors to Jupiter masses
-        mass = mass * Me2Mj
-        mass_err_min = mass_err_min * Me2Mj
-        mass_err_max = mass_err_max * Me2Mj
+        mass, mass_err_min, mass_err_max = convert(
+            mass,
+            mass_err_min,
+            mass_err_max,
+            from_units="me",
+            to_units="mj",
+        )
 
         # Return a new planet?
         if new_planet:
@@ -1038,15 +1034,19 @@ class StaticPlanet(StaticBody):
             Maximum error in Jupiter radii. If `err_method=0`, the error is 0.0.
         """
         # Get planet mass and convert to Earth masses
-        mass = self["mass"] * Mj2Me
+        mass = convert(self["mass"], from_units="mj", to_units="me")
 
         # Get the errors and convert to Earth masses, if needed (and available)
         ret_err = True
         mass_err_min = 0.0
         mass_err_max = 0.0
         if kwargs.get("err_method", 0) in [1, 2]:
-            mass_err_min = self["mass_err_min"] * Mj2Me
-            mass_err_max = self["mass_err_max"] * Mj2Me
+            mass_err_min = convert(
+                self["mass_err_min"], from_units="mj", to_units="me"
+            )
+            mass_err_max = convert(
+                self["mass_err_max"], from_units="mj", to_units="me"
+            )
         elif kwargs.get("err_method", -1) == -1:
             ret_err = False
             kwargs["err_method"] = 0  # Set to 0 for the function
@@ -1065,9 +1065,13 @@ class StaticPlanet(StaticBody):
         )
 
         # Convert radius and errors to Jupiter radii
-        radius = radius * Re2Rj
-        radius_err_min = radius_err_min * Re2Rj
-        radius_err_max = radius_err_max * Re2Rj
+        radius, radius_err_min, radius_err_max = convert(
+            radius,
+            radius_err_min,
+            radius_err_max,
+            from_units="re",
+            to_units="rj",
+        )
 
         # Return a new planet?
         if new_planet:
@@ -2359,7 +2363,8 @@ class StaticSystem:
                     used_mass_table = used_mass_table.iloc[: i - 1]
                     # Create a tuple with the masses and their errors. Also,
                     # convert to solar masses for total mass sumamtion
-                    tup = (used_mass_table * Mj2Ms).itertuples(
+                    factor = convert(from_units="mj", to_units="ms")
+                    tup = (used_mass_table * factor).itertuples(
                         index=False, name=None
                     )
                     # Re Calculate the inner mass and error
@@ -3961,7 +3966,7 @@ class StaticSystem:
         # Define units
         if isinstance(units, bool):
             if units:  # AU, Msun
-                units = (M_SUN, AU)
+                units = (CGS["ms"], CGS["au"])
                 if verbose:
                     print(" Using AU, Msun units.")
             else:  # m, Kg
@@ -3981,36 +3986,36 @@ class StaticSystem:
                     stacklevel=2,
                 )
             sim.add(
-                m=self.star.star0.mass * M_SUN / units[0],
-                r=self.star.star0.radius * R_SUN / units[1],
+                m=self.star.star0.mass * CGS["ms"] / units[0],
+                r=self.star.star0.radius * CGS["rs"] / units[1],
                 hash=self.star.star0.name,
             )
             # Define the "center" for the planets
             center = sim.particles[self.star.star0.name]
             if self.is_circumbinary:  # Circumbinary
                 sim.add(
-                    m=self.star.star1.mass * M_SUN / units[0],
+                    m=self.star.star1.mass * CGS["ms"] / units[0],
                     r=(
-                        self.star.star1.radius * R_SUN / units[1]
+                        self.star.star1.radius * CGS["rs"] / units[1]
                         if hasattr(self.star.star1, "radius")
                         else 0.0
                     ),
-                    a=self.star.a * AU / units[1],
+                    a=self.star.a * CGS["au"] / units[1],
                     e=self.star.e,
                     hash=self.star.star1.name,
                 )
                 # Redefine the "center" for the planets
                 # Here we create a new particle at the center of mass
                 sim.add(
-                    m=self.star.total_mass_ * M_SUN / units[0],
+                    m=self.star.total_mass_ * CGS["ms"] / units[0],
                     r=0.0,
                     hash="center",
                 )
                 center = sim.particles["center"]
         else:  # Single star
             sim.add(
-                m=self.star.mass * M_SUN / units[0],
-                r=self.star.radius * R_SUN / units[1],
+                m=self.star.mass * CGS["ms"] / units[0],
+                r=self.star.radius * CGS["rs"] / units[1],
                 hash=self.star.name,
             )
             # Define the "center" for the planets
@@ -4058,12 +4063,12 @@ class StaticSystem:
                 )
             )
             sim.add(
-                m=pmass * M_JUP / units[0],
-                r=pradius * R_JUP / units[1],
-                a=pa * AU / units[1],
+                m=pmass * CGS["mj"] / units[0],
+                r=pradius * CGS["rj"] / units[1],
+                a=pa * CGS["au"] / units[1],
                 e=planet.e if planet.e > 0 else 0.0,
-                inc=planet.inc * DEG2RAD if planet.inc > 0 else 0.0,
-                omega=planet.w * DEG2RAD if planet.w > 0 else 0.0,
+                inc=convert(planet.inc, from_units="deg", to_units="rad"),
+                omega=convert(planet.w, from_units="deg", to_units="rad"),
                 M=rng.uniform(0, 2 * pi),  # Random mean anomaly
                 hash=planet.name,
                 primary=center,  # Our center
@@ -4074,13 +4079,13 @@ class StaticSystem:
         # Check if final binary
         if self.is_binary_ and not self.is_circumbinary:
             sim.add(
-                m=self.star.star1.mass * M_SUN / units[0],
+                m=self.star.star1.mass * CGS["ms"] / units[0],
                 r=(
-                    self.star.star1.radius * R_SUN / units[1]
+                    self.star.star1.radius * CGS["rs"] / units[1]
                     if hasattr(self.star.star1, "radius")
                     else 0.0
                 ),
-                a=self.star.a * AU / units[1],
+                a=self.star.a * CGS["au"] / units[1],
                 e=self.star.e,
                 hash=self.star.star1.name,
                 primary=center,  # Our center

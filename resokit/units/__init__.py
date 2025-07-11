@@ -13,26 +13,12 @@
 # DOCS
 # =============================================================================
 
-"""The ResoKit.units module includes tools for unit manipulation (m|Kg|seg)."""
+"""The ResoKit.units module includes tools for unit manipulation."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-from .units import *  # noqa
+from .units import CGS, UNITS, convert  # noqa
 
-import sys  # noqa
-
-__all__ = []
-
-# Add everything from .units dynamically, if available
-if hasattr(sys.modules[__name__ + ".units"], "__all__"):
-    __all__.extend(sys.modules[__name__ + ".units"].__all__)
-else:
-    __all__.extend(
-        [
-            name
-            for name in dir(sys.modules[__name__ + ".units"])
-            if not name.startswith("_")
-        ]
-    )
+__all__ = ["CGS", "UNITS", "convert"]

@@ -17,85 +17,144 @@
 # IMPORTS
 # =============================================================================
 
+from types import MappingProxyType
+from typing import List, Tuple, Union
+
 from numpy import pi
 
 # =============================================================================
-# CONSTANTS
+# CONSTANTS AND NORMALIZED UNIT DICTIONARIES
 # =============================================================================
 
 # Gravitational constant in SI units
 G = 6.67430e-11  # m^3 kg^-1 s^-2
 
-# Astronomical unit in meters
-AU = 1.496e11  # m
-# Parsec in meters
-PC = 3.086e16  # m
-# Solar radius in m
-R_SUN = 6.957e8  # m
-# Jupiter radius in m
-R_JUP = 6.9911e7  # m
-# Earth radius in m
-R_EAR = 6.371e6  # m
+# UNITS dictionary
+_units = {
+    "mass": {
+        "g": 1e-3,  # grams → kg
+        "kg": 1.0,
+        "ton": 1e3,  # metric ton → kg
+        "me": 5.972e24,  # Earth mass → kg
+        "mj": 1.898e27,  # Jupiter mass → kg
+        "ms": 1.989e30,  # Solar mass → kg
+    },
+    "distance": {
+        "cm": 1e-2,  # cm → m
+        "m": 1.0,
+        "km": 1e3,  # km → m
+        "re": 6.371e6,  # Earth radius → m
+        "rj": 6.9911e7,  # Jupiter radius → m
+        "rs": 6.957e8,  # Solar radius → m
+        "au": 1.496e11,  # Astronomical unit → m
+        "pc": 3.086e16,  # Parsec → m
+    },
+    "time": {
+        "sec": 1.0,
+        "s": 1.0,  # alias
+        "min": 60.0,
+        "hour": 3600.0,
+        "day": 86400.0,
+        "year": 3.154e7,
+    },
+    "angle": {
+        "rad": 1.0,
+        "deg": pi / 180.0,
+    },
+}
+# Add density units
+_units["density"] = {
+    "rhos": _units["mass"]["ms"]
+    / (4.0 / 3.0 * pi * _units["distance"]["rs"] ** 3),
+    "rhoj": _units["mass"]["mj"]
+    / (4.0 / 3.0 * pi * _units["distance"]["rj"] ** 3),
+    "rhoe": _units["mass"]["me"]
+    / (4.0 / 3.0 * pi * _units["distance"]["re"] ** 3),
+}
 
-# Solar mass in kg
-M_SUN = 1.989e30  # kg
-# Jupiter mass in kg
-M_JUP = 1.898e27  # kg
-# Earth mass in kg
-M_EAR = 5.972e24  # kg
+# Create immutable dict
+UNITS = MappingProxyType(_units)
 
-# Density of Sun in kg/m^3
-RHO_SUN = M_SUN / (4.0 / 3.0 * pi * R_SUN**3)  # kg/m^3
-# Density of Jupiter in kg/m^3
-RHO_JUP = M_JUP / (4.0 / 3.0 * pi * R_JUP**3)  # kg/m^3
-# Density of Earth in kg/m^3
-RHO_EARTH = M_EAR / (4.0 / 3.0 * pi * R_EAR**3)  # kg/m^3
+# Custom with CGS
+_cgs = {u: v for uv in UNITS.values() for u, v in uv.items()}
+_cgs["G"] = G
 
-# Hour in seconds
-HOUR = 3600.0  # s
-# Day in seconds
-DAY = 86400.0  # s
-# Year in seconds
-YEAR = 3.154e7  # s
+# Create dict to set CGS
+CGS = MappingProxyType(_cgs)
 
-# Gravitational constant in AU^3 M_sun^-1 days^-2
-G_ASD = G * AU**3 / M_SUN / DAY**2
 
-# UNIT CONVERSIONS (Overkill, but useful)
-# Mass conversions
-Me2Mj = M_EAR / M_JUP  # Earth to Jupiter mass
-Mj2Me = M_JUP / M_EAR  # Jupiter to Earth mass
-Me2Ms = M_EAR / M_SUN  # Earth to Solar mass
-Ms2Me = M_SUN / M_EAR  # Solar to Earth mass
-Mj2Ms = M_JUP / M_SUN  # Jupiter to Solar mass
-Ms2Mj = M_SUN / M_JUP  # Solar to Jupiter mass
-# Radius conversions
-Re2Rj = R_EAR / R_JUP  # Earth to Jupiter radius
-Rj2Re = R_JUP / R_EAR  # Jupiter to Earth radius
-Re2Rs = R_EAR / R_SUN  # Earth to Solar radius
-Rs2Re = R_SUN / R_EAR  # Solar to Earth radius
-Rj2Rs = R_JUP / R_SUN  # Jupiter to Solar radius
-Rs2Rj = R_SUN / R_JUP  # Solar to Jupiter radius
-# Distance conversions
-AU2PC = AU / PC  # AU to parsec
-PC2AU = PC / AU  # Parsec to AU
-# Density conversions
-RhoJ2RhoE = RHO_JUP / RHO_EARTH  # Jupiter to Earth density
-RhoE2RhoJ = RHO_EARTH / RHO_JUP  # Earth to Jupiter density
-RhoJ2RhoS = RHO_JUP / RHO_SUN  # Jupiter to Solar density
-RhoS2RhoJ = RHO_SUN / RHO_JUP  # Solar to Jupiter density
-RhoE2RhoS = RHO_EARTH / RHO_SUN  # Earth to Solar density
-RhoS2RhoE = RHO_SUN / RHO_EARTH  # Solar to Earth density
-# Angle conversions
-DEG2RAD = pi / 180.0  # Degrees to radians
-RAD2DEG = 180.0 / pi  # Radians to degrees
-# Time conversions
-YEAR2DAY = 365.25  # Years to days
-DAY2YEAR = 1.0 / YEAR2DAY  # Days to years
-HOUR2DAY = 24.0  # Hours to days
-DAY2HOUR = 1.0 / HOUR2DAY  # Days to hours
-HOUR2YEAR = HOUR / YEAR  # Hours to years
-YEAR2HOUR = YEAR / HOUR  # Years to hours
-SEC2HOUR = 1.0 / HOUR  # Seconds to hours
-SEC2DAY = 1.0 / DAY  # Seconds to days
-SEC2YEAR = 1.0 / YEAR  # Seconds to years
+def _convert_units(from_unit, to_unit, power=1):
+    from_unit = from_unit.lower()
+    to_unit = to_unit.lower()
+
+    for unit_dict in UNITS.values():
+        if from_unit in unit_dict and to_unit in unit_dict:
+            origin = unit_dict[from_unit]
+            dest = unit_dict[to_unit]
+            return (origin / dest) ** power
+
+    raise ValueError(
+        f"Cannot convert '{from_unit}' to '{to_unit}': incompatible or unknown."
+    )
+
+
+def __normalize_units(u):
+    if isinstance(u, str):
+        return [u]
+    return u
+
+
+def __normalize_powers(p, n):
+    if isinstance(p, int):
+        return [p] * n
+    if len(p) != n:
+        raise ValueError(
+            f"Power length {len(p)} does not match units length {n}."
+        )
+    return p
+
+
+def convert(
+    *values,
+    from_units: Union[None, str, Tuple[str, ...], List[str]] = None,
+    to_units: Union[None, str, Tuple[str, ...], List[str]] = None,
+    power: Union[int, Tuple[int, ...], List[int]] = 1,
+) -> Union[float, List[float]]:
+    """
+    Convert between compound units (e.g. km^2/s → m^2/s).
+
+    Parameters
+    ----------
+    from_units : str or list of str
+        Units to convert from.
+    to_units : str or list of str
+        Units to convert to.
+    power : int or list of int
+        Power(s) for each unit (default = 1). Must match length if list.
+
+    Returns
+    -------
+    Union[float, List]
+        Converted value, or list of converted values.
+    """
+    if from_units is None:
+        raise ValueError("Argument 'from_units' must be set.")
+    if to_units is None:
+        raise ValueError("Argument 'to_units' must be set.")
+
+    from_units = __normalize_units(from_units)
+    to_units = __normalize_units(to_units)
+    powers = __normalize_powers(power, len(from_units))
+
+    if len(from_units) != len(to_units):
+        raise ValueError("Mismatch between number of from_units and to_units.")
+
+    factor = 1.0
+    for fu, tu, pw in zip(from_units, to_units, powers):
+        factor *= _convert_units(fu, tu, power=pw)
+
+    if not values:
+        return factor
+    if len(values) == 1:
+        return factor * values[0]
+    return [value * factor for value in values]
