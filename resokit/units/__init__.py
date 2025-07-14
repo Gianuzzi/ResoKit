@@ -19,6 +19,6 @@
 # IMPORTS
 # =============================================================================
 
-from .units import CGS, UNITS, convert  # noqa
+from .units import MKS, UNITS, convert  # noqa
 
-__all__ = ["CGS", "UNITS", "convert"]
+__all__ = ["MKS", "UNITS", "convert"]

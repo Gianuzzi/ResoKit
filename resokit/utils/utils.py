@@ -22,7 +22,7 @@ from typing import Callable, Tuple, Union
 
 from numpy import pi, sqrt
 
-from resokit.units import CGS
+from resokit.units import MKS
 
 # =============================================================================
 # CONSTANTS
@@ -216,12 +216,12 @@ def calc_period(a: float, m_star: float, m_planet) -> float:
         Orbital period of the planet, in days.
     """
     ene = sqrt(
-        CGS["G"]
-        * (m_star * CGS["ms"] + m_planet * CGS["mj"])
-        / (a * CGS["au"]) ** 3
+        MKS["G"]
+        * (m_star * MKS["ms"] + m_planet * MKS["mj"])
+        / (a * MKS["au"]) ** 3
     )
 
-    return 2 * pi / ene / CGS["day"]
+    return 2 * pi / ene / MKS["day"]
 
 
 def calc_period_with_errors(
@@ -291,13 +291,13 @@ def calc_period_with_errors(
         period_err_max = abs(period - period_max)
         return period, period_err_min, period_err_max
     elif err_method == 2:
-        a_err = max(a_err_min, a_err_max) * CGS["au"]
-        m_star_err = max(m_star_err_min, m_star_err_max) * CGS["ms"]
-        m_planet_err = max(m_planet_err_min, m_planet_err_max) * CGS["mj"]
+        a_err = max(a_err_min, a_err_max) * MKS["au"]
+        m_star_err = max(m_star_err_min, m_star_err_max) * MKS["ms"]
+        m_planet_err = max(m_planet_err_min, m_planet_err_max) * MKS["mj"]
     elif err_method == 3 or err_method == 4:
-        a_err = (a_err_min + a_err_max) * 0.5 * CGS["au"]
-        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * CGS["ms"]
-        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * CGS["mj"]
+        a_err = (a_err_min + a_err_max) * 0.5 * MKS["au"]
+        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * MKS["ms"]
+        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * MKS["mj"]
         if err_method == 4:
             a = (a - a_err_min + a + a_err_max) * 0.5
             m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
@@ -313,11 +313,11 @@ def calc_period_with_errors(
     # Partial derivatives for error propagation
     dperiod_dm_star = (
         -period
-        * CGS["day"]
-        / (2 * ((m_star * CGS["ms"]) + (m_planet * CGS["mj"])))
+        * MKS["day"]
+        / (2 * ((m_star * MKS["ms"]) + (m_planet * MKS["mj"])))
     )
     dperiod_dm_planet = dperiod_dm_star  # Same derivative as the star
-    dperiod_da = -6 * pi**2 / ((period * CGS["day"]) * (a * CGS["au"]))
+    dperiod_da = -6 * pi**2 / ((period * MKS["day"]) * (a * MKS["au"]))
 
     # Errors
     period_err = (
@@ -326,7 +326,7 @@ def calc_period_with_errors(
             + (dperiod_dm_star * m_star_err) ** 2
             + (dperiod_dm_planet * m_planet_err) ** 2
         )
-        / CGS["day"]
+        / MKS["day"]
     )  # In days
 
     return period, period_err, period_err  # Same error for min and max
@@ -352,11 +352,11 @@ def calc_a(period: float, m_star: float, m_planet: float) -> float:
     float
         Semi-major axis of the planet, in AU.
     """
-    ene = 2 * pi / period / CGS["day"]
+    ene = 2 * pi / period / MKS["day"]
 
     return (
-        CGS["G"] * (m_star * CGS["ms"] + m_planet * CGS["mj"]) / ene**2
-    ) ** (1 / 3) / CGS["au"]
+        MKS["G"] * (m_star * MKS["ms"] + m_planet * MKS["mj"]) / ene**2
+    ) ** (1 / 3) / MKS["au"]
 
 
 def calc_a_with_errors(
@@ -430,13 +430,13 @@ def calc_a_with_errors(
         a_err_max = abs(a - a_max)
         return a, a_err_min, a_err_max
     elif err_method == 2:
-        period_err = max(period_err_min, period_err_max) * CGS["day"]
-        m_star_err = max(m_star_err_min, m_star_err_max) * CGS["ms"]
-        m_planet_err = max(m_planet_err_min, m_planet_err_max) * CGS["mj"]
+        period_err = max(period_err_min, period_err_max) * MKS["day"]
+        m_star_err = max(m_star_err_min, m_star_err_max) * MKS["ms"]
+        m_planet_err = max(m_planet_err_min, m_planet_err_max) * MKS["mj"]
     elif err_method == 3 or err_method == 4:
-        period_err = (period_err_min + period_err_max) * 0.5 * CGS["day"]
-        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * CGS["ms"]
-        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * CGS["mj"]
+        period_err = (period_err_min + period_err_max) * 0.5 * MKS["day"]
+        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * MKS["ms"]
+        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * MKS["mj"]
         if err_method == 3:
             period = (period - period_err_min + period + period_err_max) * 0.5
             m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
@@ -451,12 +451,12 @@ def calc_a_with_errors(
 
     # Partial derivatives for error propagation
     da_dm_star = (
-        CGS["G"]
-        * (period * CGS["day"]) ** 2
-        / (12 * pi**2 * (a * CGS["au"]) ** 2)
+        MKS["G"]
+        * (period * MKS["day"]) ** 2
+        / (12 * pi**2 * (a * MKS["au"]) ** 2)
     )
     da_dm_planet = da_dm_star  # Same derivative as the star
-    da_dperiod = 2 / 3 * (a * CGS["au"]) / (period * CGS["day"])
+    da_dperiod = 2 / 3 * (a * MKS["au"]) / (period * MKS["day"])
 
     # Errors
     a_err = (
@@ -465,7 +465,7 @@ def calc_a_with_errors(
             + (da_dm_star * m_star_err) ** 2
             + (da_dm_planet * m_planet_err) ** 2
         )
-        / CGS["au"]
+        / MKS["au"]
     )  # In AU
 
     return a, a_err, a_err  # Same error for min and max
@@ -501,8 +501,8 @@ def calc_hill_radius(
         * (1 - e)
         * (
             m_planet
-            * CGS["mj"]
-            / (3 * (m_star * CGS["ms"] + m_planet * CGS["mj"]))
+            * MKS["mj"]
+            / (3 * (m_star * MKS["ms"] + m_planet * MKS["mj"]))
         )
         ** (1 / 3.0)
     )
@@ -591,15 +591,15 @@ def calc_hill_radius_with_errors(
         hill_err_max = abs(hill - hill_max)
         return hill, hill_err_min, hill_err_max
     elif err_method == 2:
-        a_err = max(a_err_min, a_err_max) * CGS["au"]
+        a_err = max(a_err_min, a_err_max) * MKS["au"]
         e_err = max(e_err_min, e_err_max)
-        m_star_err = max(m_star_err_min, m_star_err_max) * CGS["ms"]
-        m_planet_err = max(m_planet_err_min, m_planet_err_max) * CGS["mj"]
+        m_star_err = max(m_star_err_min, m_star_err_max) * MKS["ms"]
+        m_planet_err = max(m_planet_err_min, m_planet_err_max) * MKS["mj"]
     elif err_method == 3 or err_method == 4:
-        a_err = (a_err_min + a_err_max) * 0.5 * CGS["au"]
+        a_err = (a_err_min + a_err_max) * 0.5 * MKS["au"]
         e_err = (e_err_min + e_err_max) * 0.5
-        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * CGS["ms"]
-        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * CGS["mj"]
+        m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * MKS["ms"]
+        m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * MKS["mj"]
         if err_method == 4:
             a = (a - a_err_min + a + a_err_max) * 0.5
             e = (e - e_err_min + e + e_err_max) * 0.5
@@ -614,14 +614,14 @@ def calc_hill_radius_with_errors(
     hill = calc_hill_radius(a, e, m_star, m_planet)
 
     # Auxiliary total mass
-    total_mass = m_star * CGS["ms"] + m_planet * CGS["mj"]
+    total_mass = m_star * MKS["ms"] + m_planet * MKS["mj"]
 
     # Partial derivatives for error propagation
-    dhill_da = hill / (a * CGS["au"])
+    dhill_da = hill / (a * MKS["au"])
     dhill_de = -hill / (1 - e)
     dhill_dm_star = -hill / (3 * total_mass)
     dhill_dm_planet = (
-        -dhill_dm_star * (m_star * CGS["ms"]) / (m_planet * CGS["mj"])
+        -dhill_dm_star * (m_star * MKS["ms"]) / (m_planet * MKS["mj"])
     )
 
     # Errors

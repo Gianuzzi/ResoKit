@@ -32,30 +32,32 @@ G = 6.67430e-11  # m^3 kg^-1 s^-2
 # UNITS dictionary
 _units = {
     "mass": {
-        "g": 1e-3,  # grams → kg
+        "g": 1e-3,  # alias
+        "gr": 1e-3,  # grams → kg
         "kg": 1.0,
         "ton": 1e3,  # metric ton → kg
-        "me": 5.972e24,  # Earth mass → kg
-        "mj": 1.898e27,  # Jupiter mass → kg
+        "me": 5.9722e24,  # Earth mass → kg
+        "mj": 1.89813e27,  # Jupiter mass → kg
         "ms": 1.989e30,  # Solar mass → kg
     },
     "distance": {
         "cm": 1e-2,  # cm → m
         "m": 1.0,
         "km": 1e3,  # km → m
-        "re": 6.371e6,  # Earth radius → m
+        "re": 6.371e6,  # Earth eq radius → m
         "rj": 6.9911e7,  # Jupiter radius → m
         "rs": 6.957e8,  # Solar radius → m
-        "au": 1.496e11,  # Astronomical unit → m
-        "pc": 3.086e16,  # Parsec → m
+        "au": 1.495978e11,  # Astronomical unit → m
+        "pc": 3.0857e16,  # Parsec → m
     },
     "time": {
         "sec": 1.0,
         "s": 1.0,  # alias
-        "min": 60.0,
-        "hour": 3600.0,
-        "day": 86400.0,
-        "year": 3.154e7,
+        "min": 60.0,  # min → s
+        "hour": 3600.0,  # hour → s
+        "day": 86400.0,  # day → s
+        "year": 31557600.0,  # year → s
+        "yr": 31557600,  # alias 2
     },
     "angle": {
         "rad": 1.0,
@@ -64,6 +66,7 @@ _units = {
 }
 # Add density units
 _units["density"] = {
+    "rhow": _units["mass"]["g"] / _units["distance"]["cm"] ** 3,
     "rhos": _units["mass"]["ms"]
     / (4.0 / 3.0 * pi * _units["distance"]["rs"] ** 3),
     "rhoj": _units["mass"]["mj"]
@@ -75,12 +78,12 @@ _units["density"] = {
 # Create immutable dict
 UNITS = MappingProxyType(_units)
 
-# Custom with CGS
-_cgs = {u: v for uv in UNITS.values() for u, v in uv.items()}
-_cgs["G"] = G
+# Custom with MKS
+_mks = {u: v for uv in UNITS.values() for u, v in uv.items()}
+_mks["G"] = G
 
-# Create dict to set CGS
-CGS = MappingProxyType(_cgs)
+# Create dict to set MKS
+MKS = MappingProxyType(_mks)
 
 
 def _convert_units(from_unit, to_unit, power=1):
@@ -130,7 +133,18 @@ def convert(
     to_units : str or list of str
         Units to convert to.
     power : int or list of int
-        Power(s) for each unit (default = 1). Must match length if list.
+        Power(s) for each unit (default = 1).
+        Must match length if list.
+
+    Example
+    -------
+    To convert 5 km s^{-2} to au yr^{-2} simply invoke:
+    >> resokit.units.convert(5,
+                             from_units=("km", "s"),
+                             to_units=("au", "yr"),
+                             power=(1, -2),
+                             )
+    33247713.903743323
 
     Returns
     -------

@@ -30,7 +30,7 @@ from numpy.random import default_rng
 
 import pandas as pd
 
-from resokit.units import CGS, convert
+from resokit.units import MKS, convert
 from resokit.utils.mass_radius import estimate_mass, estimate_radius
 from resokit.utils.mmr import plot_mmrs
 from resokit.utils.parser import (
@@ -3966,7 +3966,7 @@ class StaticSystem:
         # Define units
         if isinstance(units, bool):
             if units:  # AU, Msun
-                units = (CGS["ms"], CGS["au"])
+                units = (MKS["ms"], MKS["au"])
                 if verbose:
                     print(" Using AU, Msun units.")
             else:  # m, Kg
@@ -3986,36 +3986,36 @@ class StaticSystem:
                     stacklevel=2,
                 )
             sim.add(
-                m=self.star.star0.mass * CGS["ms"] / units[0],
-                r=self.star.star0.radius * CGS["rs"] / units[1],
+                m=self.star.star0.mass * MKS["ms"] / units[0],
+                r=self.star.star0.radius * MKS["rs"] / units[1],
                 hash=self.star.star0.name,
             )
             # Define the "center" for the planets
             center = sim.particles[self.star.star0.name]
             if self.is_circumbinary:  # Circumbinary
                 sim.add(
-                    m=self.star.star1.mass * CGS["ms"] / units[0],
+                    m=self.star.star1.mass * MKS["ms"] / units[0],
                     r=(
-                        self.star.star1.radius * CGS["rs"] / units[1]
+                        self.star.star1.radius * MKS["rs"] / units[1]
                         if hasattr(self.star.star1, "radius")
                         else 0.0
                     ),
-                    a=self.star.a * CGS["au"] / units[1],
+                    a=self.star.a * MKS["au"] / units[1],
                     e=self.star.e,
                     hash=self.star.star1.name,
                 )
                 # Redefine the "center" for the planets
                 # Here we create a new particle at the center of mass
                 sim.add(
-                    m=self.star.total_mass_ * CGS["ms"] / units[0],
+                    m=self.star.total_mass_ * MKS["ms"] / units[0],
                     r=0.0,
                     hash="center",
                 )
                 center = sim.particles["center"]
         else:  # Single star
             sim.add(
-                m=self.star.mass * CGS["ms"] / units[0],
-                r=self.star.radius * CGS["rs"] / units[1],
+                m=self.star.mass * MKS["ms"] / units[0],
+                r=self.star.radius * MKS["rs"] / units[1],
                 hash=self.star.name,
             )
             # Define the "center" for the planets
@@ -4063,9 +4063,9 @@ class StaticSystem:
                 )
             )
             sim.add(
-                m=pmass * CGS["mj"] / units[0],
-                r=pradius * CGS["rj"] / units[1],
-                a=pa * CGS["au"] / units[1],
+                m=pmass * MKS["mj"] / units[0],
+                r=pradius * MKS["rj"] / units[1],
+                a=pa * MKS["au"] / units[1],
                 e=planet.e if planet.e > 0 else 0.0,
                 inc=convert(planet.inc, from_units="deg", to_units="rad"),
                 omega=convert(planet.w, from_units="deg", to_units="rad"),
@@ -4079,13 +4079,13 @@ class StaticSystem:
         # Check if final binary
         if self.is_binary_ and not self.is_circumbinary:
             sim.add(
-                m=self.star.star1.mass * CGS["ms"] / units[0],
+                m=self.star.star1.mass * MKS["ms"] / units[0],
                 r=(
-                    self.star.star1.radius * CGS["rs"] / units[1]
+                    self.star.star1.radius * MKS["rs"] / units[1]
                     if hasattr(self.star.star1, "radius")
                     else 0.0
                 ),
-                a=self.star.a * CGS["au"] / units[1],
+                a=self.star.a * MKS["au"] / units[1],
                 e=self.star.e,
                 hash=self.star.star1.name,
                 primary=center,  # Our center
