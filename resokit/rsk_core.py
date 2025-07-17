@@ -6,7 +6,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import attrs
-from .tools import rmm
+from tools import rmm
 
 
 # =============================================================================
@@ -115,26 +115,28 @@ class DynamicPlanet:
     Omega: list  # deg
 
     # Input constants
-    mass: float = attrs.field(default=None, validator=_validate_constant)  # earth masses
-    radius: float = attrs.field(default=None, validator=_validate_constant)  # earth radii
+    mass: float = attrs.field(
+        default=None, validator=_validate_constant
+    )  # earth masses
+    radius: float = attrs.field(
+        default=None, validator=_validate_constant
+    )  # earth radii
 
     # Flags
     is_star: bool = attrs.field(default=False)  # is_star flag
 
-    # Star reference
-    star: "Star" = attrs.field(default=None)  # Reference to the system's star
-    
-    # System reference
-    system: "DynamicSystem" = attrs.field(default=None)  # Reference to the system
-
     # Additional info
-    name: str = attrs.field(default="", validator=attrs.validators.instance_of(str))  # planet's name
+    name: str = attrs.field(
+        default="", validator=attrs.validators.instance_of(str)  # planets name
+    )
 
     # Calculated arrays
-    _varpi: list = attrs.field(init=False, default=None, validator=_validate_sequence)  # pericenter longitude
-    _lam: list = attrs.field(init=False, default=None)  # mean longitude
-    _n: list = attrs.field(init=False,default=None) # mean motion
-    
+    _varpi: list = attrs.field(
+        init=False, default=None, validator=_validate_sequence
+    )  # pericenter longitude
+    _lam: list = attrs.field(
+        init=False, default=None)  # mean longitude
+
     @property
     def varpi(self):
         if not _everything_exists(self.w, self.Omega):
@@ -156,21 +158,7 @@ class DynamicPlanet:
         elif self._lam is None:
             self._lam = self.M + self.w + self.Omega
         return self._lam
-        
-    @property
-    def n(self):
-    	if not _everything_exists(self.star.mass, self.a):
-    	    raise TypeError(
-                "'w' and 'Omega' are \
-                            required to calculate 'varpi'"
-            )
-    	elif self.mass is None:
-    	    mu = G*self.star.mass
-    	    raise Warning('Assuming m_planet = 0 for mean-motion calculation')
-    	elif self.mass is not None:
-    	    mu = G*(self.star.mass + self.mass*E2S)
-    	return np.sqrt(mu / (self.a**3))
-  
+    
     def plot(self,var,ax=None,**plot_kw):
       if ax is None: ax=plt.gca()
       ax.plot(self.times,getattr(self,var),**plot_kw)
@@ -314,7 +302,7 @@ class DynamicSystem:
         pl3 = self.planets[i3]
 
         _3pmmr_ang = pl1.lam*k1 + pl2.lam*k2 + pl3.lam*k3 \
-                   - np.dot(vp_coefs,[pl1.varpi,pl2.varpi,pl3.varpi])
+                   + np.dot(vp_coefs,[pl1.varpi,pl2.varpi,pl3.varpi])
         return(_3pmmr_ang)
     
     def _plot_or_scatter_resangs(self,ax,method,which_resang,**any_kw):
