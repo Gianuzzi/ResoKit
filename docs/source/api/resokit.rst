@@ -10,6 +10,6 @@
    :maxdepth: 4
 
    resokit.core
-   resokit.io
+   resokit.load
    resokit.datasets
    resokit.utils

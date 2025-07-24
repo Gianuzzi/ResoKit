@@ -70,6 +70,17 @@ instance/
 # Sphinx documentation
 docs/_build/
 
+# Ignore Sphinx build output
+docs/build/
+
+# Ignore LaTeX and PDF build artifacts
+docs/source/tutorials/*.aux
+docs/source/tutorials/*.log
+docs/source/tutorials/*.out
+docs/source/tutorials/*.pdf
+docs/source/tutorials/*.tex
+docs/source/tutorials/tutorial_files/
+
 # PyBuilder
 target/
 
