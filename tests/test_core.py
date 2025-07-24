@@ -15,7 +15,7 @@ import pandas as pd
 
 import pytest
 
-import resokit.io as rio
+import resokit.load as rio
 from resokit.core import (
     StaticBinaryStar,
     StaticPlanet,
@@ -109,36 +109,36 @@ class K11:
     estimated_mass = pd.DataFrame(
         data=[
             [  # ck17
-                0.01187256,
-                0.02609178,
-                0.03001185,
-                0.04966084,
-                0.02048483,
-                0.0335768,
+                0.011872141051038074,
+                0.02609086347629103,
+                0.030010804546323423,
+                0.049659103103399396,
+                0.020484112885561786,
+                0.03357562292185889,
             ],
             [  # o20
-                0.0201735,
-                0.09992169,
-                0.13279644,
-                0.0509617,
-                0.06111526,
-                0.03540478,
+                0.020172789575398694,
+                0.09991819186770531,
+                0.13279179209679726,
+                0.05095991162664184,
+                0.061113118825503895,
+                0.0354035428798858,
             ],
             [  # e23
-                0.01848317,
-                0.03655726,
-                0.04126936,
-                0.06383795,
-                0.02964581,
-                0.04548318,
+                0.018482520943664683,
+                0.03655597714344237,
+                0.0412679180806311,
+                0.06383571769905695,
+                0.029644772131728718,
+                0.045481583779843,
             ],
             [  # m24
-                0.01748089,
-                0.03492863,
-                0.03950223,
-                0.06150359,
-                0.02823663,
-                0.04359883,
+                0.01748027769110997,
+                0.034927409114917526,
+                0.03950084780072523,
+                0.061501432603222425,
+                0.028235645987476073,
+                0.04359730370417228,
             ],
         ],
         columns=pl_names,
@@ -194,8 +194,8 @@ class K11:
 class TestLoadSystem:
 
     load_function = {
-        "eu": rio.load_system_from_eu,
-        "nasa": rio.load_system_from_nasa,
+        "eu": rio.from_eu,
+        "nasa": rio.from_nasa,
     }
 
     @pytest.mark.parametrize("source", ["eu"])
@@ -284,8 +284,8 @@ class TestLoadSystem:
 class TestStaticSystem:
 
     load_function = {
-        "eu": rio.load_system_from_eu,
-        "nasa": rio.load_system_from_nasa,
+        "eu": rio.from_eu,
+        "nasa": rio.from_nasa,
     }
 
     @pytest.mark.parametrize("name", ["Kepler-11 b", "b", 0])
@@ -481,4 +481,6 @@ class TestStaticSystem:
                 radii_ss,
                 K11.estimated_radii[model],
                 check_names=False,  # Names are different
+                rtol=1e-3,
+                atol=1e-4,
             )

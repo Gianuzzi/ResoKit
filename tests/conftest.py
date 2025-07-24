@@ -292,7 +292,7 @@ def patch_download(monkeypatch):
 @pytest.fixture(scope="class")
 def load_eu_data(sample_eu_csv_path):
     # load small test data
-    rk.datasets.load_dataset(
+    rk.datasets.load(
         source="eu",
         from_file=sample_eu_csv_path,
         from_zip=False,
@@ -305,7 +305,7 @@ def load_eu_data(sample_eu_csv_path):
 @pytest.fixture(scope="class")
 def load_binary_data(sample_bin_p_txt_path):
     # load small test data
-    rk.datasets.load_binary_dataset(
+    rk.datasets.load_binary(
         which="p", from_file=sample_bin_p_txt_path, verbose=False
     )
     yield

@@ -11,7 +11,7 @@
 # DOCS
 # =============================================================================
 
-"""Module with input/output functions for the ResoKit package."""
+"""Module with planetary systems load functions for the ResoKit package."""
 
 # =============================================================================
 # IMPORTS
@@ -30,7 +30,7 @@ from resokit.core import (
     df_to_resokit,
     resokit_to_system,
 )
-from resokit.datasets.databases import load_binary_dataset, load_dataset
+from resokit.datasets.databases import load, load_binary
 from resokit.utils.parser import DEFAULT_METADATA, find_best_match
 from resokit.utils.utils import calc_period
 
@@ -112,7 +112,7 @@ def _search_system_index(
         raw_series = raw_df[column]  # Get the column
     elif not alternative_names:
         # Update the keyword arguments
-        parsed = load_dataset(
+        parsed = load(
             source=source,
             **{**load_kwargs, "only_index": "parsed", "verbose": False},
         )  # Load the parsed dataset (if it is in memory)
@@ -120,13 +120,13 @@ def _search_system_index(
             parse = None  # None mean parse only the name
             raw_series = parsed  # Because raw_series is already parsed
         else:  # Load the whole dataset
-            raw_series = load_dataset(
+            raw_series = load(
                 source=source,
                 **load_kwargs,
             )  # Will be stored and parsed next time
         raw_series = raw_series[column]  # Get the column
     else:  # Search in the alternate names
-        not_parsed = load_dataset(
+        not_parsed = load(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )  # Load the whole dataset (worst scenario)
@@ -140,7 +140,7 @@ def _search_system_index(
     # We have to get back the original values
     # If parse is None, then we have to compute the non parsed
     if not_parsed is None:
-        not_parsed = load_dataset(
+        not_parsed = load(
             source=source,
             **{**load_kwargs, "only_index": False, "verbose": False},
         )
@@ -157,7 +157,7 @@ def _search_system_index(
     return index, original_values, ratio
 
 
-def _load_system_from_db(
+def _from_db(
     name: str,
     source: str,
     is_planet: bool = False,
@@ -261,7 +261,7 @@ def _load_system_from_db(
 
     # Load the dataset
     if not low_memory:  # Load the whole dataset
-        raw_df = load_dataset(source=source, **load_kwargs)
+        raw_df = load(source=source, **load_kwargs)
     else:  # Will load only the index if possible
         raw_df = None
 
@@ -334,7 +334,7 @@ def _load_system_from_db(
 
     # Load the system
     if raw_df is None:  # Load only the system data
-        data = load_dataset(source=source, **{**load_kwargs, "only_rows": idx})
+        data = load(source=source, **{**load_kwargs, "only_rows": idx})
     else:
         data = raw_df.loc[idx]  # Load the system data from the raw dataset
 
@@ -371,7 +371,7 @@ def _load_system_from_db(
     return data, binary_type, idxbin
 
 
-def load_system_from_eu(
+def from_eu(
     name: str,
     is_planet: bool = False,
     file_path: Union[str, Path, bool] = True,
@@ -438,7 +438,7 @@ def load_system_from_eu(
         or :py:class:`StaticSystem`.
     """
     # Load the system from the database
-    df, bin_type, _ = _load_system_from_db(
+    df, bin_type, _ = _from_db(
         name=name,
         source="eu",
         is_planet=is_planet,
@@ -480,7 +480,7 @@ def load_system_from_eu(
 
     # Return StaticSystem
     if bin_type in ["p", "s"]:  # We have to create StaticBinaryStar
-        binary = load_from_binary(
+        binary = from_binary(
             name=name,
             exact_match=exact_match,
             as_pandas=False,
@@ -498,7 +498,7 @@ def load_system_from_eu(
     return resokit_to_system(reso, verbose=verbose)  # Return StaticSystem
 
 
-def load_system_from_nasa(
+def from_nasa(
     name: str,
     is_planet: bool = False,
     file_path: Union[str, Path, bool] = True,
@@ -571,7 +571,7 @@ def load_system_from_nasa(
         Loaded system as :py:class:`ResokitDataFrame` (if `as_resokit=True`),
         or :py:class:`StaticSystem`.
     """
-    df, bin_type, _ = _load_system_from_db(
+    df, bin_type, _ = _from_db(
         name=name,
         source="nasa",
         is_planet=is_planet,
@@ -606,8 +606,7 @@ def load_system_from_nasa(
             raise ValueError(
                 f"{obj} {name} not found in NASA database, "
                 + "after filtering with "
-                + f"controversial_set={controversial_set} "
-                + f"and default_set={default_set}."
+                + f"{controversial_set=} and {default_set=}."
             )
         # In this case, there is no such thing as a "system", because
         # each planet solution may be independant from other. So, we just
@@ -642,7 +641,7 @@ def load_system_from_nasa(
 
     # Return StaticSystem
     if bin_type in ["p", "s"]:  # We have to create StaticBinaryStar
-        binary = load_from_binary(
+        binary = from_binary(
             name=name,
             exact_match=exact_match,
             as_pandas=False,
@@ -663,7 +662,7 @@ def load_system_from_nasa(
 # --------------------------- Binary Stars ------------------------------------
 
 
-def load_from_binary(
+def from_binary(
     name: str,
     exact_match: bool = True,
     as_pandas: bool = False,
@@ -713,7 +712,7 @@ def load_from_binary(
         raise ValueError(f"Star '{name}' not found in binary datasets.")
 
     # Extract the data
-    row = load_binary_dataset(
+    row = load_binary(
         which=circumbinary,
         from_memory=True,
         rename_columns=True,
@@ -796,7 +795,7 @@ def check_if_binary(
     for circumbinary in [True, False]:
         which = "p" if circumbinary else "s"
         try:
-            df = load_binary_dataset(
+            df = load_binary(
                 which=which,
                 from_memory=True,
                 rename_columns=False,
@@ -811,7 +810,7 @@ def check_if_binary(
                     + " Txt file not found.\n"
                     + " Try downloading with "
                     + "resokit.datasets.download_binary"
-                    + f"_dataset('{which}', to_file=True)"
+                    + f"_dataset({which=}, to_file=True)"
                 )
             if circumbinary:  # Try both...
                 continue

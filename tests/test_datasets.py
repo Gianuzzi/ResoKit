@@ -164,7 +164,7 @@ class TestDownloadAndLoadDataset:
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_download_to_file(self, source, mock_requests, test_dir):
         file_path = test_dir / DATASET_FILENAMES[source]
-        result = rdb.download_dataset(
+        result = rdb.download(
             source,
             to_file=True,
             to_zip=False,
@@ -179,7 +179,7 @@ class TestDownloadAndLoadDataset:
     def test_download_and_load_from_zip(self, mock_requests, test_dir):
         source = "nasa"
         zip_path = test_dir / DATASET_ZIPNAMES[source]
-        rdb.download_dataset(
+        rdb.download(
             source,
             to_zip=True,
             dir_path=test_dir,
@@ -190,7 +190,7 @@ class TestDownloadAndLoadDataset:
         with zipfile.ZipFile(zip_path) as z:
             assert DATASET_FILENAMES[source] in z.namelist()
 
-        df = rdb.load_dataset(
+        df = rdb.load(
             source=source,
             from_memory=False,
             from_file=DATASET_FILENAMES[source],
@@ -206,7 +206,7 @@ class TestDownloadAndLoadDataset:
     def test_download_and_overwrite_from_zip(self, mock_requests, test_dir):
         source = "nasa"
         zip_path = test_dir / DATASET_ZIPNAMES[source]
-        rdb.download_dataset(
+        rdb.download(
             source,
             to_zip=True,
             dir_path=test_dir,
@@ -229,7 +229,7 @@ class TestDownloadAndLoadDataset:
             assert inside
 
         # overwrite
-        rdb.download_dataset(
+        rdb.download(
             source,
             to_zip=True,
             dir_path=test_dir,
@@ -238,7 +238,7 @@ class TestDownloadAndLoadDataset:
         )
 
         # load from path
-        df = rdb.load_dataset(
+        df = rdb.load(
             source=source,
             from_memory=False,
             from_file=True,
@@ -252,7 +252,7 @@ class TestDownloadAndLoadDataset:
         assert "pl_name" in df.columns
 
     def test_download_and_load_as_resokit(self, mock_requests):
-        result = rdb.download_dataset(
+        result = rdb.download(
             "nasa", to_memory=True, to_resokit=True, to_file=False
         )
         assert hasattr(result, "to_dataframe")
@@ -274,7 +274,7 @@ class TestDownloadAndLoadDataset:
         # -------------------------------------------------------------------
 
         # Load the dataset
-        index1 = rdb.load_dataset(
+        index1 = rdb.load(
             source=source,
             only_index=True,
             from_file=sample_eu_csv_path,
@@ -312,7 +312,7 @@ class TestDownloadAndLoadDataset:
 
         # Load the dataset
         with pytest.raises(ValueError):
-            rdb.load_dataset(source=source, only_rows=True, verbose=False)
+            rdb.load(source=source, only_rows=True, verbose=False)
 
         # -------------------------------------------------------------------
         # ValueError if used with only_index=True.
@@ -320,7 +320,7 @@ class TestDownloadAndLoadDataset:
 
         # Load the dataset
         with pytest.raises(ValueError):
-            rdb.load_dataset(
+            rdb.load(
                 source=source,
                 from_zip=False,
                 from_file=sample_eu_csv_path,
@@ -334,7 +334,7 @@ class TestDownloadAndLoadDataset:
         # -------------------------------------------------------------------
 
         # Load the dataset
-        rows1 = rdb.load_dataset(
+        rows1 = rdb.load(
             source=source,
             only_rows=good_rows,
             from_zip=False,
@@ -371,7 +371,7 @@ class TestDownloadAndLoadDataset:
         assert rdb._full_manager._indexes[source].empty
 
         # Load the dataset and store a row
-        rdb.load_dataset(
+        rdb.load(
             source=source,
             only_rows=good_rows,
             store=True,
@@ -388,7 +388,7 @@ class TestDownloadAndLoadDataset:
         len_old = rdb._full_manager._datasets[source].shape[0]
 
         # Load with only_rows
-        rdb.load_dataset(
+        rdb.load(
             source=source,
             only_rows=3,
             verbose=False,
@@ -407,7 +407,7 @@ class TestDownloadAndLoadDataset:
         # -------------------------------------------------------------------
 
         # Load with only_rows
-        rdb.load_dataset(
+        rdb.load(
             source=source,
             only_rows=3,
             verbose=False,
@@ -428,7 +428,7 @@ class TestDownloadAndLoadDataset:
 
         rdb._full_manager._is_fully_stored[source] = True
 
-        df = rdb.load_dataset(source)
+        df = rdb.load(source)
 
         assert isinstance(df, rdb.ResoKitDataset)
         assert len(df) == len_old + 1
@@ -440,7 +440,7 @@ class TestDownloadAndLoadDataset:
     def test_load_error(self, source, test_dir):
         wrong_filepath = test_dir / "wrong.csv"
         with pytest.raises(FileNotFoundError):
-            rdb.load_dataset(
+            rdb.load(
                 source,
                 from_memory=False,
                 from_zip=False,
@@ -452,7 +452,7 @@ class TestDownloadAndLoadBinary:
     @pytest.mark.parametrize("source", ["p", "s"])
     def test_download(self, source, mock_requests_bina, test_dir):
         file_path = test_dir / BINARIES_FILENAMES[source]
-        result = rdb.download_binary_dataset(
+        result = rdb.download_binary(
             which=source,
             to_file=file_path,
             dir_path=test_dir,
@@ -465,7 +465,7 @@ class TestDownloadAndLoadBinary:
         assert file_path.read_text().startswith("===")
 
     def test_load_p(self, sample_bin_p_txt_path):
-        df = rdb.load_binary_dataset(
+        df = rdb.load_binary(
             which="p",
             from_memory=False,
             from_file=sample_bin_p_txt_path,
@@ -478,7 +478,7 @@ class TestDownloadAndLoadBinary:
     def test_load_error(self, source, test_dir):
         wrong_filepath = test_dir / "wrong.csv"
         with pytest.raises(FileNotFoundError):
-            rdb.load_binary_dataset(
+            rdb.load_binary(
                 source,
                 from_memory=False,
                 from_file=wrong_filepath,
@@ -486,55 +486,59 @@ class TestDownloadAndLoadBinary:
 
 
 class TestCheckOnline:
-    def test_check_online_eu_success(self, mock_requests_eu_html_success):
-        result = rdb.check_online_dataset("eu", verbose=True)
+    def test_check_outdated_eu_success(self, mock_requests_eu_html_success):
+        result = rdb.check_outdated_dataset("eu", verbose=True)
         assert result[0] == 5435
         assert result[1] > 300
 
-    def test_check_online_nasa_success(self, mock_requests_nasa_html_success):
-        result = rdb.check_online_dataset("nasa", verbose=False)
+    def test_check_outdated_nasa_success(
+        self, mock_requests_nasa_html_success
+    ):
+        result = rdb.check_outdated_dataset("nasa", verbose=False)
         assert result[0] == 5432
         assert result[1] > 12000
 
-    def test_check_online_eu_wrong(self, mock_requests_eu_html_wrong):
-        result = rdb.check_online_dataset("eu", verbose=False)
+    def test_check_outdated_eu_wrong(self, mock_requests_eu_html_wrong):
+        result = rdb.check_outdated_dataset("eu", verbose=False)
         assert result[0] == -1
         assert result[1] is None
 
-    def test_check_online_nasa_wrong(self, mock_requests_nasa_html_wrong):
-        result = rdb.check_online_dataset("nasa", verbose=False)
+    def test_check_outdated_nasa_wrong(self, mock_requests_nasa_html_wrong):
+        result = rdb.check_outdated_dataset("nasa", verbose=False)
         assert result[0] == -1
         assert result[1] > 12000
 
-    def test_check_online_nasa_no_match(
+    def test_check_outdated_nasa_no_match(
         self, mock_requests_nasa_html_no_match
     ):
-        result = rdb.check_online_dataset("nasa", verbose=False)
+        result = rdb.check_outdated_dataset("nasa", verbose=False)
         assert result[0] == -1
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
-    def test_check_online_nasa_failure(
+    def test_check_outdated_nasa_failure(
         self, source, mock_requests_html_failure
     ):
-        result = rdb.check_online_dataset(source, verbose=False)
+        result = rdb.check_outdated_dataset(source, verbose=False)
         assert result[0] == -1
         assert result[1] is None
 
-    def test_check_online_invalid_source(self):
+    def test_check_outdated_invalid_source(self):
         with pytest.raises(ValueError):
-            rdb.check_online_dataset("Z", verbose=False)
+            rdb.check_outdated_dataset("Z", verbose=False)
 
     @pytest.mark.parametrize("source", ["p", "s"])
-    def test_check_online_binary_valid_sources(
+    def test_check_outdated_binary_valid_sources(
         self, source, fake_requests_success
     ):
-        assert rdb.check_online_binary(source, verbose=False) == 3
+        assert rdb.check_outdated_binary(source, verbose=False) == 3
 
     @pytest.mark.parametrize("source", ["p", "s"])
-    def test_check_online_binary_failure(self, source, fake_requests_failure):
-        count = rdb.check_online_binary(source, verbose=False)
+    def test_check_outdated_binary_failure(
+        self, source, fake_requests_failure
+    ):
+        count = rdb.check_outdated_binary(source, verbose=False)
         assert count == -1
 
-    def test_check_online_binary_invalid_source(self):
+    def test_check_outdated_binary_invalid_source(self):
         with pytest.raises(ValueError):
-            rdb.check_online_binary("Z", verbose=False)
+            rdb.check_outdated_binary("Z", verbose=False)

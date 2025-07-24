@@ -13,22 +13,19 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.io module includes tools for input/output operations."""
+"""The ResoKit.query module includes tools to make online queries."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-from .io import load_from_binary  # noqa
-from .io import load_system_from_eu  # noqa
-from .io import load_system_from_nasa  # noqa
-from .query import query_online  # noqa
+
+from .query import build_query, execute_query, query_system  # noqa
 
 # Make the functions available at the package level
 
 __all__ = [
-    "load_from_binary",
-    "load_system_from_eu",
-    "load_system_from_nasa",
-    "query_online",
+    "build_query",
+    "execute_query",
+    "query_system",
 ]

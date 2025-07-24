@@ -250,6 +250,10 @@ def assert_module_imported(
 ):
     """Assert that the specified module is imported.
 
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
+
     Parameters
     ----------
     imported : bool
@@ -287,6 +291,10 @@ def assert_module_imported(
 def parse_to_iter(value: Any, to: type = list) -> Iterable:
     """Parse a value to an iterable if it is not already.
 
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
+
     Parameters
     ----------
     value : Any
@@ -319,6 +327,10 @@ def parse_name(name: str, force: bool = False) -> str:
     2.5) If force is `True`, removes (AB) from the middle of the name.
     3) The name is converted to lowercase.
     4) All whitespaces and hyphens are removed.
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------
@@ -374,6 +386,10 @@ def find_best_match(
     force: bool = False,
 ) -> Tuple[Index, Series, float]:
     """Find the best match for a name in a series.
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------

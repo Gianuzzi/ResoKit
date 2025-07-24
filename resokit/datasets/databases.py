@@ -21,7 +21,7 @@ import datetime
 import warnings
 from io import BytesIO, StringIO, TextIOWrapper
 from pathlib import Path
-from typing import BinaryIO, List, Tuple, Union
+from typing import BinaryIO, Dict, List, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import attrs
@@ -40,13 +40,15 @@ from resokit.datasets.utils import (
     DATASET_ZIPNAMES,
     INDEX_COLUMNS,
     check_file_age,
-    check_online_binary,
-    check_online_dataset,
+    check_outdated_binary,
+    check_outdated_dataset,
     load_from_zip,
+    merge_old_and_new,
     remove_from_zip,
     request_dataset,
     resolve_paths,
 )
+from resokit.query import build_query, execute_query
 from resokit.utils.parser import DEFAULT_METADATA, parse_name, parse_to_iter
 
 # =============================================================================
@@ -646,7 +648,8 @@ class DatasetManager:
         dir_path: Union[str, Path, bool, None] = True,
         overwrite: bool = False,
         soft: bool = True,
-        check_online: bool = True,
+        check_outd: bool = True,
+        is_query: bool = False,
         to_resokit: Union[bool, None] = None,
         verbose: bool = True,
         chunk_size: int = 1024,
@@ -664,8 +667,6 @@ class DatasetManager:
                 "Nothing to do. Set at least one of to_file, to_zip, "
                 + "to_memory, or to_resokit."
             )
-
-        url = DATASET_URLS[source]
 
         bpaths, fpaths, zfpaths = resolve_paths(
             to_file=to_file,
@@ -729,18 +730,13 @@ class DatasetManager:
                 )
             return None
 
-        if check_online:
+        if check_outd:
             outdated = check_outdated(source, verbose=verbose)
             if not outdated:
-                if (save_file or save_zip) and verbose:
-                    print(
-                        "To store the dataset in a file, load it and "
-                        + "invoke the `to_file` method."
-                    )
-                elif verbose:
+                if verbose:
                     print(
                         "No need to download the dataset. "
-                        + "Set check_online=False to really force it."
+                        + "Set check_outd=False to really force it."
                     )
                 if to_resokit is not None:
                     df = self.load(source, verbose=False, to_df=not to_resokit)
@@ -751,13 +747,46 @@ class DatasetManager:
                     return df
                 return None
 
-        data = request_dataset(
-            url, verbose=verbose, chunk_size=chunk_size, print_size=print_size
-        )
-        if not data or len(data) == 0:
-            raise ValueError(f"Empty dataset downloaded from {url}.")
-        elif verbose:
-            print(f" Data downloaded successfully. ({len(data)/1e6:.2f} MB)")
+        # Set default df
+        df = _mk_empty_dataset(source).dataset
+
+        # Get url
+        url = DATASET_URLS[source]
+
+        # Check if full download or query new
+        if not is_query:  # Download
+            data = request_dataset(
+                url,
+                verbose=verbose,
+                chunk_size=chunk_size,
+                print_size=print_size,
+            )
+            if not data or len(data) == 0:
+                raise ValueError(f"Empty dataset downloaded from {url}.")
+            elif verbose:
+                print(
+                    f" Data downloaded successfully. ({len(data)/1e6:.2f} MB)"
+                )
+        else:  # Query
+            old_df, new_df = self.query_new(
+                source=source,
+                to_resokit=False,
+                verbose=verbose,
+                old_df_and_new=True,
+            )
+            if len(new_df) == 0:
+                raise ValueError(f"No new rows downloaded from {url}.")
+            # Merge old and new into one
+            df = merge_old_and_new(
+                old_df=old_df, new_df=new_df, source=source, verbose=verbose
+            )
+            # Set columns dtypes
+            df = df.astype(DATASET_DTYPES[source])
+            # Convert to bytes for possible file writing
+            buffer = BytesIO()
+            df.to_csv(buffer)  # This is the magic N° 1
+            buffer.seek(0)
+            data = buffer.getvalue()  # There are the bytes. Magic N°2
 
         for zipf_path in zfpaths:
             file_name = zipf_path.name
@@ -779,10 +808,7 @@ class DatasetManager:
             if verbose:
                 print(f" Written {file_path}.")
 
-        # Set default df
-        df = _mk_empty_dataset(source).dataset
-
-        if to_memory or to_resokit is not None:
+        if (to_memory or to_resokit is not None) and len(df) == 0:
             df = pd.read_csv(BytesIO(data), dtype=DATASET_DTYPES[source])
 
         metadata = dict(DEFAULT_METADATA)
@@ -831,6 +857,102 @@ class DatasetManager:
             return zfpaths
 
         return None
+
+    def query_new(
+        self,
+        source: str,
+        to_resokit: Union[None, bool] = False,
+        verbose: bool = True,
+        load_kwargs: Union[Dict, None] = None,
+        old_df_and_new: bool = False,
+    ) -> Union[pd.DataFrame, ResoKitDataset, Tuple]:
+        """Query new rows from online dataset."""
+        source = source.lower()  # Ensure lowercase
+
+        # Define last update row name
+        if source == "eu":
+            update_col = "updated"
+            raise NotImplementedError(
+                "This feature is not implemented yet, as the TAP services of"
+                + "\nhttps://exoplanet.eu/ do not include the values for the"
+                + "\n'updated' column."
+                + "\nThis has already been informed to the Exoplanet EU Team"
+                + "\n(https://exoplanet.eu/team/), and will be implemented"
+                + "\nwhen the available."
+            )
+        elif source == "nasa":
+            update_col = "rowupdate"
+        else:
+            raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
+
+        # Get old
+        if load_kwargs is None:
+            load_kwargs = {}
+        load_kwargs.update(
+            {
+                "to_df": True,
+                "to_resokit": False,
+                "only_index": False,
+                "only_rows": False,
+                "verbose": False,
+            }
+        )
+        old_df = self.load(source=source, **load_kwargs)
+
+        assert isinstance(
+            old_df, pd.DataFrame
+        ), f"Error: Expected a pandas DataFrame, got {type(old_df)} instead."
+
+        if len(old_df) == 0:
+            raise IndexError("Could not load local dataset. No rows found.")
+
+        # Get last update
+        max_date_str = old_df[update_col][~old_df[update_col].isna()].max()
+
+        if verbose:
+            print(f"Latest row update in local dataset: {max_date_str}")
+            print("Querying online rows update after that date.")
+
+        # Build the query
+        query = build_query(
+            source=source,
+            select="*",
+            conditions=f"{update_col} >= '{max_date_str}'",
+        )
+
+        # Get new
+        new_df = execute_query(
+            query=query, source=source, cache=True, verbose=verbose
+        )
+
+        # Message
+        if verbose:
+            if len(new_df) == 0:
+                print("No new rows downloaded")
+            else:
+                print(f"Amount of rows downloaded: {len(new_df)}")
+
+        # Define new
+        if to_resokit is False:
+            new = new_df
+        else:
+            if to_resokit is None:
+                to_resokit = False
+            new = _df_to_dataset(
+                new_df,
+                source=source,
+                age=0,
+                origin="internet",
+                is_full=False,
+                copy=False,
+                as_resokit=to_resokit,
+            )
+
+        # Return
+        if old_df_and_new:
+            return old_df, new
+
+        return new
 
     def load_full(
         self,
@@ -1200,7 +1322,7 @@ class DatasetManager:
                 if dir_path == DATASETS_DIR:
                     msg = (
                         "\n Try running "
-                        + f"`resokit.datasets.download_dataset('{source}',"
+                        + f"`resokit.datasets.download({source=},"
                         + " to_zip=True)` first to download the dataset."
                     )
                 zip_name = zip_path.name
@@ -1229,7 +1351,7 @@ class DatasetManager:
                 if dir_path == DATASETS_DIR:
                     msg = (
                         "\n Try running "
-                        + f"`resokit.datasets.download_dataset('{source}',"
+                        + f"`resokit.datasets.download({source=},"
                         + " to_file=True)` first to download the dataset."
                     )
                 file_name = file_path.name
@@ -1721,7 +1843,7 @@ _binary_manager = BinaryDatasetManager()
 # --------------------------- EU AND NASA DATASETS ----------------------------
 
 
-def load_dataset(
+def load(
     source: str,
     from_memory: bool = True,
     from_zip: Union[str, Path, bool] = True,
@@ -1820,15 +1942,16 @@ def load_dataset(
     )
 
 
-def download_dataset(
+def download(
     source: str,
     to_memory: bool = True,
     to_file: Union[str, Path, bool] = True,
     to_zip: Union[str, Path, bool] = True,
     dir_path: Union[str, Path, bool, None] = True,
     overwrite: bool = False,
-    soft: bool = True,
-    check_online: bool = True,
+    soft: bool = False,
+    check_outd: bool = True,
+    only_new_rows: bool = False,
     to_resokit: Union[bool, None] = None,
     verbose: bool = True,
     chunk_size: int = 1024,
@@ -1866,11 +1989,16 @@ def download_dataset(
         If `True`, overwrites the file if it already exists.
         The memory stored Dataset and Index are always overwritten,
         independently of this parameter.
-    soft : bool, optiona. Default: True
+    soft : bool, optiona. Default: False
         If `True`, prints a message instead of raising an error, in
         case of file existing and overwrite = `False`.
-    check_online : bool, optional. Default: True.
+    check_outd : bool, optional. Default: True.
         Whether to check if the dataset is already up-to-date.
+    only_new_rows : bool, optional. Default: False.
+        Whether to perform a query of only rows updated after the
+        latest local row-update. If no previous local dataset exists
+        an error is raised.
+        If False, the whole dataset is downloaded.
     to_resokit : bool, dict, optional. Default: None.
         If `True`, returns the dataset as a ResoKitDataset.
         If `False`, returns the dataset as a pandas DataFrame.
@@ -1891,7 +2019,7 @@ def download_dataset(
     """
     if source.lower() in ["all", "both"]:
         # Download both datasets
-        eu = download_dataset(
+        eu = download(
             source="eu",
             to_memory=to_memory,
             to_file=to_file,
@@ -1899,13 +2027,14 @@ def download_dataset(
             dir_path=dir_path,
             overwrite=overwrite,
             soft=soft,
-            check_online=check_online,
+            check_outd=check_outd,
             to_resokit=to_resokit,
+            is_query=only_new_rows,
             verbose=verbose,
             chunk_size=chunk_size,
             print_size=print_size,
         )
-        nasa = download_dataset(
+        nasa = download(
             source="nasa",
             to_memory=to_memory,
             to_file=to_file,
@@ -1913,8 +2042,9 @@ def download_dataset(
             dir_path=dir_path,
             overwrite=overwrite,
             soft=soft,
-            check_online=check_online,
+            check_outd=check_outd,
             to_resokit=to_resokit,
+            is_query=only_new_rows,
             verbose=verbose,
             chunk_size=chunk_size,
             print_size=print_size,
@@ -1928,18 +2058,201 @@ def download_dataset(
         dir_path=dir_path,
         overwrite=overwrite,
         soft=soft,
-        check_online=check_online,
+        check_outd=check_outd,
         to_resokit=to_resokit,
+        is_query=only_new_rows,
         verbose=verbose,
         chunk_size=chunk_size,
         print_size=print_size,
     )
 
 
+def query_new_rows(
+    source: str,
+    check_outd: bool = True,
+    to_resokit: Union[None, bool] = False,
+    verbose: bool = True,
+    load_kwargs: Union[Dict, None] = None,
+) -> Union[pd.DataFrame, ResoKitDataset, Tuple]:
+    """Query online the rows updated after latest local dataset row-update.
+
+    The rows are queried according the the corresponding row-update value.
+    The resulting pandas dataframe is cached for the duration of the session.
+    If querying from NASA, the rows will have all (including non default
+    and controversial) new planets.
+
+    Note
+    ----
+    This function does not update the local dataset, but caches the queries
+    in case of reusing when calling `resokit.databases.update`.
+
+    Note
+    ----
+    Requires the requests library.
+
+    Parameters
+    ----------
+    source : str
+        Identifier for the data source ('eu' or 'nasa').
+        If "all" or "both", queries rows from both datasets.
+    check_outd : bool, optional. Default: True.
+        Whether to check if the dataset is already up-to-date.
+        If so, no query is performed.
+    to_resokit : bool, dict, optional. Default: None.
+        Formats the final dataset:
+        If `True`, as a ResoKitDataset.
+        If `False`, as a pandas DataFrame.
+        If `None`, as a ResoKitDataset, using all original columns.
+    verbose : bool, optional. Default: True.
+        If `True`, displays messages about the query process.
+    load_kwargs : dict, None, optional. Default: None
+        Dictionary with keyboard arguments for the `resokit.load`
+        function.
+        If `None`, the default arguments are used.
+
+    Returns
+    -------
+    downloaded : pd.DataFrame or ResoKitDataset or Tuple
+        The requested rows with specified format; or tuple if
+        both sources requested.
+    """
+    # Ensure lowercase
+    source = source.lower()
+
+    if source in ["all", "both"]:
+        eu_new = query_new_rows(
+            source="eu",
+            check_outd=check_outd,
+            to_resokit=to_resokit,
+            verbose=verbose,
+            load_kwargs=load_kwargs,
+        )
+        if verbose:
+            print("")
+        nasa_new = query_new_rows(
+            source="nasa",
+            check_outd=check_outd,
+            to_resokit=to_resokit,
+            verbose=verbose,
+            load_kwargs=load_kwargs,
+        )
+        return eu_new, nasa_new
+
+    if check_outd:
+        check_outdated(which=source, verbose=verbose)
+
+    if load_kwargs is None:
+        load_kwargs = {
+            "from_memory": True,
+            "from_file": True,
+            "from_zip": True,
+        }
+
+    result = _full_manager.query_new(
+        source=source,
+        to_resokit=to_resokit,
+        verbose=verbose,
+        load_kwargs=load_kwargs,
+        old_df_and_new=False,
+    )
+    assert isinstance(result, (pd.DataFrame, ResoKitDataset)), (
+        "Expected result to be a pd.DataFrame or ResoKitDataset, "
+        + f"got {type(result)} instead."
+    )
+
+    return result
+
+
+def update(
+    source: str,
+    load_kwargs: Union[Dict, None] = None,
+    to_memory: bool = True,
+    to_file: Union[str, Path, bool] = True,
+    to_zip: Union[str, Path, bool] = True,
+    dir_path: Union[str, Path, bool, None] = True,
+    overwrite: bool = False,
+    check_outd: bool = True,
+    to_resokit: Union[bool, None] = None,
+    verbose: bool = True,
+) -> Union[Path, pd.DataFrame, ResoKitDataset, None, dict]:
+    """Update the local dataset with new rows from a specified source.
+
+    This function is a wrapper for the function
+    `resokit.datasets.download(..., only_new_rows=True)`; but is
+    mandatory that the dataset exists previously to be loaded first.
+    No download printing progress available for this function.
+
+    Note
+    ----
+    Requires the requests library.
+
+    Parameters
+    ----------
+    source : str
+        Identifier for the data source ('eu' or 'nasa').
+        If "all" or "both", downloads both datasets.
+    load_kwargs : dict or None, optional. Defalt: None
+        Dictionary with keyboard arguments for the `resokit.load`
+        function.
+        If `None`, the default arguments are used.
+    to_memory : bool, optional. Default: True.
+        If `True`, stores the dataset in memory.
+    to_file : str or Path or bool, optional. Default: True.
+        Path or str to the file to store the dataset.
+        If `True`, default filename is used.
+        If `False`, the file is not saved nor created.
+    to_zip : str or Path or bool, optional. Default: True.
+        Path or str to the ZIP archive to store the dataset.
+        If `True`, default ZIP filename is used.
+        If `False`, the file is not saved nor created in the ZIP archive.
+    dir_path : str or Path or bool or None. Default: True
+        Directory path to save the dataset, or path to the ZIP archive.
+        If `None` or `True` the default directory is used.
+    overwrite : bool, optional. Default: False.
+        If `True`, overwrites the file if it already exists.
+        The memory stored Dataset and Index are always overwritten,
+        independently of this parameter.
+    check_outd : bool, optional. Default: True.
+        Whether to check if the dataset is already up-to-date.
+    to_resokit : bool, dict, optional. Default: None.
+        If `True`, returns the dataset as a ResoKitDataset.
+        If `False`, returns the dataset as a pandas DataFrame.
+        If `None`, returns the path to the downloaded file.
+    verbose : bool, optional. Default: True.
+        If `True`, displays messages about the download process.
+
+    Returns
+    -------
+    updated : Path or pd.DataFrame or None
+        `Path` to the updated dataset (and or zip archive),
+        or the dataset if `to_resokit` is not `None`.
+    """
+    if load_kwargs is None:
+        load_kwargs = {}
+
+    # Load the dataset
+    load(source=source, **load_kwargs)
+
+    # Now update it
+    return download(
+        source=source,
+        to_memory=to_memory,
+        to_file=to_file,
+        to_zip=to_zip,
+        dir_path=dir_path,
+        overwrite=overwrite,
+        soft=False,
+        check_outd=check_outd,
+        only_new_rows=True,
+        to_resokit=to_resokit,
+        verbose=verbose,
+    )
+
+
 # --------------------------- BINARY SYSTEMS DATASETS -------------------------
 
 
-def load_binary_dataset(
+def load_binary(
     which: Union[str, bool],
     from_memory: bool = True,
     from_file: Union[str, bool] = True,
@@ -2009,7 +2322,7 @@ def load_binary_dataset(
     )
 
 
-def download_binary_dataset(
+def download_binary(
     which: str,
     to_file: Union[str, Path, bool] = True,
     dir_path: Union[str, Path, bool, None] = True,
@@ -2070,7 +2383,7 @@ def download_binary_dataset(
     """
     if which.lower() in ["all", "both"]:
         # Download both datasets
-        s = download_binary_dataset(
+        s = download_binary(
             which="simple",
             to_file=to_file,
             dir_path=dir_path,
@@ -2082,7 +2395,7 @@ def download_binary_dataset(
             chunk_size=chunk_size,
             print_size=print_size,
         )
-        p = download_binary_dataset(
+        p = download_binary(
             which="circumbinary",
             to_file=to_file,
             dir_path=dir_path,
@@ -2147,7 +2460,7 @@ def clear_memory(
         )
     else:
         raise ValueError(
-            f"Invalid source: {which}. Must be 'eu', 'nasa', 'p', 's', "
+            f"Invalid {which=}. Must be 'eu', 'nasa', 'p', 's', "
             + "'binary', 'datasets', or 'all'."
         )
 
@@ -2178,6 +2491,8 @@ def check_outdated(
     which = which.lower()  # Ensure lowercase
     if which == "both":
         eu = check_outdated(which="eu", verbose=verbose, soft=soft)
+        if verbose:
+            print("")  # A space between prints
         nasa = check_outdated(which="nasa", verbose=verbose, soft=soft)
         return eu, nasa
     if which == "all":
@@ -2188,13 +2503,13 @@ def check_outdated(
         if which in BINARIES_FILENAMES:
             if verbose:
                 print(
-                    f"Use `check_binary_outdated('{which}') to check if"
+                    f"Use `check_binary_outdated({which=}) to check if"
                     + "binary dataset is outdated."
                 )
-        raise ValueError(f"Invalid which: {which}. Must be 'eu' or 'nasa'.")
+        raise ValueError(f"Invalid {which=}. Must be 'eu' or 'nasa'.")
 
     if verbose:
-        print(f"Checking local dataset from '{which}' source...")
+        print(f"Checking local dataset from {which=} source...")
 
     # Check if the dataset is stored
     try:
@@ -2233,7 +2548,7 @@ def check_outdated(
     except FileNotFoundError as error:
         if verbose:
             print(
-                f" File from '{which}' source to check if outdated not found."
+                f" File from {which=} source to check if outdated not found."
             )
         if soft:
             return True
@@ -2257,12 +2572,12 @@ def check_outdated(
     if n_local > 0 and verbose:
         print(f" Number of planets in stored dataset: {n_local}")
         if which == "nasa":
-            print("  (Including also non-default parameters set.)")
+            print("  (Including only default parameters sets.)")
     elif verbose:
         print(" Could not load the stored dataset. ")
 
     # Check if the dataset is outdated
-    n_online, _ = check_online_dataset(source=which, verbose=verbose)
+    n_online, _ = check_outdated_dataset(source=which, verbose=verbose)
 
     if n_online == n_local:
         if verbose:
@@ -2275,8 +2590,13 @@ def check_outdated(
         return True
     elif n_online < n_local:
         if verbose:
-            print("The online dataset has less rows than the stored dataset. ")
-            print("This is unexpected.")
+            print(
+                "The online dataset has less rows than the stored dataset. "
+                + "\n This could be the result of some online row(s) deleted."
+                + "\n Although this is usually not a problem, running "
+                + f"\n`resokit.datasets.download({which=})` could solve it "
+                + "if needed."
+            )
         return False
     # n_online > n_local
     if verbose:
@@ -2287,9 +2607,9 @@ def check_outdated(
 
 
 def check_binary_outdated(
-    which: Union[str, bool], verbose: bool = True, soft=True
+    which: Union[str, bool] = "both", verbose: bool = True, soft=True
 ) -> Union[bool, Tuple[bool, bool]]:
-    """Check if the specified stored bianry dataset is outdated.
+    """Check if the specified stored binary dataset is outdated.
 
     Parameters
     ----------
@@ -2311,16 +2631,18 @@ def check_binary_outdated(
     which = which.lower()  # Ensure lowercase
     if which in ["both", "all"]:
         p = check_binary_outdated(which="p", verbose=verbose, soft=soft)
+        if verbose:
+            print("")  # A space between prints
         s = check_binary_outdated(which="s", verbose=verbose, soft=soft)
         return p, s
     if which not in BINARIES_FILENAMES:
         if which in DATASET_FILENAMES:
             if verbose:
                 print(
-                    f"Use `check_outdated('{which}') to check if "
+                    f"Use `check_outdated({which=}) to check if "
                     + f"'{which}' dataset is outdated."
                 )
-        raise ValueError(f"Invalid which: {which}. Must be 'p' or 's'.")
+        raise ValueError(f"Invalid {which=}. Must be 'p' or 's'.")
 
     # Check if the dataset is stored
     try:
@@ -2346,7 +2668,7 @@ def check_binary_outdated(
         print("Could not load the stored dataset. ")
 
     # Check if the dataset is outdated
-    n_online = check_online_binary(source=which, verbose=verbose)
+    n_online = check_outdated_binary(source=which, verbose=verbose)
 
     if n_online == n_local:
         if verbose:

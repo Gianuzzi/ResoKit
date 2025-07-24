@@ -499,7 +499,7 @@ def df_to_resokit(
     # Check source
     if source not in ["eu", "nasa"]:
         raise ValueError(
-            f"source must be 'eu' or 'nasa'. Got: {source} instead."
+            f"source must be 'eu' or 'nasa'. Got: {source=} instead."
         )
 
     # Check if df is a DataFrame
@@ -1980,7 +1980,7 @@ class StaticSystem:
                 raise IndexError(
                     "Index out of range. "
                     + f"Expected: 0 to {self.n_planets_ + extra - 1}. "
-                    + f"Got: {indices}."
+                    + f"Got: {indices=}."
                 )
             return indices if only_index else self.bodies_[indices]
         # Check if indices is a string

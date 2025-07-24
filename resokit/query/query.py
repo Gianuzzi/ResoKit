@@ -50,23 +50,33 @@ except ImportError:
 
 # Query URLs for the two datasets
 QUERY_URL = {
-    "eu": "http://voparis-tap-planeto.obspm.fr/tap/sync?lang=ADQL&",
-    "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync?",
+    "eu": "http://voparis-tap-planeto.obspm.fr/tap/sync",
+    "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
 }
+
+# =============================================================================
+# DYNAMIC
+# =============================================================================
+
+_session_queries = {}  # This dict will store queries for the session
 
 # =============================================================================
 # FUNCTIONS
 # =============================================================================
 
 
-def _build_query(
+def build_query(
     source: str,
     select: str = "*",
     alias: str = "",
     conditions: str = "",
     order_by: str = "",
 ) -> str:
-    """Construct a query for the specified dataset source.
+    """Construct a very simple query for the specified dataset source.
+
+    For more information on how to write the conditions, visit:
+    - EU information: http://voparis-tap-planeto.obspm.fr/__system__/dc_tables/show/tableinfo/exoplanet.epn_core
+    - NASA information: https://exoplanetarchive.ipac.caltech.edu/docs/TAP/usingTAP.html#sync-query
 
     Parameters
     ----------
@@ -77,6 +87,8 @@ def _build_query(
     alias : str, optional. Default: ''.
         Optional alias for the table or columns.
     conditions : list of str, optional. Default: ''.
+        Multiple (list) conditions are grouped with 'AND' clause.
+        If 'OR' is needed, it must be written explicitly.
         List of conditions for WHERE clause.
     order_by : str, optional. Default: ''.
         Column name for ORDER BY clause.
@@ -85,7 +97,7 @@ def _build_query(
     -------
     str
         Constructed query string.
-    """
+    """  # noqa: E501
     source = source.lower()  # Ensure lowercase
 
     # SELECT clause
@@ -106,8 +118,11 @@ def _build_query(
 
     # WHERE clause
     if conditions:
-        where_conditions = [f"({condition})" for condition in conditions]
-        query += f" WHERE {' AND '.join(where_conditions)}"
+        if isinstance(conditions, str):
+            query += f" WHERE {conditions}"
+        else:
+            where_conditions = [f"({condition})" for condition in conditions]
+            query += f" WHERE {' AND '.join(where_conditions)}"
 
     # ORDER BY clause
     if order_by:
@@ -118,55 +133,131 @@ def _build_query(
     return query
 
 
-def _execute_query(query: str, source: str):
+def execute_query(
+    source: str,
+    query: str,
+    cache: bool = True,
+    to_bytes: bool = False,
+    verbose: bool = True,
+    soft: bool = False,
+) -> Union[bytes, pd.DataFrame]:
     """Execute a query on the specified dataset source.
+
+    This function attempts to follow all TAPs.
+    For more information on how to write the conditions, visit:
+    - EU information: http://voparis-tap-planeto.obspm.fr/__system__/dc_tables/show/tableinfo/exoplanet.epn_core
+    - NASA information: https://exoplanetarchive.ipac.caltech.edu/docs/TAP/usingTAP.html#sync-query
 
     Parameters
     ----------
-    query : str
-        Query string to execute.
     source : str
         Data source identifier ('eu' or 'nasa').
+    query : str
+        Query string to execute.
+    cache : bool, optional. Default: True.
+        Cache the query and result (dataframe) in case of repetition
+        during this session.
+    to_bytes: bool, optional. Default: False
+        Return bytes instead of pandas dataframe.
+    verbose : bool, optional. Default: True.
+        Print messages
+    soft : bool, optional. Default = False.
+        Whether to perform a query that do not includes a
+        WHERE statement. This is not recommended, as it would download
+        the full databases. Use `resokit.datasets.dowload(...) for this.
 
     Returns
     -------
-    pd.DataFrame
-        Resulting dataset as a pandas DataFrame.
-    """
+    Union[bytes, pd.DataFrame]
+        Resulting dataset as a pandas DataFrame, or bytes if requested.
+    """  # noqa: E501
     # Ensure requests module is imported
     global requests_imported
     requests_imported = assert_module_imported(requests_imported, "requests")
 
     source = source.lower()  # Ensure lowercase
 
+    if source not in QUERY_URL:
+        raise ValueError(f"Unknown data source: {source}")
+
     # Define the query URL
     url = QUERY_URL[source]
-    query_url = (
-        "query="
-        + query.replace(" ", "+")
-        + ("&format=csv" if source == "nasa" else "")
-    )
+
+    # Check if WHERE is included
+    if "WHERE" not in query.upper():
+        if not soft:
+            raise ValueError("Expected a WHERE clause in the query.")
+        if verbose:
+            print("Warning: No WHERE clause in the query.")
+
+    # Define the query parameters
+    params = {
+        "query": query,
+    }
+    if source == "nasa":
+        params["format"] = "csv"
+    else:
+        global astropy_imported
+        astropy_imported = assert_module_imported(
+            astropy_imported, "astropy", "(Not needed for NASA)"
+        )
+        params["lang"] = "ADQL"
+
+    # Construct the full query URL (used as the cache key)
+    req = requests.Request("GET", url, params=params).prepare()
+    query_url = req.url  # This is the full URL with encoded params
+
+    if query_url in _session_queries:
+        if verbose:
+            print("Using cached previous identic query.")
+        if not isinstance(_session_queries[query_url], pd.DataFrame):
+            print("Error. Las query result was not a dataframe.")
+            print(" Deleting cached query. Retry if necessary.")
+            raise ValueError(
+                "Expected previous query result as dataframe, but"
+                + f" got {type(_session_queries[query_url])} instead."
+            )
+        if to_bytes:
+            buffer = BytesIO()
+            _session_queries[query_url].to_csv(buffer)
+            buffer.seek(0)
+            return buffer.getvalue()
+        return _session_queries[query_url]
+
+    # Default result
+    result = pd.DataFrame()
 
     try:  # Execute the query
-        response = requests.get(url + query_url)
+        if verbose:
+            print("Executing the query...")
+        response = requests.get(url, params=params)
         response.raise_for_status()
 
         if source == "nasa":  # Parse CSV response
-            return pd.read_csv(BytesIO(response.content))
+            result = pd.read_csv(BytesIO(response.content))
         else:  # Parse VOTable response
-            return Table.read(BytesIO(response.content)).to_pandas()
+            result = Table.read(BytesIO(response.content)).to_pandas()
+
+        if verbose:
+            aux = " , but returned no data" if result.empty else ""
+            print(f"Query executed successfully{aux}.")
 
     except requests.RequestException as e:
         print(f" Error querying {source} database: {e}")
-        return pd.DataFrame()  # Return empty DataFrame on error
+
+    if cache:
+        _session_queries.update({query_url: result})
+
+    return result
 
 
-def query_online(
+def query_system(
     source: str,
     star_name: str = "",
     planet_name: str = "",
     default_flag: int = 1,
     controversial_flag: int = 0,
+    cache: bool = True,
     verbose: bool = True,
     as_resokit: bool = False,
 ) -> Union[ResokitDataFrame, StaticSystem]:
@@ -190,6 +281,9 @@ def query_online(
         If equal to 0, only returns confirmed planets.
         If equal to 1, only returns controversial planets.
         If None, all planets (confirmed and not) are returned.
+    cache : bool, optional. Default: True.
+        Cache the query and result in case of repetition
+        during this session.
     verbose : bool, optional. Default: True.
         Print query information.
     as_resokit : bool, optional. Default: False.
@@ -223,7 +317,7 @@ def query_online(
         field_name = "target_name" if planet_name else "star_name"
         global astropy_imported
         astropy_imported = assert_module_imported(
-            astropy_imported, "astropy", "Not needed for NASA."
+            astropy_imported, "astropy", "(Not needed for NASA)"
         )
     else:
         field_name = "pl_name" if planet_name else "hostname"
@@ -231,7 +325,7 @@ def query_online(
     filter_value = star_name or planet_name  # Get the filter value
 
     # Build the query
-    query = _build_query(source, conditions=[f"{field_name}='{filter_value}'"])
+    query = build_query(source, conditions=[f"{field_name}='{filter_value}'"])
 
     # Add default_flag condition for NASA source
     if default_flag and source == "nasa":
@@ -246,7 +340,11 @@ def query_online(
         print(f" Querying {source} database with query: {query}")
 
     # Execute query and get results
-    df = _execute_query(query, source)
+    df = execute_query(source=source, query=query)
+
+    # Cache result
+    if cache:
+        _session_queries.update({query: df})
 
     # Convert to ResoKit format
     # Note: Metadata is set from default values

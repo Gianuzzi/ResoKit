@@ -22,12 +22,14 @@
 from pathlib import Path
 
 from .databases import clear_memory  # noqa
-from .databases import download_binary_dataset  # noqa
-from .databases import download_dataset  # noqa
-from .databases import load_binary_dataset  # noqa
-from .databases import load_dataset  # noqa
+from .databases import download_binary  # noqa
+from .databases import download  # noqa
+from .databases import load_binary  # noqa
+from .databases import load  # noqa
 from .databases import check_binary_outdated  # noqa
 from .databases import check_outdated  # noqa
+from .databases import update  # noqa
+from .databases import query_new_rows  # noqa
 from .utils import DATASETS_DIR  # noqa
 
 # =============================================================================
@@ -41,10 +43,12 @@ Path(DATASETS_DIR).mkdir(parents=True, exist_ok=True)
 
 __all__ = [
     "clear_memory",
-    "download_binary_dataset",
-    "download_dataset",
-    "load_binary_dataset",
-    "load_dataset",
-    "check_binary_outdated",
+    "load",
+    "download",
+    "update",
     "check_outdated",
+    "load_binary",
+    "download_binary",
+    "check_binary_outdated",
+    "query_new_rows",
 ]

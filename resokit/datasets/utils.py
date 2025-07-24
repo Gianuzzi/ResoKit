@@ -24,12 +24,12 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import mkdtemp
 from types import MappingProxyType
-from typing import Any, Callable, Set, Tuple, Union
+from typing import Any, Callable, List, Set, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from pandas import DataFrame, read_csv
+from pandas import DataFrame, concat, merge, read_csv
 
-from resokit.utils.parser import assert_module_imported
+from resokit.utils.parser import assert_module_imported, parse_to_iter
 
 try:
     from bs4 import BeautifulSoup
@@ -566,6 +566,19 @@ BINARIES_COLUMNS = [
     "imut",
 ]
 
+# Default key columns to use to match old and new rows
+DEFAULT_KEY_COLS = {
+    "nasa": [
+        "pl_name",
+        "pl_letter",
+        "hostname",
+        "default_flag",
+        "pl_controv_flag",
+        "releasedate",
+        "pl_refname",
+    ],
+    "eu": None,
+}
 
 # =============================================================================
 # FUNCTIONS
@@ -582,6 +595,10 @@ def resolve_paths(
 ) -> Tuple[Set[Path], Set[Path], Set[Path]]:
     """
     Normalize to_file, to_zip, and dir_path into full output file and zip paths.
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------
@@ -693,6 +710,10 @@ def check_file_age(
 ) -> int:
     """Check the dataset file's age in days.
 
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
+
     Parameters
     ----------
     file_path : str or Path, optional. Default: False.
@@ -744,6 +765,10 @@ def load_from_zip(
     """Load the dataset from a ZIP archive.
 
     Reads the dataset from a ZIP archive and returns it as a pandas DataFrame.
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------
@@ -806,6 +831,10 @@ def remove_from_zip(zipfname: str, *filenames: str, verbose: bool = False):
     It is unefficient (especially for large archives) because it decompresses
     and recompresses the whole archive.
 
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
+
     Parameters
     ----------
     zipfname : str
@@ -859,6 +888,10 @@ def request_dataset(
     print_size: float = 0.15,
 ) -> bytes:
     """Download the data from a specified URL.
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------
@@ -985,10 +1018,14 @@ def __parse_date(date_str: str, soft: bool = True) -> Union[datetime, bool]:
     raise ValueError(f"Could not parse date: {date_str}")
 
 
-def check_online_dataset(
+def check_outdated_dataset(
     source: str, verbose: bool = True
 ) -> Tuple[int, Union[int, None]]:
     """Query the length (count) of the dataset from the specified source.
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------
@@ -1020,9 +1057,9 @@ def check_online_dataset(
 
     # Call subfunction
     if source == "eu":
-        length_str, date_str = _check_online_eu(verbose=verbose)
+        length_str, date_str = _check_outdated_eu(verbose=verbose)
     elif source == "nasa":
-        length_str, date_str = _check_online_nasa(verbose=verbose)
+        length_str, date_str = _check_outdated_nasa(verbose=verbose)
     else:
         raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
@@ -1058,7 +1095,7 @@ def check_online_dataset(
     return length, last_update
 
 
-def _check_online_eu(
+def _check_outdated_eu(
     verbose: bool = True,
 ) -> Tuple[str, Union[str, None]]:
     """Query the length of the exoplanet.eu dataset.
@@ -1119,7 +1156,7 @@ def _check_online_eu(
     return "-1", None
 
 
-def _check_online_nasa(
+def _check_outdated_nasa(
     verbose: bool = True,
 ) -> Tuple[Union[str, int], Union[str, None]]:
     """Query the length of the NASA dataset.
@@ -1173,11 +1210,15 @@ def _check_online_nasa(
     return "-1", None
 
 
-def check_online_binary(source: str, verbose: bool = True) -> int:
+def check_outdated_binary(source: str, verbose: bool = True) -> int:
     """Query the length (count) of the file from the specified source.
 
     This function is kind of dumb, because it downloads the file (although
     if does not parse it, just count the lines).
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
 
     Parameters
     ----------
@@ -1230,3 +1271,130 @@ def check_online_binary(source: str, verbose: bool = True) -> int:
             )
 
     return length
+
+
+def merge_old_and_new(
+    old_df: DataFrame,
+    new_df: DataFrame,
+    source: Union[str, None] = None,
+    verbose: bool = True,
+    key_cols: Union[str, List, None] = None,
+) -> DataFrame:
+    """
+    Merge old and new DataFrames based on a set of key columns.
+
+    This function compares two datasets (`old_df` and `new_df`)
+    and performs an outer merge using
+    specified key columns. It returns a DataFrame that includes:
+    - Rows only in the old data
+    - Rows in both old and new (with new values preferred)
+    - Rows only in the new data
+
+    Note
+    ----
+    This function is not intended to by explicitly executed by the user.
+
+    Parameters
+    ----------
+    old_df : pd.DataFrame
+        The original (historical) dataset.
+
+    new_df : pd.DataFrame
+        The newly downloaded or updated dataset to be merged.
+
+    source : str or None, optional
+        If `key_cols` is not provided, this value will be used to
+        look up default key columns
+        from `DEFAULT_KEY_COLS[source]`.
+
+    verbose : bool, default=True
+        If True, prints the number of rows in each merge category.
+
+    key_cols : str, list, or None, optional
+        Column name(s) used to join the old and new data. If None,
+        `source` must be provided.
+
+    Returns
+    -------
+    pd.DataFrame
+        A merged DataFrame that contains all unique records from the
+        old and new datasets, giving priority to values from the new
+        dataset where overlap occurs.
+    """
+    assert isinstance(old_df, DataFrame), (
+        "Expected old_df to be a pd.DataFrame, "
+        + f"got {type(old_df)} instead."
+    )
+    assert isinstance(new_df, DataFrame), (
+        "Expected old_df to be a pd.DataFrame, "
+        + f"got {type(new_df)} instead."
+    )
+
+    # Check if empty
+    if len(new_df) == 0:
+        if verbose:
+            print("No merge required.")
+        return old_df
+
+    # Get key cols
+    if key_cols is None and source is None:
+        raise ValueError("Can not be both 'source' and 'key_cols' None")
+    elif key_cols is None:
+        key_cols = DEFAULT_KEY_COLS[source]
+    else:
+        key_cols = parse_to_iter(key_cols)
+
+    # Merge into 1
+    merged = merge(
+        old_df,
+        new_df,
+        on=key_cols,
+        suffixes=("_old", "_new"),
+        how="outer",
+        indicator=True,
+    )
+
+    def clean(df, suffix="new", key_cols=None):
+        """Return cleaned DataFrame with only one suffix + key cols."""
+        cols = [c for c in df.columns if c.endswith(f"_{suffix}")]
+        base = [c.replace(f"_{suffix}", "") for c in cols]
+
+        result = df[cols].copy()
+        result.columns = base
+
+        # Reattach key columns from original (no suffix)
+        if key_cols is not None:
+            for key in key_cols:
+                if key not in result.columns and key in df.columns:
+                    result[key] = df[key]
+
+        return result.reset_index(drop=True)
+
+    # Get cleaned
+    old_clean = clean(
+        merged[merged["_merge"] == "left_only"],
+        suffix="old",
+        key_cols=key_cols,
+    )
+    upd_clean = clean(
+        merged[merged["_merge"] == "both"], suffix="new", key_cols=key_cols
+    )
+    new_clean = clean(
+        merged[merged["_merge"] == "right_only"],
+        suffix="new",
+        key_cols=key_cols,
+    )
+
+    # Message
+    if verbose:
+        nold = len(old_clean)
+        nupd = len(upd_clean)
+        nnew = len(new_clean)
+        print(f" Rows in only old | both | only new: {nold} | {nupd} | {nnew}")
+
+    # Concatenate
+    latest = concat([old_clean, upd_clean, new_clean], ignore_index=True)
+    # latest.drop_duplicates(inplace=True)
+    latest = latest[old_df.columns]  # Reorder
+
+    return latest

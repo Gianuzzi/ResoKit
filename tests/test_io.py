@@ -14,7 +14,7 @@
 import pytest
 
 
-import resokit.io as rio
+import resokit.load as rio
 from resokit.core import StaticBinaryStar, StaticSystem
 
 
@@ -26,8 +26,8 @@ from resokit.core import StaticBinaryStar, StaticSystem
 @pytest.mark.usefixtures("load_eu_data")
 class TestLoadSystem:
     load_function = {
-        "eu": rio.load_system_from_eu,
-        "nasa": rio.load_system_from_nasa,
+        "eu": rio.from_eu,
+        "nasa": rio.from_nasa,
     }
 
     @pytest.mark.parametrize("source", ["eu"])
@@ -119,7 +119,7 @@ class TestLoadBinary:
         with pytest.raises(
             ValueError, match="Star 'wrong_system' not found in b"
         ):
-            rio.load_from_binary(name="wrong_system", verbose=False)
+            rio.from_binary(name="wrong_system", verbose=False)
         # Capture the output
         out, _ = capfd.readouterr()
         # Ensure the verbose output is correct
@@ -127,7 +127,7 @@ class TestLoadBinary:
 
         # Now with verbose=True
         with pytest.raises(ValueError, match="Star 'wrong_system' not found"):
-            rio.load_from_binary(name="wrong_system", verbose=True)
+            rio.from_binary(name="wrong_system", verbose=True)
 
         # Ensure the verbose output is correct
         out, _ = capfd.readouterr()
@@ -139,9 +139,7 @@ class TestLoadBinary:
     def test_load_binary_wrong_soft(self, capfd):
         """Test load_binary with wrong system, soft=True."""
 
-        syst = rio.load_from_binary(
-            name="wrong_system", verbose=True, soft=True
-        )
+        syst = rio.from_binary(name="wrong_system", verbose=True, soft=True)
 
         # syst is a DataFrame
         assert syst is None
@@ -159,7 +157,7 @@ class TestLoadBinary:
     def test_load_binary_almost(self, capfd):
         """Test load_binary with almost correct system."""
 
-        syst = rio.load_from_binary(name="kepler47", verbose=False, soft=True)
+        syst = rio.from_binary(name="kepler47", verbose=False, soft=True)
 
         assert syst is None
 
@@ -169,7 +167,7 @@ class TestLoadBinary:
         assert err == ""
 
         # Now with verbose=True
-        syst = rio.load_from_binary(name="kepler47", verbose=True, soft=True)
+        syst = rio.from_binary(name="kepler47", verbose=True, soft=True)
 
         assert syst is None
 
@@ -184,7 +182,7 @@ class TestLoadBinary:
         """Test load_binary with almost correct system."""
         # Assert nothing is pre-stored
 
-        syst = rio.load_from_binary(name="kepler47", exact_match=False)
+        syst = rio.from_binary(name="kepler47", exact_match=False)
 
         assert isinstance(syst, StaticBinaryStar)
         assert syst.name == "Kepler47"

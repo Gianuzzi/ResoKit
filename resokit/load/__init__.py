@@ -12,40 +12,21 @@
 # ============================================================================
 # DOCS
 # ============================================================================
-"""ResoKit.
 
-ResoKit addresses the need for diagnosing and analyzing  mean motion
-resonances (MMR) in coplanar planetary systems.
-"""
-
-try:
-    from ._version import version as __version__
-except ImportError:
-    __version__ = "unknown"
-
+"""The ResoKit.load module includes tools to load planetary systems locally."""
 
 # =============================================================================
 # IMPORTS
 # =============================================================================
 
-from . import core  # noqa
-from . import datasets  # noqa
-from . import load  # noqa
-from . import query  # noqa
-from . import utils  # noqa
-from . import units  # noqa
-from .utils import mmr  # noqa
-from .utils import mass_radius  # noqa
+from .load import from_binary  # noqa
+from .load import from_eu  # noqa
+from .load import from_nasa  # noqa
 
-# Make the core classes available directly from the package.
+# Make the functions available at the package level
 
 __all__ = [
-    "core",
-    "datasets",
-    "load",
-    "query",
-    "units",
-    "utils",
-    "mmr",
-    "mass_radius",
+    "from_binary",
+    "from_eu",
+    "from_nasa",
 ]
