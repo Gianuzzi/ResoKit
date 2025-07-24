@@ -15,13 +15,25 @@
 ## Motivation
 Given the vast number of exoplanetary systems surveyed, and the expectation of many more to come, we believe it is essential to have a tool capable of processing and providing valuable insights from such a large volume of observational data. Two prominent sources of this data are the [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) and the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/).
 
-
 ## Features
-ResoKit currently has two main functions:
+The two main currently ResoKit applications involve the manipulation of data:
 
-- Analyze exoplanetary systems properties obtained from [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) or the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/).
+- Exoplaneteary Datasets (including downloading, re-loading and updating) obtained from [NASA Exoplanet Archive](https://exoplanetarchive.ipac.caltech.edu/) or the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/).
 
-- Analyze exoplanetary systems integrated with a n-body code.
+- Exoplanetary Systems created within the context of the datasets.
+
+## Examples
+Some `notebook` format tutorials can be found at in the [tutorials](./docs/source/tutorials/) directory.
+
+More information available in the [documentation](https://resokit.readthedocs.io/en/latest/).
+
+
+## Future
+
+The implementation of tools for analizyng standard n-body simulations output
+(and the Mean Movement Resonacnes involved) is still under development, but will be the next feature of ResoKit.
+
+Stay tuned for updates!
 
 -------------------------------------------------------------------------------
 
@@ -40,7 +52,7 @@ $ python -m pip install resokit
 
 #### Extra dependencies
 
-If query online databases features will be used with the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/) dataset, package [astropy](https://pypi.org/project/astropy/) is needed.
+If query online database features will be used with the [Encyclopaedia of exoplanetary systems](https://exoplanet.eu/home/) dataset, package [astropy](https://pypi.org/project/astropy/) is needed.
 
 You can install all extra ResoKit requirements via pip:
 

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42", "setuptools_scm"]
+requires = ["setuptools>=61", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -38,9 +38,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-query = ["astropy"]
+query = ["astropy", "pyvo"]
 reb = ["rebound"]
-all = ["astropy", "rebound"]
+all = ["astropy", "pyvo", "rebound"]
 
 [tool.setuptools]
 include-package-data = true
