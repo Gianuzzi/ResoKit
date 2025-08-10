@@ -881,6 +881,31 @@ def remove_from_zip(zipfname: str, *filenames: str, verbose: bool = False):
         shutil.rmtree(tempdir)
 
 
+def _get_request_with_refresh(url: str, verbose: bool = True, **kwargs):
+    """Request a URL and automatically follows HTML meta refresh redirects."""
+    response = requests.get(url, **kwargs)
+
+    # Regex for meta refresh
+    meta_match = re.search(
+        r'<meta\s+[^>]*http-equiv=["\']?Refresh["\']?[^>]'
+        r'*content=["\']?\s*\d+\s*;\s*URL=([^"\'>\s]+)',
+        response.text,
+        flags=re.IGNORECASE,
+    )
+
+    if meta_match is not None:
+        redirect_url = meta_match.group(1).strip()
+        # If the redirect is relative, build absolute
+        if not redirect_url.lower().startswith("http"):
+            redirect_url = requests.compat.urljoin(response.url, redirect_url)
+
+        if verbose:
+            print(f"Following meta refresh to: {redirect_url}")
+        return requests.get(redirect_url, **kwargs)
+
+    return response
+
+
 def request_dataset(
     url: str,
     verbose: bool = True,
@@ -933,7 +958,7 @@ def request_dataset(
         print(f" Note: Progress is shown at every {print_size} {print_unit}")
 
     # Send a GET request with streaming enabled
-    response = requests.get(url, stream=True)
+    response = _get_request_with_refresh(url, verbose=verbose, stream=True)
 
     # Check for errors
     response.raise_for_status()
@@ -1021,7 +1046,7 @@ def __parse_date(date_str: str, soft: bool = True) -> Union[datetime, bool]:
 def check_outdated_dataset(
     source: str, verbose: bool = True
 ) -> Tuple[int, Union[int, None]]:
-    """Query the length (count) of the dataset from the specified source.
+    """Web scrap the length (count) of the dataset from the specified source.
 
     Note
     ----
@@ -1098,7 +1123,7 @@ def check_outdated_dataset(
 def _check_outdated_eu(
     verbose: bool = True,
 ) -> Tuple[str, Union[str, None]]:
-    """Query the length of the exoplanet.eu dataset.
+    """Web scrap the length of the exoplanet.eu dataset.
 
     Parameters
     ----------
@@ -1159,7 +1184,7 @@ def _check_outdated_eu(
 def _check_outdated_nasa(
     verbose: bool = True,
 ) -> Tuple[Union[str, int], Union[str, None]]:
-    """Query the length of the NASA dataset.
+    """Web scrap the length of the NASA dataset.
 
     Parameters
     ----------
@@ -1211,7 +1236,7 @@ def _check_outdated_nasa(
 
 
 def check_outdated_binary(source: str, verbose: bool = True) -> int:
-    """Query the length (count) of the file from the specified source.
+    """Web scrap the length (count) of the file from the specified source.
 
     This function is kind of dumb, because it downloads the file (although
     if does not parse it, just count the lines).

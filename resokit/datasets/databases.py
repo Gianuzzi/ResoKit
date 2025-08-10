@@ -763,6 +763,11 @@ class DatasetManager:
             )
             if not data or len(data) == 0:
                 raise ValueError(f"Empty dataset downloaded from {url}.")
+            elif len(data) < 1024:  # Just to check if wrong data downloaded
+                raise ValueError(
+                    "Expected more data from requested dataset. "
+                    + "There could be a URL or an online database problem."
+                )
             elif verbose:
                 print(
                     f" Data downloaded successfully. ({len(data)/1e6:.2f} MB)"
