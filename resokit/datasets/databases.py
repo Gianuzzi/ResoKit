@@ -2243,7 +2243,7 @@ def update(
         overwrite=overwrite,
         soft=False,
         check_outd=check_outd,
-        only_new_rows=True,
+        only_new_rows=source != "eu",  # QUERY EU NOT IMPLEMENTED YET
         to_resokit=to_resokit,
         verbose=verbose,
     )
