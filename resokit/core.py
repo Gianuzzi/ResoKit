@@ -1296,7 +1296,7 @@ class StaticBinaryStar:
     nplanets : int
         Number of planets in the binary system.
     planet_HW_crit : float
-        Hill-Waterworth criterion for the binary system.
+        Holman & Wiegert (1999) criterion for the binary system.
     total_mass_ : float
         Total mass of the binary system, in solar masses.
     known_orbit_ : bool
