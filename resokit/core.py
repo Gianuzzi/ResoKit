@@ -3162,14 +3162,41 @@ class StaticSystem:
             triplets = [(i, i + 1, i + 2) for i in range(self.n_planets_ - 2)]
         elif isinstance(which, int):
             if which < 0 or which >= self.n_planets_ - 2:
-                raise ValueError("Index out of range.")
+                raise ValueError(f"Index {which} out of range.")
             triplets = [(which, which + 1, which + 2)]
+        elif isinstance(which, (tuple, list)):
+            triplets = []
+            for value in which:
+                if isinstance(value, int):
+                    if value < 0 or value >= self.n_planets_ - 2:
+                        raise ValueError(f"Index {value} out of range.")
+                    triplets.append([value, value + 1, value + 2])
+                elif isinstance(value, (list, tuple)):
+                    triplets.append(value)
+                else:
+                    raise TypeError(
+                        f"Argument of type {type(value)} not supported"
+                    )
         else:
-            raise ValueError("Invalid value for 'which'.")
+            raise TypeError(f"Argument of type {type(which)} not supported")
+
+        # Check all good
+        for triplet in triplets:
+            if len(triplet) != 3:
+                raise ValueError(f"Triplet {triplet} is not valid.")
+            elif (min(triplet) < 0) or (max(triplet) > self.n_planets_):
+                raise ValueError(f"Triplet {triplet} is out of bounds.")
 
         # Create a new figure if ax is None
         if ax is None:
             ax = plt.gca()
+
+        # Get limits
+        xmin, xmax = ax.get_xlim()
+        ymin, ymax = ax.get_ylim()
+        if xmin == 0 and xmax == 1 and ymin == 0 and ymax == 1:
+            xmin = ymin = 1e6
+            xmax = ymax = -1e6
 
         # Check label
         if label:
@@ -3200,8 +3227,6 @@ class StaticSystem:
         fmt = kwargs.pop("fmt", "o")
 
         # Plot each triplet
-        xmin = ymin = 1e6
-        xmax = ymax = -1e6
         for trip, (i, j, k) in enumerate(triplets):
             if label is True and not use_suffix:
                 label_aux = "".join([str(i), str(j), str(k)])
