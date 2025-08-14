@@ -132,23 +132,25 @@ def convert(
         Units to convert from.
     to_units : str or list of str
         Units to convert to.
-    power : int or list of int
+    power : int or list of int, optional
         Power(s) for each unit (default = 1).
         Must match length if list.
 
-    Example
-    -------
-    To convert 5 km s^{-2} to au yr^{-2} simply invoke:
-    >> resokit.units.convert(5,
-                             from_units=("km", "s"),
-                             to_units=("au", "yr"),
-                             power=(1, -2),
-                             )
+    Examples
+    --------
+    To convert 5 km s^{-2} to au yr^{-2}:
+
+    >>> resokit.units.convert(
+    ...     5,
+    ...     from_units=("km", "s"),
+    ...     to_units=("au", "yr"),
+    ...     power=(1, -2)
+    ... )
     33247713.903743323
 
     Returns
     -------
-    Union[float, List]
+    float or list of float
         Converted value, or list of converted values.
     """
     if from_units is None:

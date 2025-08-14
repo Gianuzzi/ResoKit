@@ -164,7 +164,7 @@ def execute_query(
     soft : bool, optional. Default = False.
         Whether to perform a query that do not includes a
         WHERE statement. This is not recommended, as it would download
-        the full databases. Use `resokit.datasets.dowload(...) for this.
+        the full databases. Use `resokit.datasets.download(...)` for this.
 
     Returns
     -------
