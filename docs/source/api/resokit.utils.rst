@@ -1,4 +1,4 @@
-``resokit.utils`` package
+Package ``resokit.utils``
 =========================
 
 .. automodule:: resokit.utils
@@ -6,14 +6,14 @@
    :show-inheritance:
    :member-order: bysource
 
-``resokit.utils.mass_radius`` package
+Package ``resokit.utils.mass_radius``
 -------------------------------------
 .. automodule:: resokit.utils.mass_radius
    :members:
    :show-inheritance:
    :member-order: bysource
 
-``resokit.utils.mmr`` package
+Package ``resokit.utils.mmr``
 -----------------------------
 .. automodule:: resokit.utils.mmr
    :members:

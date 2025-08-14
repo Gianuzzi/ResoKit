@@ -1,7 +1,7 @@
-Package ``resokit.load``
+Package ``resokit.units``
 =========================
 
-.. automodule:: resokit.load
+.. automodule:: resokit.units
    :members:
    :show-inheritance:
    :member-order: bysource

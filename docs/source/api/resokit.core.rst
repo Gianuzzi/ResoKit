@@ -1,4 +1,4 @@
-``resokit.core`` module
+Module ``resokit.core``
 =======================
 
 .. automodule:: resokit.core
