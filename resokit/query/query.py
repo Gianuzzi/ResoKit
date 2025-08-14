@@ -22,6 +22,8 @@ from typing import Union
 
 import pandas as pd
 
+import requests
+
 from resokit.core import (
     ResokitDataFrame,
     StaticSystem,
@@ -30,12 +32,6 @@ from resokit.core import (
 )
 from resokit.utils.parser import DEFAULT_METADATA, assert_module_imported
 
-try:
-    import requests
-
-    requests_imported = True
-except ImportError:
-    requests_imported = False
 
 try:
     from astropy.table import Table
@@ -171,10 +167,6 @@ def execute_query(
     Union[bytes, pd.DataFrame]
         Resulting dataset as a pandas DataFrame, or bytes if requested.
     """  # noqa: E501
-    # Ensure requests module is imported
-    global requests_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-
     source = source.lower()  # Ensure lowercase
 
     if source not in QUERY_URL:
@@ -295,10 +287,6 @@ def query_system(
         Results of the query in a :py:class:`ResokitDataFrame`
         (if `as_resokit=True`), or :py:class:`StaticSystem`.
     """
-    # Ensure requests and astropy modules are imported
-    global requests_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-
     if not planet_name and not star_name:
         raise ValueError(
             "Either 'planet_name' or 'star_name' must be provided."

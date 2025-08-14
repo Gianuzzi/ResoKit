@@ -27,23 +27,14 @@ from types import MappingProxyType
 from typing import Any, Callable, List, Set, Tuple, Union
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from bs4 import BeautifulSoup
+
 from pandas import DataFrame, concat, merge, read_csv
 
-from resokit.utils.parser import assert_module_imported, parse_to_iter
+import requests
 
-try:
-    from bs4 import BeautifulSoup
+from resokit.utils.parser import parse_to_iter
 
-    bs4_imported = True
-except ImportError:
-    bs4_imported = False
-
-try:
-    import requests
-
-    requests_imported = True
-except ImportError:
-    requests_imported = False
 
 # =============================================================================
 # CONSTANTS
@@ -937,10 +928,6 @@ def request_dataset(
     content : bytes
         The downloaded data.
     """
-    # Check if requests is imported
-    global requests_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-
     # Print message
     if verbose:
         print(f"Downloading data from {url}...")
@@ -1067,13 +1054,6 @@ def check_outdated_dataset(
         Date of the last update of the dataset.
     If no match is found, -1 is returned for length and None for last_update.
     """
-    # Ensure requests and BeautifulSoup modules are imported
-    global requests_imported, bs4_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-    bs4_imported = assert_module_imported(
-        bs4_imported, "bs4", alias="beautifulsoup4", package="BeautifulSoup"
-    )
-
     source = source.lower()  # Ensure lowercase
 
     # Message
@@ -1258,10 +1238,6 @@ def check_outdated_binary(source: str, verbose: bool = True) -> int:
         Amount of entries (rows) in the file.
         If no match is found, -1 is returned.
     """
-    # Ensure requests module is imported
-    global requests_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-
     source = source.lower()  # Ensure lowercase
     if source not in BINARIES_URLS:
         raise ValueError(f"Invalid source: {source}. Must be 'p' or 's'.")
