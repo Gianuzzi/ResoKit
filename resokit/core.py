@@ -517,8 +517,13 @@ def df_to_resokit(
 
     # Check if "eu" and query. If so, modify specifics
     if source == "eu":
-        if "alt_target_name" in df.columns:
-            df["alt_target_name"].str.replace("#", ", ", regex=False)
+        df = df.apply(
+            lambda col: (
+                col.str.replace("#", ", ", regex=False)
+                if col.dtype == "object"
+                else col
+            )
+        )
         if "modification_date" in df.columns:
             df["modification_date"] = pd.to_datetime(
                 df["modification_date"], errors="coerce"
@@ -2306,6 +2311,10 @@ class StaticSystem:
         is_period = p_a_h == 0
         is_hill = p_a_h == 2
 
+        # Check err_method
+        if err_method not in [-1, 0, 1, 2, 3, 4]:
+            raise ValueError(f"Invalid {err_method=}.")
+
         # Define parameters
         if is_period:  # Period
             param = "P"
@@ -2351,14 +2360,17 @@ class StaticSystem:
                 continue
 
             # Define the used (this) planet masses
-            if err_method > 0:
-                pl_mass = used_mass_table.iloc[i, 0]
-                pl_mass_err_min = used_mass_table.iloc[i, 1]
-                pl_mass_err_max = used_mass_table.iloc[i, 2]
-            else:
+            if (
+                err_method == -1 or 
+                (err_method == 0 and not deep_estimate)
+            ):
                 pl_mass = used_mass_table.iloc[i]
                 pl_mass_err_min = 0
                 pl_mass_err_max = 0
+            else:
+                pl_mass = used_mass_table.iloc[i, 0]
+                pl_mass_err_min = used_mass_table.iloc[i, 1]
+                pl_mass_err_max = used_mass_table.iloc[i, 2]
 
             # Check if binary star
             if self.is_binary_:

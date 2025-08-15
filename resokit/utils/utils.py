@@ -277,7 +277,7 @@ def calc_period_with_errors(
         Orbital period and its minimum and maximum errors, in days.
     """
     # Switch for the error propagation method
-    if err_method <= 0:
+    if err_method in [-1, 0]:
         return calc_period(a, m_star, m_planet), 0, 0
     elif err_method == 1:
         period = calc_period(a, m_star, m_planet)
@@ -412,7 +412,7 @@ def calc_a_with_errors(
         Semi-major axis and its minimum and maximum errors, in AU.
     """
     # Switch for the error propagation method
-    if err_method <= 0:
+    if err_method in [-1, 0]:
         return calc_a(period, m_star, m_planet), 0, 0
     elif err_method == 1:
         a = calc_a(period, m_star, m_planet)
@@ -571,7 +571,7 @@ def calc_hill_radius_with_errors(
         Hill radius and its minimum and maximum errors, in AU.
     """
     # Switch for the error propagation method
-    if err_method <= 0:
+    if err_method in [-1, 0]:
         return calc_hill_radius(a, e, m_star, m_planet), 0, 0
     elif err_method == 1:
         hill = calc_hill_radius(a, e, m_star, m_planet)
@@ -666,7 +666,7 @@ def calc_sum_with_errors(
         Sum of the values and its error.
     """
     # Switch for the error propagation method
-    if err_method <= 0:
+    if err_method in [-1, 0]:
         return sum(val[0] for val in vals), 0.0, 0.0
     elif err_method == 1:
         suma = sum(val[0] for val in vals)

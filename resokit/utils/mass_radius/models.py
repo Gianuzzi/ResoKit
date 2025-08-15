@@ -888,7 +888,7 @@ def estimate_mass_single(
     if not silent and model in ["ck17", "o20", "m24"] and err_method == 1:
         warnings.warn(
             "Using the naive error propagation method may generate"
-            + " excecively large errors in multivariate sections",
+            + " excessively large errors in multivariate sections",
             stacklevel=2,
         )
 
@@ -993,7 +993,7 @@ def estimate_radius_single(
     if not silent and model == "o20" and err_method == 1:
         warnings.warn(
             "Using the naive error propagation method may generate"
-            + " excecively large errors in multivariate sections",
+            + " excessively large errors in multivariate sections",
             stacklevel=2,
         )
 
