@@ -568,7 +568,11 @@ DEFAULT_KEY_COLS = {
         "releasedate",
         "pl_refname",
     ],
-    "eu": None,
+    "eu": [
+        "name",
+        "updated",
+        "star_name",
+    ],
 }
 
 # =============================================================================
@@ -1395,6 +1399,7 @@ def merge_old_and_new(
 
     # Concatenate
     latest = concat([old_clean, upd_clean, new_clean], ignore_index=True)
+
     # latest.drop_duplicates(inplace=True)
     latest = latest[old_df.columns]  # Reorder
 

@@ -50,6 +50,7 @@ QUERY_URL = {
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
 }
 
+
 # =============================================================================
 # DYNAMIC
 # =============================================================================
@@ -251,8 +252,9 @@ def query_system(
     controversial_flag: int = 0,
     cache: bool = True,
     verbose: bool = True,
-    as_resokit: bool = False,
-) -> Union[ResokitDataFrame, StaticSystem]:
+    as_frame: bool = False,
+    raw: bool = False,
+) -> Union[pd.DataFrame, ResokitDataFrame, StaticSystem]:
     """Query the online dataset based on specified filters.
 
     Parameters
@@ -278,14 +280,19 @@ def query_system(
         during this session.
     verbose : bool, optional. Default: True.
         Print query information.
-    as_resokit : bool, optional. Default: False.
-        Whether to return the dataset in ResoKit format.
+    as_frame : bool, optional. Default: False.
+        Whether to return the dataset in a `ResokitDataFrame`
+        format (True), or a `StaticSystem` format (False).
+    raw : bool, optional. Default = False.
+        Whether to return a pandas DataFrame of the query result.
+        Overrides `as_frame` parameter.
 
     Returns
     -------
-    data : ResokitDataFrame or StaticSystem
+    data : DataFrame, ResokitDataFrame or StaticSystem
         Results of the query in a :py:class:`ResokitDataFrame`
-        (if `as_resokit=True`), or :py:class:`StaticSystem`.
+        (if `as_resokit=True`), or :py:class:`StaticSystem`,
+        or :py:class:`pandas.DataFrame` (if `raw=True`).
     """
     if not planet_name and not star_name:
         raise ValueError(
@@ -334,6 +341,10 @@ def query_system(
     if cache:
         _session_queries.update({query: df})
 
+    # Get raw?
+    if raw:
+        return df
+
     # Convert to ResoKit format
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
@@ -347,7 +358,7 @@ def query_system(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return StaticSystem
+    if not as_frame:  # Return StaticSystem
         return resokit_to_system(reso)
 
     return reso  # Return ResoKit DataFrame

@@ -36,6 +36,7 @@ from resokit.utils.mmr import plot_mmrs
 from resokit.utils.parser import (
     DEFAULT_METADATA,
     MAPPINGS,
+    QUERY_MAPPINGS,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
@@ -456,7 +457,7 @@ def df_to_resokit(
     source: str,
     drop: bool = True,
     copy: bool = False,
-    sort_by: Union[str, bool] = "P",
+    sort_by: Union[str, bool] = True,
     return_df: bool = False,
     rename_index: bool = False,
     metadata: Union[dict, None] = None,
@@ -479,7 +480,7 @@ def df_to_resokit(
         Whether to edit a copy of the DataFrame, instead of the original.
         Despite this, the output will be a :py:class:`ResokitDataFrame`,
         unless `return_df=True`.
-    sort_by : str, bool, optional. Default: "P".
+    sort_by : str, bool, optional. Default: True.
         Column to sort the data by.
         If `False` or `None`, do not sort the data.
         If `True`, sort by period ("P").
@@ -506,19 +507,35 @@ def df_to_resokit(
     if not isinstance(df, pd.DataFrame):
         raise TypeError(f"df must be a DataFrame. Got: {type(df)} instead.")
 
-    # Get the new columns dictionary
-    new_cols_dict = MAPPINGS[source]
-
     # Copy the DataFrame
     if copy:
         df = df.copy()
 
+    # Get the new columns dictionary
+    first_col_change = QUERY_MAPPINGS[source]
+    final_col_change = MAPPINGS[source]
+
+    # Check if "eu" and query. If so, modify specifics
+    if source == "eu":
+        if "alt_target_name" in df.columns:
+            df["alt_target_name"].str.replace("#", ", ", regex=False)
+        if "modification_date" in df.columns:
+            df["modification_date"] = pd.to_datetime(
+                df["modification_date"], errors="coerce"
+            ).dt.year
+        if "obs_id" in df.columns:  # Alright, this is a query
+            metadata = dict(DEFAULT_METADATA)
+            metadata["eu_indexes"] = df["obs_id"]
+
     # Rename columns
-    df = df.rename(columns=new_cols_dict)
+    # First change
+    df = df.rename(columns=first_col_change)
+    # Second change
+    df = df.rename(columns=final_col_change)
 
     # Drop columns not in the mapping
     if drop:
-        df = df.drop(columns=set(df.columns) - set(new_cols_dict.values()))
+        df = df.drop(columns=set(df.columns) - set(final_col_change.values()))
 
     # Assert no empty DataFrame
     if df.empty:
@@ -538,8 +555,10 @@ def df_to_resokit(
 
     # Sort by
     if sort_by and sort_by is not None:
-        if sort_by is True:
+        if sort_by is True and "P" in df.columns:
             sort_by = "P"
+        elif sort_by is True:
+            sort_by = df.columns[0]
         df = df.sort_values(by=sort_by, ascending=True)
 
     # Rename index if needed
@@ -656,11 +675,12 @@ class StaticBody(ResokitDataFrame):
     def _web_page_default(self):
         """Set the default value for web_page."""
         if not self.is_star and self.source == "eu":
-            aux = (
-                str(self.name).replace(" ", "_").lower()
-                + "--"
-                + str(self.metadata["eu_indexes"])
-            )
+            index = self.metadata.get("eu_indexes")
+            if index is None:
+                index = self.metadata.get("obs_id")
+            if index is None:
+                return "Not available"
+            aux = str(self.name).replace(" ", "_").lower() + "--" + str(index)
             return "https://exoplanet.eu/catalog/" + aux + "/"
         if self.source == "nasa":
             aux = str(self.name).replace(" ", "%20")

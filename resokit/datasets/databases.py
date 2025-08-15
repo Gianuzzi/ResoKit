@@ -26,6 +26,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import attrs
 
+import numpy as np  # for nan
+
 import pandas as pd
 
 from resokit.core import MetaData, ResokitDataFrame, df_to_resokit
@@ -49,7 +51,12 @@ from resokit.datasets.utils import (
     resolve_paths,
 )
 from resokit.query import build_query, execute_query
-from resokit.utils.parser import DEFAULT_METADATA, parse_name, parse_to_iter
+from resokit.utils.parser import (
+    DEFAULT_METADATA,
+    QUERY_MAPPINGS,
+    parse_name,
+    parse_to_iter,
+)
 
 # =============================================================================
 # CLASSES
@@ -772,10 +779,22 @@ class DatasetManager:
                 source=source,
                 to_resokit=False,
                 verbose=verbose,
+                rename=True,
                 old_df_and_new=True,
             )
+            # Check if empty
             if len(new_df) == 0:
                 raise ValueError(f"No new rows downloaded from {url}.")
+            # Add missing columns
+            for col in old_df.columns:
+                is_num = pd.api.types.is_numeric_dtype(old_df[col].dtype)
+                if col not in new_df.columns and is_num:
+                    new_df[col] = np.nan
+                elif col not in new_df.columns and not is_num:
+                    new_df[col] = ""
+                else:
+                    new_df[col].astype(old_df[col].dtype)
+
             # Merge old and new into one
             df = merge_old_and_new(
                 old_df=old_df, new_df=new_df, source=source, verbose=verbose
@@ -864,6 +883,7 @@ class DatasetManager:
         to_resokit: Union[None, bool] = False,
         verbose: bool = True,
         load_kwargs: Union[Dict, None] = None,
+        rename: bool = True,
         old_df_and_new: bool = False,
     ) -> Union[pd.DataFrame, ResoKitDataset, Tuple]:
         """Query new rows from online dataset."""
@@ -872,16 +892,18 @@ class DatasetManager:
         # Define last update row name
         if source == "eu":
             update_col = "updated"
-            raise NotImplementedError(
-                "This feature is not implemented yet, as the TAP services of"
-                + "\nhttps://exoplanet.eu/ do not include the values for the"
-                + "\n'updated' column."
-                + "\nThis has already been informed to the Exoplanet EU Team"
-                + "\n(https://exoplanet.eu/team/), and will be implemented"
-                + "\nwhen the available."
-            )
+            online_col = "modification_date"
+            # raise NotImplementedError(
+            #     "This feature is not implemented yet, as the TAP services of"
+            #     + "\nhttps://exoplanet.eu/ do not include the values for the"
+            #     + "\n'updated' column."
+            #     + "\nThis has already been informed to the Exoplanet EU Team"
+            #     + "\n(https://exoplanet.eu/team/), and will be implemented"
+            #     + "\nwhen the available."
+            # )
         elif source == "nasa":
             update_col = "rowupdate"
+            online_col = update_col
         else:
             raise ValueError("Invalid source. Must be 'eu' or 'nasa'.")
 
@@ -909,6 +931,7 @@ class DatasetManager:
         # Get last update
         max_date_str = old_df[update_col][~old_df[update_col].isna()].max()
 
+        # Message
         if verbose:
             print(f"Latest row update in local dataset: {max_date_str}")
             print("Querying online rows update after that date.")
@@ -917,7 +940,7 @@ class DatasetManager:
         query = build_query(
             source=source,
             select="*",
-            conditions=f"{update_col} >= '{max_date_str}'",
+            conditions=f"{online_col} >= '{max_date_str}'",
         )
 
         # Get new
@@ -931,6 +954,17 @@ class DatasetManager:
                 print("No new rows downloaded")
             else:
                 print(f"Amount of rows downloaded: {len(new_df)}")
+
+        # Rename?
+        if rename:
+            # Now, updated from eu can be a problem...
+            if source == "eu" and (
+                "updated" in new_df.columns
+                and "modification_date" in new_df.columns
+            ):
+                new_df.drop(columns="updated", inplace=True)
+                # Updated is rewritten with rename
+            new_df.rename(columns=QUERY_MAPPINGS[source], inplace=True)
 
         # Define new
         if to_resokit is False:
@@ -2072,6 +2106,7 @@ def query_new_rows(
     check_outd: bool = True,
     to_resokit: Union[None, bool] = False,
     verbose: bool = True,
+    rename: bool = True,
     load_kwargs: Union[Dict, None] = None,
 ) -> Union[pd.DataFrame, ResoKitDataset, Tuple]:
     """Query online the rows updated after latest local dataset row-update.
@@ -2105,6 +2140,9 @@ def query_new_rows(
         If `None`, as a ResoKitDataset, using all original columns.
     verbose : bool, optional. Default: True.
         If `True`, displays messages about the query process.
+    rename : bool, optional. Default: True.
+        If `True`, renames the columns to match the original
+        databe column names. Mainly for EU database queries.
     load_kwargs : dict, None, optional. Default: None
         Dictionary with keyboard arguments for the `resokit.load`
         function.
@@ -2125,6 +2163,7 @@ def query_new_rows(
             check_outd=check_outd,
             to_resokit=to_resokit,
             verbose=verbose,
+            rename=rename,
             load_kwargs=load_kwargs,
         )
         if verbose:
@@ -2134,6 +2173,7 @@ def query_new_rows(
             check_outd=check_outd,
             to_resokit=to_resokit,
             verbose=verbose,
+            rename=rename,
             load_kwargs=load_kwargs,
         )
         return eu_new, nasa_new
@@ -2153,6 +2193,7 @@ def query_new_rows(
         to_resokit=to_resokit,
         verbose=verbose,
         load_kwargs=load_kwargs,
+        rename=rename,
         old_df_and_new=False,
     )
     assert isinstance(result, (pd.DataFrame, ResoKitDataset)), (
@@ -2243,7 +2284,7 @@ def update(
         overwrite=overwrite,
         soft=False,
         check_outd=check_outd,
-        only_new_rows=source.lower() != "eu",  # NOT IMPLEMENTED YET
+        only_new_rows=True,
         to_resokit=to_resokit,
         verbose=verbose,
     )
