@@ -11,7 +11,7 @@
 # DOCS
 # =============================================================================
 
-"""Module with extra utility functions and tools for a variety of tasks."""
+"""Module with additional functions and tools for medley tasks."""
 
 # =============================================================================
 # IMPORTS

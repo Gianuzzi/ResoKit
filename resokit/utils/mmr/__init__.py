@@ -13,7 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.utils.mmr module includes diverse tools for MMRs analysis."""
+"""The ResoKit.utils.mmr package includes diverse tools for MMRs analysis."""
 
 # =============================================================================
 # IMPORTS

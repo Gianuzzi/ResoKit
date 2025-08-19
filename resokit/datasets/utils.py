@@ -11,7 +11,7 @@
 # DOCS
 # =============================================================================
 
-"""Module with internal utility functions for the datasets module."""
+"""Module with internal utility functions for the datasets package."""
 
 # =============================================================================
 # IMPORTS

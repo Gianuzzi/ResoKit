@@ -1572,7 +1572,7 @@ class BinaryDatasetManager:
         if inferr:
             kwargs["colspecs"] = "infer"
         elif circumbinary:
-            kwargs["widths"] = [15, 10, 6, 6, 8, 2, 7, 7, 2, 10, 6, 9, 7, 8]
+            kwargs["widths"] = [15, 10, 6, 6, 8, 2, 7, 7, 2, 10, 6, 9, 8, 8]
         else:
             kwargs["widths"] = [15, 10, 6, 6, 8, 2, 8, 7, 2, 8, 6, 9, 7, 8]
 

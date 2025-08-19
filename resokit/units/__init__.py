@@ -13,7 +13,7 @@
 # DOCS
 # =============================================================================
 
-"""The ResoKit.units module includes tools for unit manipulation."""
+"""The ResoKit.units package includes tools for unit manipulation."""
 
 # =============================================================================
 # IMPORTS
