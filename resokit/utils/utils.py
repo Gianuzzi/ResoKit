@@ -264,12 +264,9 @@ def calc_period_with_errors(
             - 1: Extremes. Estimate the period at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+                    distribution with sigma = sigma = max(err_min, err_max).
             - 3: Centred propagation. Assume each parameters follows a normal
                     distribution with sigma = (err_min + err_max) / 2.
-            - 4: Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
 
     Returns
     -------
@@ -294,16 +291,10 @@ def calc_period_with_errors(
         a_err = max(a_err_min, a_err_max) * MKS["au"]
         m_star_err = max(m_star_err_min, m_star_err_max) * MKS["ms"]
         m_planet_err = max(m_planet_err_min, m_planet_err_max) * MKS["mj"]
-    elif err_method == 3 or err_method == 4:
+    elif err_method == 3:
         a_err = (a_err_min + a_err_max) * 0.5 * MKS["au"]
         m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * MKS["ms"]
         m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * MKS["mj"]
-        if err_method == 4:
-            a = (a - a_err_min + a + a_err_max) * 0.5
-            m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
-            m_planet = (
-                m_planet - m_planet_err_min + m_planet + m_planet_err_max
-            ) * 0.5
     else:
         raise ValueError("Invalid error propagation method.")
 
@@ -399,12 +390,9 @@ def calc_a_with_errors(
             - 1: Extremes. Estimate the period at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+                    distribution with sigma = max(err_min, err_max).
             - 3: Centred propagation. Assume each parameters follows a normal
                     distribution with sigma = (err_min + err_max) / 2.
-            - 4: Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
 
     Returns
     -------
@@ -433,16 +421,10 @@ def calc_a_with_errors(
         period_err = max(period_err_min, period_err_max) * MKS["day"]
         m_star_err = max(m_star_err_min, m_star_err_max) * MKS["ms"]
         m_planet_err = max(m_planet_err_min, m_planet_err_max) * MKS["mj"]
-    elif err_method == 3 or err_method == 4:
+    elif err_method == 3:
         period_err = (period_err_min + period_err_max) * 0.5 * MKS["day"]
         m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * MKS["ms"]
         m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * MKS["mj"]
-        if err_method == 3:
-            period = (period - period_err_min + period + period_err_max) * 0.5
-            m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
-            m_planet = (
-                m_planet - m_planet_err_min + m_planet + m_planet_err_max
-            ) * 0.5
     else:
         raise ValueError("Invalid error propagation method.")
 
@@ -557,12 +539,9 @@ def calc_hill_radius_with_errors(
             - 1: Extremes. Estimate the period at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+                    distribution with sigma = sigma = max(err_min, err_max).
             - 3: Centred propagation. Assume each parameters follows a normal
                     distribution with sigma = (err_min + err_max) / 2.
-            - 4: Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
 
 
     Returns
@@ -595,18 +574,11 @@ def calc_hill_radius_with_errors(
         e_err = max(e_err_min, e_err_max)
         m_star_err = max(m_star_err_min, m_star_err_max) * MKS["ms"]
         m_planet_err = max(m_planet_err_min, m_planet_err_max) * MKS["mj"]
-    elif err_method == 3 or err_method == 4:
+    elif err_method == 3:
         a_err = (a_err_min + a_err_max) * 0.5 * MKS["au"]
         e_err = (e_err_min + e_err_max) * 0.5
         m_star_err = (m_star_err_min + m_star_err_max) * 0.5 * MKS["ms"]
         m_planet_err = (m_planet_err_min + m_planet_err_max) * 0.5 * MKS["mj"]
-        if err_method == 4:
-            a = (a - a_err_min + a + a_err_max) * 0.5
-            e = (e - e_err_min + e + e_err_max) * 0.5
-            m_star = (m_star - m_star_err_min + m_star + m_star_err_max) * 0.5
-            m_planet = (
-                m_planet - m_planet_err_min + m_planet + m_planet_err_max
-            ) * 0.5
     else:
         raise ValueError("Invalid error propagation method.")
 
@@ -653,12 +625,9 @@ def calc_sum_with_errors(
             - 1: Extremes. Estimate the sum at the extreme values of
                     each parameter and retrieve the errors from the difference.
             - 2: Max propagation. Assume each parameters follows a normal
-                    distribution with sigma = err_max.
+                    distribution with sigma = sigma = max(err_min, err_max).
             - 3: Centred propagation. Assume each parameters follows a normal
                     distribution with sigma = (err_min + err_max) / 2.
-            - 4: Deviated propagation. Assume each parameters follows a normal
-                    distribution with sigma = (err_max + err_min) / 2, but the
-                    mean is at ((val + err_min) + (val + err_max)) / 2.
 
     Returns
     -------
@@ -677,12 +646,8 @@ def calc_sum_with_errors(
         return suma, suma_err_min, suma_err_max
     elif err_method == 2:
         vals_err = [max(val[1], val[2]) for val in vals]
-    elif err_method == 3 or err_method == 4:
+    elif err_method == 3:
         vals_err = [(val[1] + val[2]) * 0.5 for val in vals]
-        if err_method == 4:
-            vals = [
-                [(val[0] - val[1] + val[0] + val[2]) * 0.5] for val in vals
-            ]
     else:
         raise ValueError("Invalid error propagation method.")
 
