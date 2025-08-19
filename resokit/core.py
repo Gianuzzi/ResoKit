@@ -2392,12 +2392,12 @@ class StaticSystem:
                 # Create a tuple with the masses and their errors. Also,
                 # convert to solar masses for total mass sumamtion
                 this_mass_table = convert(
-                    syst_mass_table.iloc[: i],
+                    syst_mass_table.iloc[:i],
                     from_units="mj",
                     to_units="ms",
                 )
 
-                # Re Calculate the inner mass and errors            
+                # Re Calculate the inner mass and errors
                 used_in_m, used_in_m_err_min, used_in_m_err_max = (
                     calc_sum_with_errors(
                         (in_m, in_m_err_min, in_m_err_max),
@@ -2410,7 +2410,7 @@ class StaticSystem:
                 # in_m will be the star mass, plus the inner planets mass
                 # up to the previous planet
                 extra_in_m = convert(
-                    syst_mass_table.iloc[: i, 0].sum(),
+                    syst_mass_table.iloc[:i, 0].sum(),
                     from_units="mj",
                     to_units="ms",
                 )
