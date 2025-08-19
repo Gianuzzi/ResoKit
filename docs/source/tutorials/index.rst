@@ -7,11 +7,10 @@ problems solved with ResoKit.
 From exoplanetary system (Static-System) obtaining using databases, to
 Static-System representation or even plotting its planets properties.
 
-
 .. toctree::
    :maxdepth: 2
    
    tutorial.ipynb
    datasets.ipynb
-
-   
+   query.ipynb
+   units.ipynb 
