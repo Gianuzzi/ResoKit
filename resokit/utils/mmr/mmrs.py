@@ -42,7 +42,7 @@ def mmr3b(
     """Compute the 3-body mean-motion resonance (MMR) curve.
 
     Equation
-        :math:`a x + b y + c = 0`
+        :math:`a * x + b + c / y = 0`
 
     Parameters
     ----------
@@ -574,7 +574,7 @@ def label_mmr3b(
     ----------
     resonance : tuple
         Coefficients of the resonance line (a, b, c) in
-        the form a*x + b*y + c = 0.
+        the form a * x + b + c / y = 0.
     ax : matplotlib.axes.Axes, optional. Default: None
         The axis object on which the label will be placed.
         If not provided, the function will use the current axis.

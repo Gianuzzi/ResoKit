@@ -13,7 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.utils.mass_radius module includes tools for M-R analysis."""
+"""The ResoKit.utils.mass_radius package includes tools for M-R analysis."""
 
 # =============================================================================
 # IMPORTS

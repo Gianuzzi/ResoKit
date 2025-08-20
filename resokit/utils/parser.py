@@ -232,6 +232,120 @@ RESO_DTYPES = MappingProxyType(
     {**RESO_PL_TYPES, **RESO_SR_TYPES, **RESO_OB_TYPES}
 )
 
+# Nasa Query columns to NASA
+_NASA_QUERY_MAPPING = MappingProxyType(
+    {key: key for key in _NASA_MAPPING.keys()}
+)  # Nasa is the same
+
+# EU Query columns to EU
+_EU_QUERY_MAPPING = MappingProxyType(
+    {
+        "target_name": "name",
+        "mass": "mass",
+        "mass_error_min": "mass_error_min",
+        "mass_error_max": "mass_error_max",
+        "mass_sin_i": "mass_sini",
+        "mass_sin_i_error_min": "mass_sini_error_min",
+        "mass_sin_i_error_max": "mass_sini_error_max",
+        "radius": "radius",
+        "radius_error_min": "radius_error_min",
+        "radius_error_max": "radius_error_max",
+        "period": "orbital_period",
+        "period_error_min": "orbital_period_error_min",
+        "period_error_max": "orbital_period_error_max",
+        "semi_major_axis": "semi_major_axis",
+        "semi_major_axis_error_min": "semi_major_axis_error_min",
+        "semi_major_axis_error_max": "semi_major_axis_error_max",
+        "eccentricity": "eccentricity",
+        "eccentricity_error_min": "eccentricity_error_min",
+        "eccentricity_error_max": "eccentricity_error_max",
+        "inclination": "inclination",
+        "inclination_error_min": "inclination_error_min",
+        "inclination_error_max": "inclination_error_max",
+        "angular_distance": "angular_distance",
+        "discovered": "discovered",
+        "periastron": "omega",
+        "periastron_error_min": "omega_error_min",
+        "periastron_error_max": "omega_error_max",
+        "t_peri": "tperi",
+        "t_peri_error_min": "tperi_error_min",
+        "t_peri_error_max": "tperi_error_max",
+        "t_conj": "tconj",
+        "t_conj_error_min": "tconj_error_min",
+        "t_conj_error_max": "tconj_error_max",
+        "tzero_tr": "tzero_tr",
+        "tzero_tr_error_min": "tzero_tr_error_min",
+        "tzero_tr_error_max": "tzero_tr_error_max",
+        "tzero_tr_sec": "tzero_tr_sec",
+        "tzero_tr_sec_error_min": "tzero_tr_sec_error_min",
+        "tzero_tr_sec_error_max": "tzero_tr_sec_error_max",
+        "lambda_angle": "lambda_angle",
+        "lambda_angle_error_min": "lambda_angle_error_min",
+        "lambda_angle_error_max": "lambda_angle_error_max",
+        "impact_parameter": "impact_parameter",
+        "impact_parameter_error_min": "impact_parameter_error_min",
+        "impact_parameter_error_max": "impact_parameter_error_max",
+        "tzero_vr": "tzero_vr",
+        "tzero_vr_error_min": "tzero_vr_error_min",
+        "tzero_vr_error_max": "tzero_vr_error_max",
+        "k": "k",
+        "k_error_min": "k_error_min",
+        "k_error_max": "k_error_max",
+        "temp_calculated": "temp_calculated",
+        "temp_measured": "temp_measured",
+        "hot_point_lon": "hot_point_lon",
+        "albedo": "geometric_albedo",
+        "albedo_error_min": "geometric_albedo_error_min",
+        "albedo_error_max": "geometric_albedo_error_max",
+        "log_g": "log_g",
+        "publication_status": "publication",
+        "detection_type": "detection_type",
+        "mass_detection_type": "mass_measurement_type",
+        "radius_detection_type": "radius_measurement_type",
+        "species": "molecules",
+        "star_name": "star_name",
+        "ra": "ra",
+        "dec": "dec",
+        "mag_v": "mag_v",
+        "mag_i": "mag_i",
+        "mag_j": "mag_j",
+        "mag_h": "mag_h",
+        "mag_k": "mag_k",
+        "star_distance": "star_distance",
+        "star_distance_error_min": "star_distance_error_min",
+        "star_distance_error_max": "star_distance_error_max",
+        "star_metallicity": "star_metallicity",
+        "star_mass": "star_mass",
+        "star_radius": "star_radius",
+        "star_spec_type": "star_sp_type",
+        "star_age": "star_age",
+        "star_teff": "star_teff",
+        "detected_disc": "star_detected_disc",
+        "magnetic_field": "star_magnetic_field",
+        "alt_target_name": "alternate_names",  # To edit
+        "modification_date": "updated",  # To edit
+    }
+)
+
+# Query column mappings for the different data sources
+QUERY_MAPPINGS = MappingProxyType(
+    {"eu": _EU_QUERY_MAPPING, "nasa": _NASA_QUERY_MAPPING}
+)
+
+# Missing NASA columns in Query
+_NASA_QUERY_MISSING = frozenset()
+
+# Missing EU columns in Query
+_EU_QUERY_MISSING = frozenset(
+    k for k in _EU_MAPPING.keys() if k not in _EU_QUERY_MAPPING.values()
+)
+
+# Missing column in queries
+QUERY_MISSING = MappingProxyType(
+    {"eu": _EU_QUERY_MISSING, "nasa": _NASA_QUERY_MISSING}
+)
+
+
 # Similarity ratio threshold for the best match
 RATIOS_THRESHOLD = 0.92  # Similarity ratio threshold
 

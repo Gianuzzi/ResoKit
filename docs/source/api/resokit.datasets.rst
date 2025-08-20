@@ -1,4 +1,4 @@
-``resokit.datasets`` package
+Package ``resokit.datasets``
 =============================
 
 .. automodule:: resokit.datasets

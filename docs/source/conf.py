@@ -43,6 +43,9 @@ extensions = [
     "nbsphinx",
 ]
 
+# Enable references
+napoleon_use_admonition_for_references = False  # if using napoleon
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
 

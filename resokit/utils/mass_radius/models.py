@@ -316,8 +316,7 @@ def otegi_2020_radius(
         approximation. Must be a number between 0 and 1.
     silent : bool, optional. Default: False
         Whether to silence the warning if the radius is greater than the
-        maximum
-        value used by Otegi et al. (2020), or if the estimation falls
+        maximum value used by Otegi et al. (2020), or if the estimation falls
         in a multivariate region.
 
     Returns
@@ -889,7 +888,7 @@ def estimate_mass_single(
     if not silent and model in ["ck17", "o20", "m24"] and err_method == 1:
         warnings.warn(
             "Using the naive error propagation method may generate"
-            + " excecively large errors in multivariate sections",
+            + " excessively large errors in multivariate sections",
             stacklevel=2,
         )
 
@@ -994,7 +993,7 @@ def estimate_radius_single(
     if not silent and model == "o20" and err_method == 1:
         warnings.warn(
             "Using the naive error propagation method may generate"
-            + " excecively large errors in multivariate sections",
+            + " excessively large errors in multivariate sections",
             stacklevel=2,
         )
 
@@ -1092,6 +1091,12 @@ def estimate_radius(
 ) -> Union[Tuple[float, float, float], np.ndarray]:
     r"""Calculate the radius of a planet using the power-law approximation.
 
+    The different models available are:
+    Chen & Kipping (2017),
+    Otegi et al. (2020),
+    Edmondson et al. (2023),
+    and Müller et al. (2024).
+
     Equation:
         :math:`radius = C \times mass^S`
 
@@ -1137,6 +1142,20 @@ def estimate_radius(
         (radius, radius_err_min, radius_err_max),
         else it is a (n,3) numpy array.
         If `err_method=0`, the tuple | array is (radius, 0.0, 0.0).
+
+    References
+    ----------
+        `Chen, J., & Kipping, D. 2017, ApJ, 834, 17
+        <https://ui.adsabs.harvard.edu/abs/2017ApJ...834...17C>`_
+
+        `Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
+        <https://ui.adsabs.harvard.edu/abs/2020A&A...634A..43O>`_
+
+        `Edmondson, K., Norris, J., & Kerins, E. 2023, Open J. Astrophysics,
+        submitted <https://arxiv.org/abs/2310.16733>`_
+
+        `Müller S., Baron J., Helled R., Bouchy F. & Parc L. 2024, A&A, 686,
+        A296 <https://ui.adsabs.harvard.edu/abs/2024A&A...686A.296M>`_
     """
     err_method_aux = 0 if err_method == -1 else err_method
     if isinstance(mass, (int, float)):
@@ -1182,6 +1201,12 @@ def estimate_mass(
     silent: bool = False,
 ) -> Union[Tuple[float, float, float], np.ndarray]:
     r"""Calculate the mass of a planet using a power-law approximation.
+
+    The different models available are:
+    Chen & Kipping (2017),
+    Otegi et al. (2020),
+    Edmondson et al. (2023),
+    and Müller et al. (2024).
 
     Equation:
         :math:`mass = \frac{1}{C} \times radius^{1/S}`
@@ -1234,6 +1259,20 @@ def estimate_mass(
         If radius is a scalar, the tuple is (mass, mass_err_min, mass_err_max),
         else it is a (n,3) numpy array.
         If `err_method=0`, the tuple | array is (mass, 0.0, 0.0).
+
+    References
+    ----------
+        `Chen, J., & Kipping, D. 2017, ApJ, 834, 17
+        <https://ui.adsabs.harvard.edu/abs/2017ApJ...834...17C>`_
+
+        `Otegi, J. F., Bouchy, F., & Helled, R. 2020, A&A, 634, A43
+        <https://ui.adsabs.harvard.edu/abs/2020A&A...634A..43O>`_
+
+        `Edmondson, K., Norris, J., & Kerins, E. 2023, Open J. Astrophysics,
+        submitted <https://arxiv.org/abs/2310.16733>`_
+
+        `Müller S., Baron J., Helled R., Bouchy F. & Parc L. 2024, A&A, 686,
+        A296 <https://ui.adsabs.harvard.edu/abs/2024A&A...686A.296M>`_
     """
     err_method_aux = 0 if err_method == -1 else err_method
     if multivariate is None:  # Set default values

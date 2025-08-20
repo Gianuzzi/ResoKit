@@ -11,7 +11,7 @@
 # DOCS
 # =============================================================================
 
-"""Module ResoKit."""
+"""Module with main ResoKit System classes."""
 
 # =============================================================================
 # IMPORTS
@@ -36,6 +36,7 @@ from resokit.utils.mmr import plot_mmrs
 from resokit.utils.parser import (
     DEFAULT_METADATA,
     MAPPINGS,
+    QUERY_MAPPINGS,
     RESO_OB_TYPES,
     RESO_PL_TYPES,
     RESO_SR_TYPES,
@@ -456,7 +457,7 @@ def df_to_resokit(
     source: str,
     drop: bool = True,
     copy: bool = False,
-    sort_by: Union[str, bool] = "P",
+    sort_by: Union[str, bool] = True,
     return_df: bool = False,
     rename_index: bool = False,
     metadata: Union[dict, None] = None,
@@ -479,7 +480,7 @@ def df_to_resokit(
         Whether to edit a copy of the DataFrame, instead of the original.
         Despite this, the output will be a :py:class:`ResokitDataFrame`,
         unless `return_df=True`.
-    sort_by : str, bool, optional. Default: "P".
+    sort_by : str, bool, optional. Default: True.
         Column to sort the data by.
         If `False` or `None`, do not sort the data.
         If `True`, sort by period ("P").
@@ -506,19 +507,40 @@ def df_to_resokit(
     if not isinstance(df, pd.DataFrame):
         raise TypeError(f"df must be a DataFrame. Got: {type(df)} instead.")
 
-    # Get the new columns dictionary
-    new_cols_dict = MAPPINGS[source]
-
     # Copy the DataFrame
     if copy:
         df = df.copy()
 
+    # Get the new columns dictionary
+    first_col_change = QUERY_MAPPINGS[source]
+    final_col_change = MAPPINGS[source]
+
+    # Check if "eu" and query. If so, modify specifics
+    if source == "eu":
+        df = df.apply(
+            lambda col: (
+                col.str.replace("#", ", ", regex=False)
+                if col.dtype == "object"
+                else col
+            )
+        )
+        if "modification_date" in df.columns:
+            df["modification_date"] = pd.to_datetime(
+                df["modification_date"], errors="coerce"
+            ).dt.year
+        if "obs_id" in df.columns:  # Alright, this is a query
+            metadata = dict(DEFAULT_METADATA)
+            metadata["eu_indexes"] = df["obs_id"]
+
     # Rename columns
-    df = df.rename(columns=new_cols_dict)
+    # First change
+    df = df.rename(columns=first_col_change)
+    # Second change
+    df = df.rename(columns=final_col_change)
 
     # Drop columns not in the mapping
     if drop:
-        df = df.drop(columns=set(df.columns) - set(new_cols_dict.values()))
+        df = df.drop(columns=set(df.columns) - set(final_col_change.values()))
 
     # Assert no empty DataFrame
     if df.empty:
@@ -538,8 +560,10 @@ def df_to_resokit(
 
     # Sort by
     if sort_by and sort_by is not None:
-        if sort_by is True:
+        if sort_by is True and "P" in df.columns:
             sort_by = "P"
+        elif sort_by is True:
+            sort_by = df.columns[0]
         df = df.sort_values(by=sort_by, ascending=True)
 
     # Rename index if needed
@@ -656,11 +680,12 @@ class StaticBody(ResokitDataFrame):
     def _web_page_default(self):
         """Set the default value for web_page."""
         if not self.is_star and self.source == "eu":
-            aux = (
-                str(self.name).replace(" ", "_").lower()
-                + "--"
-                + str(self.metadata["eu_indexes"])
-            )
+            index = self.metadata.get("eu_indexes")
+            if index is None:
+                index = self.metadata.get("obs_id")
+            if index is None:
+                return "Not available"
+            aux = str(self.name).replace(" ", "_").lower() + "--" + str(index)
             return "https://exoplanet.eu/catalog/" + aux + "/"
         if self.source == "nasa":
             aux = str(self.name).replace(" ", "%20")
@@ -1761,7 +1786,7 @@ class StaticSystem:
                 return self.planets[0].P / bin_per
             elif self.n_planets_ == 1 and not self.is_circumbinary:
                 return bin_per / self.planets[0].P
-            return self.pair_ratio(verbose=False, use_binary=True)
+            return self.period_ratio(verbose=False, use_binary=True)
 
         # If not a binary system...
         if self.n_planets_ == 1:  # Single planet
@@ -1769,7 +1794,7 @@ class StaticSystem:
         elif self.n_planets_ == 2:  # Two planets
             return self.planets[1].P / self.planets[0].P
 
-        return self.pair_ratio(verbose=False)  # More than two planets
+        return self.period_ratio(verbose=False)  # More than two planets
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
@@ -2249,12 +2274,9 @@ class StaticSystem:
             *1* : Extremes. Estimate the parameter at the extreme values of
             each parameter and retrieve the errors from the difference.
             *2* : Extended propagation. Assume each parameters follows a normal
-            distribution with sigma = err_max.
+            distribution with sigma = max(err_max, err_min).
             *3* : Centred propagation. Assume each parameters follows a normal
             distribution with sigma = (err_min + err_max) / 2.
-            *4* : Deviated propagation. Assume each parameters follows a normal
-            distribution with sigma = (err_max + err_min) / 2, but the
-            mean is at ((val + err_min) + (val + err_max)) / 2.
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the parameter.
             Involves using the accumulated inner mass (star + inner planets)
@@ -2286,6 +2308,11 @@ class StaticSystem:
         is_period = p_a_h == 0
         is_hill = p_a_h == 2
 
+        # Check err_method
+        if err_method not in [-1, 0, 1, 2, 3]:
+            raise ValueError(f"Invalid {err_method=}.")
+        aux_err = 0 if err_method == -1 else err_method
+
         # Define parameters
         if is_period:  # Period
             param = "P"
@@ -2313,13 +2340,36 @@ class StaticSystem:
 
         # If deep_estimate is requested, estimate the missing parameters
         if deep_estimate:
-            used_mass_table = self.estimate_mass(
+            syst_mass_table = self.estimate_mass(
                 which="all",
                 force=False,  # Do not force the estimation
-                err_method=err_method,
+                err_method=aux_err,
             )
         else:
-            used_mass_table = self.get_item("mass", error=err_method > 0)
+            syst_mass_table = self.get_item("mass", error=True)
+
+        # Check
+        assert isinstance(syst_mass_table, pd.DataFrame)
+
+        # Redefine errors if not needed
+        if aux_err == 0:
+            syst_mass_table.loc[:, "mass_err_min"] = 0
+            syst_mass_table.loc[:, "mass_err_max"] = 0
+
+        # Check if binary star and define in_m
+        if self.is_binary_:
+            # Check if circumbinary
+            if self.is_circumbinary:
+                in_m = self.star.total_mass_
+            else:  # Normal binary
+                in_m = self.star.star0.mass
+            # No errors
+            in_m_err_min = 0.0
+            in_m_err_max = 0.0
+        else:  # Single star
+            in_m = self.star.mass
+            in_m_err_min = self.star.mass_err_min
+            in_m_err_max = self.star.mass_err_max
 
         # Iterate over the planets
         for pl in planets:
@@ -2331,64 +2381,48 @@ class StaticSystem:
                 continue
 
             # Define the used (this) planet masses
-            if err_method > 0:
-                pl_mass = used_mass_table.iloc[i, 0]
-                pl_mass_err_min = used_mass_table.iloc[i, 1]
-                pl_mass_err_max = used_mass_table.iloc[i, 2]
-            else:
-                pl_mass = used_mass_table.iloc[i]
-                pl_mass_err_min = 0
-                pl_mass_err_max = 0
-
-            # Check if binary star
-            if self.is_binary_:
-                # Check if circumbinary
-                if self.is_circumbinary:
-                    in_m = self.star.total_mass_
-                else:  # Normal binary
-                    in_m = self.star.star0.mass
-                # No errors
-                in_m_err_min = 0.0
-                in_m_err_max = 0.0
-            else:  # Single star
-                in_m = self.star.mass
-                in_m_err_min = self.star.mass_err_min
-                in_m_err_max = self.star.mass_err_max
+            pl_mass = syst_mass_table.iloc[i, 0]
+            pl_mass_err_min = syst_mass_table.iloc[i, 1]
+            pl_mass_err_max = syst_mass_table.iloc[i, 2]
 
             # Jacobi criterion with errors
-            if jacobi and err_method > 0:
+            if jacobi and i > 0 and aux_err > 0:
                 # Check if not the first planet
-                if i > 0:
-                    # Keep only the masses of the planets before this one
-                    used_mass_table = used_mass_table.iloc[: i - 1]
-                    # Create a tuple with the masses and their errors. Also,
-                    # convert to solar masses for total mass sumamtion
-                    factor = convert(from_units="mj", to_units="ms")
-                    tup = (used_mass_table * factor).itertuples(
-                        index=False, name=None
+                # Keep only the masses of the planets before this one
+                # Create a tuple with the masses and their errors. Also,
+                # convert to solar masses for total mass sumamtion
+                this_mass_table = convert(
+                    syst_mass_table.iloc[:i],
+                    from_units="mj",
+                    to_units="ms",
+                )
+
+                # Re Calculate the inner mass and errors
+                used_in_m, used_in_m_err_min, used_in_m_err_max = (
+                    calc_sum_with_errors(
+                        (in_m, in_m_err_min, in_m_err_max),
+                        *(x for x in this_mass_table.values),
                     )
-                    # Re Calculate the inner mass and error
-                    in_m, in_m_err_min, in_m_err_max = calc_sum_with_errors(
-                        (
-                            *(
-                                in_m,
-                                in_m_err_min,
-                                in_m_err_max,
-                            ),
-                            *tup,
-                        ),
-                    )
-            # Jacobi criterion without errors
-            elif jacobi:
+                )
+
+            elif jacobi and i > 0:  # Jacobi criterion without errors
+                # Check if not the first planet
                 # in_m will be the star mass, plus the inner planets mass
                 # up to the previous planet
-                # Check if not the first planet
-                if i > 0:
-                    in_m = in_m + used_mass_table.cumsum().iloc[i - 1]
-            # No Jacobi criterion. Heliocentric
-            else:
-                # Already defined
-                pass
+                extra_in_m = convert(
+                    syst_mass_table.iloc[:i, 0].sum(),
+                    from_units="mj",
+                    to_units="ms",
+                )
+                used_in_m = in_m + extra_in_m
+                used_in_m_err_min = 0.0
+                used_in_m_err_max = 0.0
+
+            else:  # Default values
+                # No Jacobi criterion. Heliocentric
+                used_in_m = in_m
+                used_in_m_err_min = in_m_err_min
+                used_in_m_err_max = in_m_err_max
 
             # Calculate the param and its errors if not hill radius
             if not is_hill:
@@ -2401,16 +2435,16 @@ class StaticSystem:
                     antipar,
                     antipar_err_min,
                     antipar_err_max,
-                    in_m,
-                    in_m_err_min,
-                    in_m_err_max,
+                    used_in_m,
+                    used_in_m_err_min,
+                    used_in_m_err_max,
                     pl_mass,
                     pl_mass_err_min,
                     pl_mass_err_max,
                     err_method,
                 )
-            # Calculate the Hill radius and its errors
-            else:
+
+            else:  # Calculate the Hill radius and its errors
                 # The little trick here, is that if the semi-major axis is
                 # not available, we use the period to calculate it, in case
                 # deep_estimate is requested
@@ -2422,9 +2456,9 @@ class StaticSystem:
                         pl.P,
                         pl.P_err_min,
                         pl.P_err_max,
-                        in_m,
-                        in_m_err_min,
-                        in_m_err_max,
+                        used_in_m,
+                        used_in_m_err_min,
+                        used_in_m_err_max,
                         pl_mass,
                         pl_mass_err_min,
                         pl_mass_err_max,
@@ -2448,9 +2482,9 @@ class StaticSystem:
                     pl_e,
                     pl_e_err_min,
                     pl_e_err_max,
-                    in_m,
-                    in_m_err_min,
-                    in_m_err_max,
+                    used_in_m,
+                    used_in_m_err_min,
+                    used_in_m_err_max,
                     pl_mass,
                     pl_mass_err_min,
                     pl_mass_err_max,
@@ -2533,12 +2567,9 @@ class StaticSystem:
             *1* : Extremes. Estimate the period at the extreme values of
             each parameter and retrieve the errors from the difference.
             *2* : Extended propagation. Assume each parameters follows a normal
-            distribution with sigma = err_max.
+            distribution with sigma = max(err_max, err_min).
             *3* : Centred propagation. Assume each parameters follows a normal
             distribution with sigma = (err_min + err_max) / 2.
-            *4* : Deviated propagation. Assume each parameters follows a normal
-            distribution with sigma = (err_max + err_min) / 2, but the
-            mean is at ((val + err_min) + (val + err_max)) / 2.
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the period.
             Involves using the accumulated inner mass (star + inner planets)
@@ -2613,12 +2644,9 @@ class StaticSystem:
             values of each parameter and retrieve the errors from the
             difference.
             *2* : Extended propagation. Assume each parameters follows a normal
-            distribution with sigma = err_max.
+            distribution with sigma = max(err_max, err_min).
             *3* : Centred propagation. Assume each parameters follows a normal
             distribution with sigma = (err_min + err_max) / 2.
-            *4* : Deviated propagation. Assume each parameters follows a normal
-            distribution with sigma = (err_max + err_min) / 2, but the
-            mean is at ((val + err_min) + (val + err_max)) / 2.
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the semi-major axis.
             Involves using the accumulated inner mass (star + inner planets)
@@ -2952,12 +2980,9 @@ class StaticSystem:
             values of each parameter and retrieve the errors from the
             difference.
             *2* : Extended propagation. Assume each parameters follows a normal
-            distribution with sigma = err_max.
+            distribution with sigma = max(err_max, err_min).
             *3* : Centred propagation. Assume each parameters follows a normal
             distribution with sigma = (err_min + err_max) / 2.
-            *4* : Deviated propagation. Assume each parameters follows a normal
-            distribution with sigma = (err_max + err_min) / 2, but the
-            mean is at ((val + err_min) + (val + err_max)) / 2.
         jacobi : bool, optional. Default: False.
             Whether to use the Jacobi criterion to estimate the Hill radius.
             Involves using the accumulated inner mass (star + inner planets)
@@ -3153,7 +3178,7 @@ class StaticSystem:
 
         # Get (all) error ratios if needed
         if error:
-            error_ratios = self.pair_ratio(
+            error_ratios = self.period_ratio(
                 error=True, verbose=False, use_binary=False
             )
 
@@ -3162,14 +3187,41 @@ class StaticSystem:
             triplets = [(i, i + 1, i + 2) for i in range(self.n_planets_ - 2)]
         elif isinstance(which, int):
             if which < 0 or which >= self.n_planets_ - 2:
-                raise ValueError("Index out of range.")
+                raise ValueError(f"Index {which} out of range.")
             triplets = [(which, which + 1, which + 2)]
+        elif isinstance(which, (tuple, list)):
+            triplets = []
+            for value in which:
+                if isinstance(value, int):
+                    if value < 0 or value >= self.n_planets_ - 2:
+                        raise ValueError(f"Index {value} out of range.")
+                    triplets.append([value, value + 1, value + 2])
+                elif isinstance(value, (list, tuple)):
+                    triplets.append(value)
+                else:
+                    raise TypeError(
+                        f"Argument of type {type(value)} not supported"
+                    )
         else:
-            raise ValueError("Invalid value for 'which'.")
+            raise TypeError(f"Argument of type {type(which)} not supported")
+
+        # Check all good
+        for triplet in triplets:
+            if len(triplet) != 3:
+                raise ValueError(f"Triplet {triplet} is not valid.")
+            elif (min(triplet) < 0) or (max(triplet) > self.n_planets_):
+                raise ValueError(f"Triplet {triplet} is out of bounds.")
 
         # Create a new figure if ax is None
         if ax is None:
             ax = plt.gca()
+
+        # Get limits
+        xmin, xmax = ax.get_xlim()
+        ymin, ymax = ax.get_ylim()
+        if xmin == 0 and xmax == 1 and ymin == 0 and ymax == 1:
+            xmin = ymin = 1e6
+            xmax = ymax = -1e6
 
         # Check label
         if label:
@@ -3200,8 +3252,6 @@ class StaticSystem:
         fmt = kwargs.pop("fmt", "o")
 
         # Plot each triplet
-        xmin = ymin = 1e6
-        xmax = ymax = -1e6
         for trip, (i, j, k) in enumerate(triplets):
             if label is True and not use_suffix:
                 label_aux = "".join([str(i), str(j), str(k)])
@@ -3211,8 +3261,8 @@ class StaticSystem:
                 )
             elif label:
                 label_aux = label[trip]
-            x = self.pair_ratio(j, i, verbose=False, use_binary=False)
-            y = self.pair_ratio(k, j, verbose=False, use_binary=False)
+            x = self.period_ratio(j, i, verbose=False, use_binary=False)
+            y = self.period_ratio(k, j, verbose=False, use_binary=False)
             err_x = error_ratios.iloc[i, j] if error else None
             err_y = error_ratios.iloc[j, k] if error else None
             ax.errorbar(
@@ -3241,6 +3291,7 @@ class StaticSystem:
                 ax=ax,
                 label_2mmrs=label is not False,
                 label_mmrs=label is not False,
+                color="black" if label is not False else None,
             )
 
         return ax
@@ -3444,15 +3495,18 @@ class StaticSystem:
 
         return new_ss
 
-    def pair_ratio(
+    def period_ratio(
         self,
         *pair: Union[int, list, tuple, str],
         verbose: bool = True,
         error: bool = False,
         use_binary: bool = True,
-        **fraction_kwargs: dict,
+        fraction_kwargs: Union[dict, None] = None,
     ) -> Union[float, pd.DataFrame]:
         r"""Return the period ratio of the specified pair of planets.
+
+        This function can also estimate the approximate fraction
+        corresponding to each period ratio.
 
         Parameters
         ----------
@@ -3470,10 +3524,17 @@ class StaticSystem:
         use_binary : bool, optional. Default: True.
             Whether to use the binary period ratio (include the star).
             If False, only the planets are considered.
-        fraction_kwargs : dict, optional
-            Keyword arguments for the float_to_fraction function.
+        fraction_kwargs : dict, optional. Default: None
+            Dictionary with arguments for the
+            :py:func:`resokit.utils.float_to_fraction` function.
             If None, no fraction conversion is done.
-            See float_to_fraction for more information.
+            Parameters can be:
+            - max_iter
+            - max_error
+            - as_fraction
+            - stop_func
+            See :py:func:`resokit.utils.float_to_fraction`
+            for more information.
 
         Returns
         -------
@@ -3497,20 +3558,23 @@ class StaticSystem:
         elif len(pair) == 1:
             pair = pair[0]
             if isinstance(pair, int):
-                return self.pair_ratio(
+                return self.period_ratio(
                     pair,
                     pair + 1,
                     verbose=verbose,
                     error=error,
                     use_binary=use_binary,
-                    **fraction_kwargs,
+                    fraction_kwargs=fraction_kwargs,
                 )
             if not isinstance(pair, Iterable) or len(pair) != 2:
                 raise ValueError("Pair must have 2 elements.")
 
         # Add verbose to fraction_kwargs, if fraction_kwargs is not empty
-        if fraction_kwargs:
-            fraction_kwargs["verbose"] = verbose
+        if fraction_kwargs is not None:
+            if not isinstance(fraction_kwargs, dict):
+                raise ValueError("Argument 'fraction_kwargs' must be a dict.")
+            if "verbose" not in fraction_kwargs:
+                fraction_kwargs["verbose"] = verbose
 
         # This calculates all the period ratios
         if isinstance(pair, str) and not error:
@@ -3581,7 +3645,7 @@ class StaticSystem:
 
         # If error is True, return the error of the period ratio
         if error:
-            err_df = self._pair_ratio_error(idxs)
+            err_df = self._period_ratio_error(idxs)
             # Check if remove binary
             if idxs == "all" and not use_binary and self.is_binary_:
                 if self.is_circumbinary:
@@ -3615,7 +3679,7 @@ class StaticSystem:
 
         return ratio
 
-    def _pair_ratio_error(
+    def _period_ratio_error(
         self, *pair: Union[list, tuple, str]
     ) -> Union[float, pd.DataFrame]:
         """Return the period ratio error of the specified pair of planets.
@@ -3638,18 +3702,18 @@ class StaticSystem:
             return self.__error_ratios__  # Already calculated for 3 bodies
 
         # Extract pair ratio
-        pair_ratio = self.pair_ratio(*pair, error=False, use_binary=True)
+        period_ratio = self.period_ratio(*pair, error=False, use_binary=True)
 
         # Formula: sqrt((err1/P1)^2 + (err2/P2)^2) * ratio
 
         # If pair is all. First call will be this one
-        if isinstance(pair_ratio, pd.DataFrame):
+        if isinstance(period_ratio, pd.DataFrame):
             # Return the DataFrame if it's already calculated
             if not self.__error_ratios__.empty:
                 return self.__error_ratios__
 
             # Create an empty series
-            max_perr_p = pd.Series(data=0.0, index=pair_ratio.index)
+            max_perr_p = pd.Series(data=0.0, index=period_ratio.index)
 
             # Fill the series with the planets first
             for i, name in enumerate(self.planet_names_):
@@ -3672,17 +3736,19 @@ class StaticSystem:
 
             # Create the DataFrame sigma2
             sigma2 = pd.DataFrame(
-                data=nan, index=pair_ratio.index, columns=pair_ratio.columns
+                data=nan,
+                index=period_ratio.index,
+                columns=period_ratio.columns,
             )
             # Fill the DataFrame
-            for name1 in pair_ratio.index:
-                for name2 in pair_ratio.columns:
+            for name1 in period_ratio.index:
+                for name2 in period_ratio.columns:
                     sigma2.loc[name1, name2] = (
                         max_perr_p[name1] + max_perr_p[name2]
                     )
 
             # Calculate the error
-            df = pair_ratio * sqrt(sigma2)
+            df = period_ratio * sqrt(sigma2)
 
             # Store the DataFrame
             self.__error_ratios__[df.columns] = df
@@ -3691,9 +3757,9 @@ class StaticSystem:
 
         # Be sure that self.__error_ratios__ is not empty
         if self.__error_ratios__.empty:
-            self.pair_ratio("all", error=True)
+            self.period_ratio("all", error=True)
 
-        # If pair is a single pair. Assume already parsed by pair_ratio
+        # If pair is a single pair. Assume already parsed by period_ratio
         # If pair is something like ([i,j],), then pair[0] is the pair
         if len(pair) == 1:
             pair = pair[0]
@@ -3749,7 +3815,7 @@ class StaticSystem:
         if in_star is not None:
             if in_planet is not None or in_binary is not None:
                 raise ValueError(
-                    "Cannot set in_star with in_planet or in_binary."
+                    "Cannot set 'in_star' with 'in_planet' or 'in_binary'."
                 )
             if not self.is_binary_:
                 to_change = dict({"star": self.star.set_attr(attr, value)})
@@ -3760,7 +3826,15 @@ class StaticSystem:
                 )
         elif in_planet is not None:
             if in_binary is not None:
-                raise ValueError("Cannot set in_planet with in_binary.")
+                raise ValueError("Cannot set 'in_planet' with 'in_binary'.")
+            if (
+                isinstance(in_planet, bool)
+                and in_planet is True
+                and self.n_planets_ > 1
+            ):
+                raise ValueError(
+                    f"Cannot set {in_planet=} with multiple planets."
+                )
             planet = self.planet(in_planet)
             new_planet = planet.set_attr(attr, value)
             # Update list of planets
@@ -3770,7 +3844,7 @@ class StaticSystem:
         elif in_binary is not None:
             if not self.is_binary_:
                 raise ValueError(
-                    "Cannot set in_binary in a single star system."
+                    "Cannot set 'in_binary' in a single star system."
                 )
             to_change = dict(
                 {"star": self.star.set_attr(attr, value, in_star=None)}

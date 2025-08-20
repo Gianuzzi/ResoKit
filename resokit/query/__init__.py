@@ -13,7 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.query module includes tools to make online queries."""
+"""The ResoKit.query package includes tools to make online queries."""
 
 # =============================================================================
 # IMPORTS

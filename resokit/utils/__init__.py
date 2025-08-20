@@ -13,7 +13,7 @@
 # DOCS
 # =============================================================================
 
-"""The ResoKit.utils module includes tools for data analysis."""
+"""The ResoKit.utils package includes tools for data analysis."""
 
 # =============================================================================
 # IMPORTS

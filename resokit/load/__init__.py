@@ -13,7 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.load module includes tools to load planetary systems locally."""
+"""The ResoKit.load package includes tools to load planetary systems locally."""
 
 # =============================================================================
 # IMPORTS

@@ -38,9 +38,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-query = ["astropy", "pyvo"]
+query = ["astropy"]
 reb = ["rebound"]
-all = ["astropy", "pyvo", "rebound"]
+all = ["astropy", "rebound"]
 
 [tool.setuptools]
 include-package-data = true

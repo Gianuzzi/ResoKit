@@ -1,4 +1,4 @@
-``resokit`` package
+``resokit`` API
 ===================
 
 .. automodule:: resokit
@@ -12,4 +12,6 @@
    resokit.core
    resokit.load
    resokit.datasets
+   resokit.query
    resokit.utils
+   resokit.units

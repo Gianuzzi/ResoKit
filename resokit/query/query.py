@@ -22,6 +22,8 @@ from typing import Union
 
 import pandas as pd
 
+import requests
+
 from resokit.core import (
     ResokitDataFrame,
     StaticSystem,
@@ -30,12 +32,6 @@ from resokit.core import (
 )
 from resokit.utils.parser import DEFAULT_METADATA, assert_module_imported
 
-try:
-    import requests
-
-    requests_imported = True
-except ImportError:
-    requests_imported = False
 
 try:
     from astropy.table import Table
@@ -53,6 +49,7 @@ QUERY_URL = {
     "eu": "http://voparis-tap-planeto.obspm.fr/tap/sync",
     "nasa": "https://exoplanetarchive.ipac.caltech.edu/TAP/sync",
 }
+
 
 # =============================================================================
 # DYNAMIC
@@ -164,17 +161,13 @@ def execute_query(
     soft : bool, optional. Default = False.
         Whether to perform a query that do not includes a
         WHERE statement. This is not recommended, as it would download
-        the full databases. Use `resokit.datasets.dowload(...) for this.
+        the full databases. Use `resokit.datasets.download(...)` for this.
 
     Returns
     -------
     Union[bytes, pd.DataFrame]
         Resulting dataset as a pandas DataFrame, or bytes if requested.
     """  # noqa: E501
-    # Ensure requests module is imported
-    global requests_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-
     source = source.lower()  # Ensure lowercase
 
     if source not in QUERY_URL:
@@ -259,8 +252,9 @@ def query_system(
     controversial_flag: int = 0,
     cache: bool = True,
     verbose: bool = True,
-    as_resokit: bool = False,
-) -> Union[ResokitDataFrame, StaticSystem]:
+    as_frame: bool = False,
+    raw: bool = False,
+) -> Union[pd.DataFrame, ResokitDataFrame, StaticSystem]:
     """Query the online dataset based on specified filters.
 
     Parameters
@@ -286,19 +280,20 @@ def query_system(
         during this session.
     verbose : bool, optional. Default: True.
         Print query information.
-    as_resokit : bool, optional. Default: False.
-        Whether to return the dataset in ResoKit format.
+    as_frame : bool, optional. Default: False.
+        Whether to return the dataset in a `ResokitDataFrame`
+        format (True), or a `StaticSystem` format (False).
+    raw : bool, optional. Default = False.
+        Whether to return a pandas DataFrame of the query result.
+        Overrides `as_frame` parameter.
 
     Returns
     -------
-    data : ResokitDataFrame or StaticSystem
+    data : DataFrame, ResokitDataFrame or StaticSystem
         Results of the query in a :py:class:`ResokitDataFrame`
-        (if `as_resokit=True`), or :py:class:`StaticSystem`.
+        (if `as_resokit=True`), or :py:class:`StaticSystem`,
+        or :py:class:`pandas.DataFrame` (if `raw=True`).
     """
-    # Ensure requests and astropy modules are imported
-    global requests_imported
-    requests_imported = assert_module_imported(requests_imported, "requests")
-
     if not planet_name and not star_name:
         raise ValueError(
             "Either 'planet_name' or 'star_name' must be provided."
@@ -346,6 +341,10 @@ def query_system(
     if cache:
         _session_queries.update({query: df})
 
+    # Get raw?
+    if raw:
+        return df
+
     # Convert to ResoKit format
     # Note: Metadata is set from default values
     meta = DEFAULT_METADATA.copy()
@@ -359,7 +358,7 @@ def query_system(
         metadata=meta,
     )
 
-    if not as_resokit:  # Return StaticSystem
+    if not as_frame:  # Return StaticSystem
         return resokit_to_system(reso)
 
     return reso  # Return ResoKit DataFrame

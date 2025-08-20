@@ -1,7 +1,7 @@
 Installation
 ============
 
-You need Python 3.8 or greater to run `ResoKit`.
+You need Python 3.10 or greater to run `ResoKit`.
 
 
 Installing  with pip

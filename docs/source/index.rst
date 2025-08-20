@@ -29,7 +29,7 @@ Contents
 
 .. toctree::
    :maxdepth: 3
-   :caption: - Reference
+   :caption: - API
 
    api/resokit.rst
 
@@ -39,6 +39,7 @@ Contents
    :caption: - Misc
 
    license.rst
+   refs.rst
 
 
 Repository and Issues

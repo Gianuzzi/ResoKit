@@ -13,7 +13,7 @@
 # DOCS
 # ============================================================================
 
-"""The ResoKit.datasets module includes tools for loading datasets."""
+"""The ResoKit.datasets package includes tools for loading datasets."""
 
 # =============================================================================
 # IMPORTS

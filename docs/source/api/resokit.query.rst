@@ -1,7 +1,7 @@
-Package ``resokit.load``
+Package ``resokit.query``
 =========================
 
-.. automodule:: resokit.load
+.. automodule:: resokit.query
    :members:
    :show-inheritance:
    :member-order: bysource

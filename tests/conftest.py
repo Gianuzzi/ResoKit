@@ -11,14 +11,11 @@
 # IMPORTS
 # ============================================================================
 
-
-# import pathlib
-
-# import numpy as np
-
 from pathlib import Path
 
-from pandas import DataFrame
+import numpy as np
+
+from pandas import DataFrame, Series
 
 import pytest
 
@@ -309,6 +306,338 @@ def load_binary_data(sample_bin_p_txt_path):
         which="p", from_file=sample_bin_p_txt_path, verbose=False
     )
     yield
+
+
+class MySharedK11:
+    npl = 6
+    pl_names = [
+        "Kepler-11 b",
+        "Kepler-11 c",
+        "Kepler-11 d",
+        "Kepler-11 e",
+        "Kepler-11 f",
+        "Kepler-11 g",
+    ]
+    data = DataFrame(
+        data=[
+            [  # Kepler-11 b
+                6.000000e-03,
+                1.610000e-01,
+                1.030390e01,
+                1.000000e-03,
+                6.000000e-04,
+            ],
+            [  # Kepler-11 c
+                9.000000e-03,
+                2.560000e-01,
+                1.302410e01,
+                8.000000e-04,
+                1.300000e-03,
+            ],
+            [  # Kepler-11 d
+                2.300000e-02,
+                2.780000e-01,
+                2.268450e01,
+                9.000000e-04,
+                9.000000e-04,
+            ],
+            [  # Kepler-11 e
+                2.500000e-02,
+                3.740000e-01,
+                3.199960e01,
+                1.200000e-03,
+                8.000000e-04,
+            ],
+            [  # Kepler-11 f
+                6.000000e-03,
+                2.220000e-01,
+                4.668880e01,
+                3.200000e-03,
+                2.700000e-03,
+            ],
+            [  # Kepler-11 g
+                7.900000e-02,
+                2.970000e-01,
+                1.183807e02,
+                6.000000e-04,
+                1.000000e-03,
+            ],
+        ],
+        columns=["mass", "radius", "P", "P_err_min", "P_err_max"],
+        index=pl_names,
+    )
+    nasa_p_err_min = [0.0006, 0.0013, 0.0009, 0.0008, 0.0027, 0.001]
+    nasa_p_err_max = [0.001, 0.0008, 0.0009, 0.0012, 0.0032, 0.0006]
+
+    perat = DataFrame(
+        data=[
+            [1.0, 1.26399713, 2.20154505, 3.10558138, 4.53117752, 11.48892167],
+            [0.79114104, 1.0, 1.74173263, 2.45695288, 3.58480049, 9.08935742],
+            [0.45422645, 0.57414093, 1.0, 1.41063722, 2.0581807, 5.21857215],
+            [0.3220009, 0.40700821, 0.70889949, 1.0, 1.45904324, 3.69944312],
+            [0.22069319, 0.27895555, 0.48586599, 0.68538065, 1.0, 2.53552672],
+            [0.08704037, 0.11001878, 0.1916233, 0.27031095, 0.39439537, 1.0],
+        ],
+        columns=pl_names,
+        index=pl_names,
+    )
+
+    estimated_mass = DataFrame(
+        data=[
+            [  # ck17
+                0.011872141051038074,
+                0.02609086347629103,
+                0.030010804546323423,
+                0.049659103103399396,
+                0.020484112885561786,
+                0.03357562292185889,
+            ],
+            [  # o20
+                0.020172789575398694,
+                0.09991819186770531,
+                0.13279179209679726,
+                0.05095991162664184,
+                0.061113118825503895,
+                0.0354035428798858,
+            ],
+            [  # e23
+                0.018482520943664683,
+                0.03655597714344237,
+                0.0412679180806311,
+                0.06383571769905695,
+                0.029644772131728718,
+                0.045481583779843,
+            ],
+            [  # m24
+                0.01748027769110997,
+                0.034927409114917526,
+                0.03950084780072523,
+                0.061501432603222425,
+                0.028235645987476073,
+                0.04359730370417228,
+            ],
+        ],
+        columns=pl_names,
+        index=["ck17", "o20", "e23", "m24"],
+    ).T
+
+    estimated_radii = DataFrame(
+        data=[
+            [  # ck17
+                0.10998515,
+                0.13676285,
+                0.23767145,
+                0.24963529,
+                0.10998515,
+                0.49161109,
+            ],
+            [  # o20
+                0.11318642,
+                0.1273095,
+                0.1671212,
+                0.17121156,
+                0.11318642,
+                0.23902445,
+            ],
+            [  # e23
+                0.11027453,
+                0.12353237,
+                0.18680687,
+                0.19770476,
+                0.11027453,
+                0.43231902,
+            ],
+            [  # m24
+                0.11064982,
+                0.12345122,
+                0.19349331,
+                0.20461059,
+                0.11064982,
+                0.44230155,
+            ],
+        ],
+        columns=pl_names,
+        index=["ck17", "o20", "e23", "m24"],
+    ).T
+
+    _estimated_a = [0.091, 0.107, 0.155, 0.195, 0.25, 0.466]
+    _estimated_a_forced = [
+        0.09142604,
+        0.10688114,
+        0.1547239,
+        0.19461124,
+        0.2503479,
+        0.46551455,
+    ]
+    _estimated_a_err0_f = [
+        [0.003, 0.003],
+        [0.001, 0.001],
+        [0.001, 0.001],
+        [0.002, 0.002],
+        [0.009, 0.009],
+        [0.004, 0.004],
+    ]
+    _estimated_a_err1_f = [
+        [0.00096839, 0.0009463],
+        [0.00112965, 0.00110943],
+        [0.00163307, 0.00159945],
+        [0.00205392, 0.00200999],
+        [0.00264699, 0.00259107],
+        [np.nan, np.nan],
+    ]
+    _estimated_a_err2_f = [
+        [0.00095237, 0.00095237],
+        [0.00111336, 0.00111336],
+        [0.00161168, 0.00161168],
+        [0.00202716, 0.00202716],
+        [0.0026078, 0.0026078],
+        [np.nan, np.nan],
+    ]
+    _estimated_a_err3_f = [
+        [0.00095236, 0.00095236],
+        [0.00111335, 0.00111335],
+        [0.00161168, 0.00161168],
+        [0.00202715, 0.00202715],
+        [0.0026078, 0.0026078],
+        [np.nan, np.nan],
+    ]
+    estimated_a = Series(
+        data=_estimated_a,
+        index=pl_names,
+        name="a",
+    )
+    estimated_a_forced = Series(
+        data=_estimated_a_forced,
+        index=pl_names,
+        name="a",
+    )
+
+    a_with_err = DataFrame(
+        data={
+            "a": _estimated_a,
+            "a_err_min": [e[0] for e in _estimated_a_err0_f],
+            "a_err_max": [e[1] for e in _estimated_a_err0_f],
+        },
+        index=pl_names,
+    )
+
+    _estimated_a_erri_f_cache = None  # internal cache
+
+    @classmethod
+    def get_estimated_a_erri_f(cls):
+        if cls._estimated_a_erri_f_cache is None:
+            cls._estimated_a_erri_f_cache = {
+                i: DataFrame(
+                    data={
+                        "a": cls._estimated_a_forced,
+                        "a_err_min": [e[0] for e in ierr_],
+                        "a_err_max": [e[1] for e in ierr_],
+                    },
+                    index=cls.pl_names,
+                )
+                for i, ierr_ in enumerate(
+                    [
+                        cls._estimated_a_err0_f,
+                        cls._estimated_a_err1_f,
+                        cls._estimated_a_err2_f,
+                        cls._estimated_a_err3_f,
+                    ]
+                )
+            }
+        return cls._estimated_a_erri_f_cache
+
+    _estimated_p = [10.3039, 13.0241, 22.6845, 31.9996, 46.6888, 118.3807]
+    _estimated_p_forced = [
+        10.23196061,
+        13.04583225,
+        22.74524654,
+        32.09553259,
+        46.5915098,
+        118.56592364,
+    ]
+    _estimated_p_err0_f = [
+        [0.001, 0.0006],
+        [0.0008, 0.0013],
+        [0.0009, 0.0009],
+        [0.0012, 0.0008],
+        [0.0032, 0.0027],
+        [0.0006, 0.001],
+    ]
+    _estimated_p_err1_f = [
+        [0.6503614, 0.68202358],
+        [0.37890969, 0.39502443],
+        [0.56370503, 0.58799598],
+        [0.97508968, 1.01662931],
+        [3.16651597, 3.32465226],
+        [np.nan, np.nan],
+    ]
+    _estimated_p_err2_f = [
+        [0.15987343, 0.15987343],
+        [0.20383931, 0.20383931],
+        [0.35538636, 0.35538636],
+        [0.50148025, 0.50148025],
+        [0.727988, 0.727988],
+        [np.nan, np.nan],
+    ]
+    _estimated_p_err3_f = [
+        [0.15987343, 0.15987343],
+        [0.20383931, 0.20383931],
+        [0.35538635, 0.35538635],
+        [0.50148024, 0.50148024],
+        [0.727988, 0.727988],
+        [np.nan, np.nan],
+    ]
+    estimated_p = Series(
+        data=_estimated_p,
+        index=pl_names,
+        name="P",
+    )
+    estimated_p_forced = Series(
+        data=_estimated_p_forced,
+        index=pl_names,
+        name="P",
+    )
+
+    p_with_err = DataFrame(
+        data={
+            "P": _estimated_p,
+            "P_err_min": [e[0] for e in _estimated_p_err0_f],
+            "P_err_max": [e[1] for e in _estimated_p_err0_f],
+        },
+        index=pl_names,
+    )
+
+    _estimated_p_erri_f_cache = None  # internal cache
+
+    @classmethod
+    def get_estimated_p_erri_f(cls):
+        if cls._estimated_p_erri_f_cache is None:
+            cls._estimated_p_erri_f_cache = {
+                i: DataFrame(
+                    data={
+                        "P": cls._estimated_p_forced,
+                        "P_err_min": [e[0] for e in ierr_],
+                        "P_err_max": [e[1] for e in ierr_],
+                    },
+                    index=cls.pl_names,
+                )
+                for i, ierr_ in enumerate(
+                    [
+                        cls._estimated_p_err0_f,
+                        cls._estimated_p_err1_f,
+                        cls._estimated_p_err2_f,
+                        cls._estimated_p_err3_f,
+                    ]
+                )
+            }
+        return cls._estimated_p_erri_f_cache
+
+
+@pytest.fixture(scope="session")
+def k11():
+    cls = MySharedK11()
+    cls.get_estimated_a_erri_f()
+    return cls
 
 
 # # ============================================================================
