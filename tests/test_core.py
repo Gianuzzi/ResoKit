@@ -226,14 +226,14 @@ class TestStaticSystem:
             k11.perat,
         )
 
-    def test_static_system_pair_ratio(self, k11):
+    def test_static_system_period_ratio(self, k11):
         """Test StaticSystem class period_ratios method."""
         syst = self.load_function["eu"](
             name=simple_syst, verbose=False, exact_match=False
         )
 
         # Test get item
-        perat = syst.pair_ratio()
+        perat = syst.period_ratio()
 
         # Assert types
         assert isinstance(perat, pd.DataFrame)

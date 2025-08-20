@@ -1786,7 +1786,7 @@ class StaticSystem:
                 return self.planets[0].P / bin_per
             elif self.n_planets_ == 1 and not self.is_circumbinary:
                 return bin_per / self.planets[0].P
-            return self.pair_ratio(verbose=False, use_binary=True)
+            return self.period_ratio(verbose=False, use_binary=True)
 
         # If not a binary system...
         if self.n_planets_ == 1:  # Single planet
@@ -1794,7 +1794,7 @@ class StaticSystem:
         elif self.n_planets_ == 2:  # Two planets
             return self.planets[1].P / self.planets[0].P
 
-        return self.pair_ratio(verbose=False)  # More than two planets
+        return self.period_ratio(verbose=False)  # More than two planets
 
     @__error_ratios__.default
     def ___error_ratios__default(self):
@@ -3178,7 +3178,7 @@ class StaticSystem:
 
         # Get (all) error ratios if needed
         if error:
-            error_ratios = self.pair_ratio(
+            error_ratios = self.period_ratio(
                 error=True, verbose=False, use_binary=False
             )
 
@@ -3261,8 +3261,8 @@ class StaticSystem:
                 )
             elif label:
                 label_aux = label[trip]
-            x = self.pair_ratio(j, i, verbose=False, use_binary=False)
-            y = self.pair_ratio(k, j, verbose=False, use_binary=False)
+            x = self.period_ratio(j, i, verbose=False, use_binary=False)
+            y = self.period_ratio(k, j, verbose=False, use_binary=False)
             err_x = error_ratios.iloc[i, j] if error else None
             err_y = error_ratios.iloc[j, k] if error else None
             ax.errorbar(
@@ -3291,6 +3291,7 @@ class StaticSystem:
                 ax=ax,
                 label_2mmrs=label is not False,
                 label_mmrs=label is not False,
+                color="black" if label is not False else None,
             )
 
         return ax
@@ -3494,15 +3495,18 @@ class StaticSystem:
 
         return new_ss
 
-    def pair_ratio(
+    def period_ratio(
         self,
         *pair: Union[int, list, tuple, str],
         verbose: bool = True,
         error: bool = False,
         use_binary: bool = True,
-        **fraction_kwargs: dict,
+        fraction_kwargs: Union[dict, None] = None,
     ) -> Union[float, pd.DataFrame]:
         r"""Return the period ratio of the specified pair of planets.
+
+        This function can also estimate the approximate fraction
+        corresponding to each period ratio.
 
         Parameters
         ----------
@@ -3520,10 +3524,17 @@ class StaticSystem:
         use_binary : bool, optional. Default: True.
             Whether to use the binary period ratio (include the star).
             If False, only the planets are considered.
-        fraction_kwargs : dict, optional
-            Keyword arguments for the float_to_fraction function.
+        fraction_kwargs : dict, optional. Default: None
+            Dictionary with arguments for the
+            :py:func:`resokit.utils.float_to_fraction` function.
             If None, no fraction conversion is done.
-            See float_to_fraction for more information.
+            Parameters can be:
+            - max_iter
+            - max_error
+            - as_fraction
+            - stop_func
+            See :py:func:`resokit.utils.float_to_fraction`
+            for more information.
 
         Returns
         -------
@@ -3547,20 +3558,23 @@ class StaticSystem:
         elif len(pair) == 1:
             pair = pair[0]
             if isinstance(pair, int):
-                return self.pair_ratio(
+                return self.period_ratio(
                     pair,
                     pair + 1,
                     verbose=verbose,
                     error=error,
                     use_binary=use_binary,
-                    **fraction_kwargs,
+                    fraction_kwargs=fraction_kwargs,
                 )
             if not isinstance(pair, Iterable) or len(pair) != 2:
                 raise ValueError("Pair must have 2 elements.")
 
         # Add verbose to fraction_kwargs, if fraction_kwargs is not empty
-        if fraction_kwargs:
-            fraction_kwargs["verbose"] = verbose
+        if fraction_kwargs is not None:
+            if not isinstance(fraction_kwargs, dict):
+                raise ValueError("Argument 'fraction_kwargs' must be a dict.")
+            if "verbose" not in fraction_kwargs:
+                fraction_kwargs["verbose"] = verbose
 
         # This calculates all the period ratios
         if isinstance(pair, str) and not error:
@@ -3631,7 +3645,7 @@ class StaticSystem:
 
         # If error is True, return the error of the period ratio
         if error:
-            err_df = self._pair_ratio_error(idxs)
+            err_df = self._period_ratio_error(idxs)
             # Check if remove binary
             if idxs == "all" and not use_binary and self.is_binary_:
                 if self.is_circumbinary:
@@ -3665,7 +3679,7 @@ class StaticSystem:
 
         return ratio
 
-    def _pair_ratio_error(
+    def _period_ratio_error(
         self, *pair: Union[list, tuple, str]
     ) -> Union[float, pd.DataFrame]:
         """Return the period ratio error of the specified pair of planets.
@@ -3688,18 +3702,18 @@ class StaticSystem:
             return self.__error_ratios__  # Already calculated for 3 bodies
 
         # Extract pair ratio
-        pair_ratio = self.pair_ratio(*pair, error=False, use_binary=True)
+        period_ratio = self.period_ratio(*pair, error=False, use_binary=True)
 
         # Formula: sqrt((err1/P1)^2 + (err2/P2)^2) * ratio
 
         # If pair is all. First call will be this one
-        if isinstance(pair_ratio, pd.DataFrame):
+        if isinstance(period_ratio, pd.DataFrame):
             # Return the DataFrame if it's already calculated
             if not self.__error_ratios__.empty:
                 return self.__error_ratios__
 
             # Create an empty series
-            max_perr_p = pd.Series(data=0.0, index=pair_ratio.index)
+            max_perr_p = pd.Series(data=0.0, index=period_ratio.index)
 
             # Fill the series with the planets first
             for i, name in enumerate(self.planet_names_):
@@ -3722,17 +3736,19 @@ class StaticSystem:
 
             # Create the DataFrame sigma2
             sigma2 = pd.DataFrame(
-                data=nan, index=pair_ratio.index, columns=pair_ratio.columns
+                data=nan,
+                index=period_ratio.index,
+                columns=period_ratio.columns,
             )
             # Fill the DataFrame
-            for name1 in pair_ratio.index:
-                for name2 in pair_ratio.columns:
+            for name1 in period_ratio.index:
+                for name2 in period_ratio.columns:
                     sigma2.loc[name1, name2] = (
                         max_perr_p[name1] + max_perr_p[name2]
                     )
 
             # Calculate the error
-            df = pair_ratio * sqrt(sigma2)
+            df = period_ratio * sqrt(sigma2)
 
             # Store the DataFrame
             self.__error_ratios__[df.columns] = df
@@ -3741,9 +3757,9 @@ class StaticSystem:
 
         # Be sure that self.__error_ratios__ is not empty
         if self.__error_ratios__.empty:
-            self.pair_ratio("all", error=True)
+            self.period_ratio("all", error=True)
 
-        # If pair is a single pair. Assume already parsed by pair_ratio
+        # If pair is a single pair. Assume already parsed by period_ratio
         # If pair is something like ([i,j],), then pair[0] is the pair
         if len(pair) == 1:
             pair = pair[0]

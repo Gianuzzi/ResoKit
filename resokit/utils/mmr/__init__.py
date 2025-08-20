@@ -19,6 +19,7 @@
 # IMPORTS
 # =============================================================================
 
+from .mmrs import closest_mmr3b  # noqa
 from .mmrs import label_mmr3b  # noqa
 from .mmrs import mindist_mmr3b  # noqa
 from .mmrs import mmr3b  # noqa
@@ -28,6 +29,7 @@ from .mmrs import plot_mmrs  # noqa
 # Make the functions available at the package level
 
 __all__ = [
+    "closest_mmr3b",
     "label_mmr3b",
     "mindist_mmr3b",
     "mmr3b",
