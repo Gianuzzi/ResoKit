@@ -11,6 +11,7 @@ Static-System representation or even plotting its planets properties.
    :maxdepth: 2
    
    tutorial.ipynb
+   basic_example.ipynb
    datasets.ipynb
    query.ipynb
    units.ipynb 
