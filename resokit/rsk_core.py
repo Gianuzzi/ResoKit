@@ -6,7 +6,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import attrs
-from tools import rmm
+from .tools import rmm
 
 
 # =============================================================================
