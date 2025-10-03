@@ -1,10 +1,12 @@
 include LICENSE
 include README.md
+include pyproject.toml
 include *.yaml
+
 recursive-include resokit *.py
 
+# Exclusions
 exclude tox.ini
-exclude pyproject.toml
 exclude resokit/_version.py
 recursive-exclude docs *
 recursive-exclude tests *

@@ -2083,6 +2083,8 @@ def download(
             chunk_size=chunk_size,
             print_size=print_size,
         )
+        if to_resokit is None and eu is None and nasa is None:
+            return
         return {"eu": eu, "nasa": nasa}
     return _full_manager.download(
         source=source,
@@ -2448,7 +2450,9 @@ def download_binary(
             chunk_size=chunk_size,
             print_size=print_size,
         )
-        return {"s": s, "p": p}
+        if return_data:
+            return {"s": s, "p": p}
+        return
     return _binary_manager.download(
         source=which,
         to_file=to_file,
