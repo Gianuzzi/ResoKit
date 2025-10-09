@@ -204,7 +204,7 @@ def execute_query(
         if verbose:
             print("Using cached previous identic query.")
         if not isinstance(_session_queries[query_url], pd.DataFrame):
-            print("Error. Las query result was not a dataframe.")
+            print("Error. Last query result was not a dataframe.")
             print(" Deleting cached query. Retry if necessary.")
             raise ValueError(
                 "Expected previous query result as dataframe, but"

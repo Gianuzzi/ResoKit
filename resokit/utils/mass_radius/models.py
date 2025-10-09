@@ -769,13 +769,13 @@ def muller_2024_mass(
     if not silent:
         warnings.warn(
             "Radius falls in the bivariate region: "
-            + f"{r1_tr} < R < {r2_tr}"
+            + f"{r3_tr} < R < {r2_tr}"
             + "\n The mass-radius relation may not be accurate.",
             stacklevel=2,
         )
-    if not isinstance(bivariate, (int, float)):
-        raise ValueError("Bivariate must be a number between 0 and 1.")
-    if bivariate < 0 or bivariate > 1:
+    if (not isinstance(bivariate, (int, float))) or (
+        bivariate < 0 or bivariate > 1
+    ):
         raise ValueError("Bivariate must be a number between 0 and 1.")
 
     if np.random.rand() < bivariate:  # Second branch

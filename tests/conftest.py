@@ -78,7 +78,7 @@ def fake_requests_success(monkeypatch):
 def fake_requests_failure(monkeypatch):
     """Mocks requests.get to raise a simulated network error."""
 
-    def mock_get(url, stream=True):
+    def mock_get(url, params=None, stream=True):
         raise requests.RequestException("Simulated network failure")
 
     monkeypatch.setattr("resokit.datasets.utils.requests.get", mock_get)
@@ -100,7 +100,7 @@ def mock_requests(monkeypatch, fake_csv_bytes):
             for i in range(0, len(self.content), chunk_size):
                 yield self.content[i : i + chunk_size]  # noqa
 
-    def fake_get(url, stream=True, timeout=30):
+    def fake_get(url, params=None, stream=True, timeout=30):
         return FakeResponse(fake_csv_bytes)
 
     monkeypatch.setattr("requests.get", fake_get)
@@ -638,6 +638,101 @@ def k11():
     cls = MySharedK11()
     cls.get_estimated_a_erri_f()
     return cls
+
+
+@pytest.fixture
+def planet_series():
+    return Series(
+        {
+            "name": "pl1",
+            "radius": 1.0,
+            "mass": 1.0,
+            "star_name": "st1",
+            "P": 10.0,
+            "radius_err_min": -0.12,
+            "radius_err_max": 0.15,
+            "mass_err_min": 0.13,
+            "mass_err_max": 0.14,
+        }
+    )
+
+
+@pytest.fixture
+def star_series():
+    return Series({"name": "st1", "mass": 1.5})
+
+
+@pytest.fixture
+def simple_binary(star_series):
+    st0 = rk.core.StaticStar(data=star_series, source="user", metadata={})
+    st1_series = star_series.copy()
+    st1_series["name"] = "st2"
+    st1_series["mass"] = 0.5
+    st1 = rk.core.StaticStar(data=st1_series, source="user", metadata={})
+    data = Series({"a": 1.0, "e": 0.1, "P": 20.0})
+    bin_sys = rk.core.StaticBinaryStar(
+        star0=st0, star1=st1, data=data, name="bin1", metadata={}
+    )
+    return bin_sys
+
+
+@pytest.fixture
+def simple_system(star_series, planet_series):
+    st = rk.core.StaticStar(data=star_series, source="user", metadata={})
+    p1_series = planet_series.copy()
+    p1_series["name"] = "pl1"
+    p1_series["P"] = 10.0
+    p1_series["P_err_min"] = 1.0
+    p1_series["P_err_max"] = 2.0
+    p1 = rk.core.StaticPlanet(data=p1_series, source="user", metadata={})
+    p2_series = planet_series.copy()
+    p2_series["name"] = "pl2"
+    p2_series["P"] = 20.0
+    p2_series["P_err_min"] = 2.0
+    p2_series["P_err_max"] = 1.0
+    p2 = rk.core.StaticPlanet(data=p2_series, source="user", metadata={})
+    sys = rk.core.StaticSystem(
+        star=st, planets=[p1, p2], name="sys1", metadata={}
+    )
+    return sys
+
+
+@pytest.fixture
+def simple_planet(planet_series):
+    return rk.core.StaticPlanet(data=planet_series, source="user", metadata={})
+
+
+@pytest.fixture
+def simple_star(star_series):
+    return rk.core.StaticStar(data=star_series, source="user", metadata={})
+
+
+@pytest.fixture()
+def patch_units_and_estimators(monkeypatch):
+    """Default lightweight patches for convert, estimate_mass, estimate_radius.
+
+    By default convert returns its input(s) unchanged (identity) so tests don't
+    depend on real unit conversions. Specific tests can override these.
+    """
+
+    def convert_dummy(*args, **kwargs):
+        # If single value -> return single value
+        if len(args) == 1:
+            return args[0]
+        # If triple values -> return tuple of them
+        if len(args) >= 3:
+            return (args[0], args[1], args[2])
+        # fallback
+        return args if args else None
+
+    monkeypatch.setattr(rk.core, "convert", convert_dummy)
+    monkeypatch.setattr(
+        rk.core, "estimate_mass", lambda **kwargs: (100.0, 90.0, 110.0)
+    )
+    monkeypatch.setattr(
+        rk.core, "estimate_radius", lambda **kwargs: (1.0, 0.9, 1.1)
+    )
+    yield
 
 
 # # ============================================================================

@@ -166,12 +166,6 @@ class ResokitDataFrame:
                 stacklevel=2,
             )
 
-        if self.n_objects_ == 1 and not isinstance(self.data, pd.Series):
-            raise TypeError(
-                "With only one object, data must be a Series "
-                + "(not a DataFrame)"
-            )
-
         return
 
     def __len__(self):
@@ -263,7 +257,6 @@ class ResokitDataFrame:
         self,
         name: str,
         value: Any,
-        inplace: bool = False,
         silent: bool = False,
     ) -> "ResokitDataFrame":
         """Set the value of a column in the associated DataFrame.
@@ -274,11 +267,8 @@ class ResokitDataFrame:
             Name of the column to set.
             It is created if non existing.
         value : Any
-            The value to be set at the colum. May be any object supported
+            The value to be set at the column. May be any object supported
             by the setting method df[name] = value of a df DataFrame.
-        inplace : bool, optional. Default: False
-            If False, a copy of the ResokitDataFrame with the column
-            set is returned.
         silent : bool, optional. Default: False
             Whether to not print a warning message when setting a column.
 
@@ -293,9 +283,12 @@ class ResokitDataFrame:
             else:
                 print("WARNING: Editing existing column of ResoKitDataFrame.")
 
-        df = self if inplace else self.copy()
-        df.data[name] = value
-        return df
+        rkdf = self.copy()
+        rkdf.data[name] = value
+        new = ResokitDataFrame(
+            data=rkdf.data, source=rkdf.source, metadata=rkdf.metadata
+        )
+        return new
 
     def plot(
         self,
@@ -336,16 +329,20 @@ class ResokitDataFrame:
         if ax is None:
             ax = plt.gca()
 
-        x_data = self[x]
-        y_data = self[y]
+        x_data = parse_to_iter(self[x])
+        y_data = parse_to_iter(self[y])
 
-        if not isinstance(x_data, str) and isnan(x_data):
+        if isinstance(x_data[0], str) or (
+            (len(x_data) > 1) and all(isnan(x_data))
+        ):
             return ax
 
-        if not isinstance(y_data, str) and isnan(y_data):
+        if isinstance(y_data[0], str) or (
+            (len(y_data) > 1) and all(isnan(y_data))
+        ):
             return ax
 
-        if not isinstance(error_x, bool) or not isinstance(error_y, bool):
+        if (not isinstance(error_x, bool)) or (not isinstance(error_y, bool)):
             raise TypeError("error_x and error_y must be booleans.")
 
         # Check error columns
@@ -793,6 +790,10 @@ class StaticBody(ResokitDataFrame):
         StaticBody
             A new StaticBody with the updated attribute.
         """
+        # Check
+        if not isinstance(attr, str):
+            raise TypeError("Argument 'attr' must be a string.")
+
         # Can not change is_star
         if attr == "is_star":
             raise ValueError("Cannot change 'is_star' attribute.")
