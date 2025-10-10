@@ -12,22 +12,21 @@
 # ============================================================================
 
 from fractions import Fraction
-from types import SimpleNamespace
-from numpy import isnan
 
 import matplotlib
-from matplotlib.testing.compare import compare_images
 import matplotlib.pyplot as plt
+from matplotlib.testing.compare import compare_images
+
+from numpy import isnan
 
 import pandas as pd
 
 import pytest
 
-
 import resokit.utils as rutils
+from resokit import core
 from resokit.load import from_eu
 
-from resokit import core
 
 # ============================================================================
 # CONSTANTS
@@ -508,7 +507,7 @@ class TestPlotTriplet:
             )
         with pytest.raises(ValueError):
             syst.plot_triplet(
-                (0,1,2), error=True, capsize=10, label=True, draw_mmr=False
+                (0, 1, 2), error=True, capsize=10, label=True, draw_mmr=False
             )
 
 
@@ -525,9 +524,9 @@ class FakeSim:
         if "hash" in kwargs:
             self.particles[kwargs["hash"]] = core.rng
 
-    def remove(self, hash):
-        self.removed.append(hash)
-        self.particles.pop(hash, None)
+    def remove(self, hashh):
+        self.removed.append(hashh)
+        self.particles.pop(hashh, None)
 
 
 class TestToRebound:
