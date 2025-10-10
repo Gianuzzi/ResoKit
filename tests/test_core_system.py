@@ -12,13 +12,22 @@
 # ============================================================================
 
 from fractions import Fraction
+from types import SimpleNamespace
+from numpy import isnan
+
+import matplotlib
+from matplotlib.testing.compare import compare_images
+import matplotlib.pyplot as plt
 
 import pandas as pd
 
 import pytest
 
+
 import resokit.utils as rutils
 from resokit.load import from_eu
+
+from resokit import core
 
 # ============================================================================
 # CONSTANTS
@@ -364,3 +373,200 @@ class TestMassRadius:
                 rtol=1e-3,
                 atol=1e-4,
             )
+
+    def test_estimate_radius_new(self, k11):
+        syst = from_eu(name=simple_syst, verbose=False, exact_match=False)
+        radii_ss = syst.estimate_radius(
+            model="e23", force=True, new_system=True
+        )
+
+        assert isinstance(radii_ss, core.StaticSystem)
+
+
+class TestPeriodRatios:
+    def test_get_period_ratios(self, my_k47):
+        syst = my_k47
+        pr = syst.period_ratios_
+        assert isinstance(pr, pd.DataFrame)
+        assert pr.shape == (4, 4)
+        assert pr.iloc[1, 1] == 1
+        assert pr.iloc[1, 2] == 3.783778325322131
+
+        pra = syst.period_ratio(
+            "all", use_binary=False, fraction_kwargs={"max_error": 1e-1}
+        )
+        assert isinstance(pra, pd.DataFrame)
+        assert pra.shape == (3, 3)
+        assert pra.iloc[1, 1] == (1, 1)
+        assert pra.iloc[1, 2] == (3, 2)
+
+        pra = syst.period_ratio(
+            "all", use_binary=True, fraction_kwargs={"max_error": 1e-1}
+        )
+        assert isinstance(pra, pd.DataFrame)
+        assert pra.shape == (4, 4)
+        assert pra.iloc[1, 1] == (1, 1)
+        assert pra.iloc[2, 3] == (3, 2)
+
+        assert syst.period_ratio([1, 2]) == 0.2642860955431012
+
+        pre = syst.period_ratio("all", error=True)
+        assert isinstance(pre, pd.DataFrame)
+        assert pre.shape == (4, 4)
+        assert isnan(pre.iloc[0, 0])
+        assert pre.iloc[1, 1] == 0.0011424757138369715
+
+
+class TestAddRemoveSwapReplace:
+    def test_manipulate(self, my_k47):
+        syst = my_k47
+        mass = syst["mass"]
+        assert isinstance(mass, pd.Series)
+        assert isnan(mass.iloc[0])
+        assert mass.iloc[1] == 0.05984
+
+        assert "Kepler-47 (AB)c" in syst.planet_names_
+        modif1 = syst.remove_planet(2)
+        assert "Kepler-47 (AB)c" not in modif1.planet_names_
+
+        modif2 = syst.remove_planet("Kepler-47 (AB)b")
+        assert "Kepler-47 (AB)b" not in modif2.planet_names_
+
+        # Get a planet from the original system
+        planet2 = syst.planet(1)
+
+        # Add the planet to the modified system
+        with pytest.warns(UserWarning):
+            modif1.add_planet(planet2)
+
+        with pytest.warns(UserWarning):
+            modif2.add_planet(planet2)
+
+        modif3 = syst.remove_planet(1)
+        modif3.add_planet(planet2)
+
+        assert syst.suffixes_ == ["A", "B", "b", "d", "c"]
+        modif4 = syst.swap_planets(1, 2)
+
+        assert modif4.suffixes_ == ["A", "B", "b", "c", "d"]
+
+        with pytest.warns(UserWarning):
+            modif5 = syst.replace_planet(2, planet2)
+        assert modif5.suffixes_ == ["A", "B", "b", "d", "d"]
+
+
+class TestPlotTriplet:
+    def test_plot_triplet(self, my_k47, triplet_plot_path, tmp_path):
+        syst = my_k47
+
+        matplotlib.use("svg")  # or 'svg', 'pdf', 'ps'
+        plt.figure(dpi=120)
+        bounds = [2.51, 4.5, 1.41, 2.1]  # [xmin, xmax, ymin, ymax]
+        ax = syst.plot_triplet(
+            error=True, capsize=10, label=True, draw_mmr=False
+        )
+        ax.set_xlim(bounds[0], bounds[1])
+        ax.set_ylim(bounds[2], bounds[3])
+        rutils.mmr.plot_mmrs(
+            bounds=bounds,
+            ax=ax,
+            label_mmrs=True,
+            color="black",
+        )
+        ax.legend()
+        ax.set_xlabel("Period Ratio ($P_2/P_1$)")
+        ax.set_ylabel("Period Ratio ($P_3/P_2$)")
+
+        image_file_path = tmp_path / "test_image.png"
+        plt.savefig(image_file_path)
+
+        compare_images(triplet_plot_path, image_file_path, tol=1e-6)
+
+    def test_plot_triplet_wrong(self, my_k47, triplet_plot_path, tmp_path):
+        syst = my_k47
+        matplotlib.use("svg")  # or 'svg', 'pdf', 'ps'
+        with pytest.raises(ValueError):
+            syst.plot_triplet(
+                which=123123,
+                error=True,
+                capsize=10,
+                label=True,
+                draw_mmr=False,
+            )
+        with pytest.raises(ValueError):
+            syst.plot_triplet(
+                error=True, capsize=10, label=["asd", 12], draw_mmr=False
+            )
+
+    def test_plot_triplet_specific(self, my_k47, triplet_plot_path, tmp_path):
+        syst = my_k47
+        matplotlib.use("svg")  # or 'svg', 'pdf', 'ps'
+
+        with pytest.raises(ValueError):
+            syst.plot_triplet(
+                1, error=True, capsize=10, label=True, draw_mmr=False
+            )
+        with pytest.raises(ValueError):
+            syst.plot_triplet(
+                (0,1,2), error=True, capsize=10, label=True, draw_mmr=False
+            )
+
+
+class FakeSim:
+    """Lightweight fake REBOUND Simulation."""
+
+    def __init__(self):
+        self.added = []
+        self.removed = []
+        self.particles = {}
+
+    def add(self, **kwargs):
+        self.added.append(kwargs)
+        if "hash" in kwargs:
+            self.particles[kwargs["hash"]] = core.rng
+
+    def remove(self, hash):
+        self.removed.append(hash)
+        self.particles.pop(hash, None)
+
+
+class TestToRebound:
+    def test_to_rebound_single(self, simple_system, capsys):
+        sys = simple_system
+        sim = sys.to_rebound(sim=None, fillna=True, units=True, verbose=True)
+        assert (
+            isinstance(sim, core.Simulation)
+            or isinstance(sim, FakeSim)
+            or hasattr(sim, "add")
+        )
+        cap = capsys.readouterr()
+        assert "Star" in cap.out or "planets" in cap.out
+
+    def test_to_rebound_binary_non_circumbinary(self, simple_system):
+        sys = simple_system
+        fake_sim = FakeSim()
+        result = sys.to_rebound(
+            sim=fake_sim, fillna=True, units=False, verbose=False
+        )
+        assert isinstance(result, FakeSim)
+        # Should have two stars and one planet
+        hashes = [a["hash"] for a in fake_sim.added]
+        assert "st1" in hashes and "pl1" in hashes and "pl2" in hashes
+
+    def test_to_rebound_fillna_false(self, simple_system):
+        sys = simple_system
+        fake_sim = FakeSim()
+        # Set planet attributes to trigger zero branches
+        pl1 = sys.planet(1)
+        pl1 = pl1.set_attr("mass", 0.1)
+        pl1 = pl1.set_attr("radius", 0.4)
+        pl1 = pl1.set_attr("a", 7)
+        pl1 = pl1.set_attr("name", "nuevo")
+        new = sys.remove_planet(1)
+        new = new.add_planet(pl1)
+        res = new.to_rebound(
+            sim=fake_sim, fillna=False, units=True, verbose=False
+        )
+        assert isinstance(res, FakeSim)
+        hashes = [a["hash"] for a in fake_sim.added]
+        assert "nuevo" in hashes

@@ -4090,7 +4090,11 @@ class StaticSystem:
         else:  # Single star
             sim.add(
                 m=self.star.mass * MKS["ms"] / units[0],
-                r=self.star.radius * MKS["rs"] / units[1],
+                r=(
+                    self.star.radius * MKS["rs"] / units[1]
+                    if hasattr(self.star, "radius")
+                    else 0.0
+                ),
                 hash=self.star.name,
             )
             # Define the "center" for the planets

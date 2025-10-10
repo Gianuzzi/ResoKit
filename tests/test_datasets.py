@@ -494,51 +494,166 @@ class TestCheckOnline:
     def test_check_outdated_nasa_success(
         self, mock_requests_nasa_html_success
     ):
-        result = rdb.check_outdated_dataset("nasa", verbose=False)
+        result = rdb.check_outdated_dataset("nasa", verbose=True)
         assert result[0] == 5432
         assert result[1] > 12000
 
     def test_check_outdated_eu_wrong(self, mock_requests_eu_html_wrong):
-        result = rdb.check_outdated_dataset("eu", verbose=False)
+        result = rdb.check_outdated_dataset("eu", verbose=True)
         assert result[0] == -1
         assert result[1] is None
 
     def test_check_outdated_nasa_wrong(self, mock_requests_nasa_html_wrong):
-        result = rdb.check_outdated_dataset("nasa", verbose=False)
+        result = rdb.check_outdated_dataset("nasa", verbose=True)
         assert result[0] == -1
         assert result[1] > 12000
 
     def test_check_outdated_nasa_no_match(
         self, mock_requests_nasa_html_no_match
     ):
-        result = rdb.check_outdated_dataset("nasa", verbose=False)
+        result = rdb.check_outdated_dataset("nasa", verbose=True)
         assert result[0] == -1
 
     @pytest.mark.parametrize("source", ["eu", "nasa"])
     def test_check_outdated_nasa_failure(
         self, source, mock_requests_html_failure
     ):
-        result = rdb.check_outdated_dataset(source, verbose=False)
+        result = rdb.check_outdated_dataset(source, verbose=True)
         assert result[0] == -1
         assert result[1] is None
 
     def test_check_outdated_invalid_source(self):
         with pytest.raises(ValueError):
-            rdb.check_outdated_dataset("Z", verbose=False)
+            rdb.check_outdated_dataset("Z", verbose=True)
 
     @pytest.mark.parametrize("source", ["p", "s"])
     def test_check_outdated_binary_valid_sources(
         self, source, fake_requests_success
     ):
-        assert rdb.check_outdated_binary(source, verbose=False) == 3
+        assert rdb.check_outdated_binary(source, verbose=True) == 3
 
     @pytest.mark.parametrize("source", ["p", "s"])
     def test_check_outdated_binary_failure(
         self, source, fake_requests_failure
     ):
-        count = rdb.check_outdated_binary(source, verbose=False)
+        count = rdb.check_outdated_binary(source, verbose=True)
         assert count == -1
 
     def test_check_outdated_binary_invalid_source(self):
         with pytest.raises(ValueError):
-            rdb.check_outdated_binary("Z", verbose=False)
+            rdb.check_outdated_binary("Z", verbose=True)
+
+
+class TestQuery:
+    def test_query_new_all_branches(self, monkeypatch, load_eu_data):
+        mgr = rdb.DatasetManager()
+
+        def fake_load(source, **kwargs):
+            if source == "empty":
+                # Trigger IndexError branch
+                return pd.DataFrame(columns=["rowupdate"])
+            if source == "eu":
+                return pd.DataFrame(
+                    {
+                        "updated": ["2023-01-01"],
+                        "modification_date": ["2023-01-01"],
+                    }
+                )
+            # Default: nasa
+            return pd.DataFrame({"rowupdate": ["2023-01-01"]})
+
+        monkeypatch.setattr(mgr, "load", fake_load)
+
+        # --- Mock build_query and execute_query
+        monkeypatch.setattr(
+            rdb, "build_query", lambda **kw: f"QUERY for {kw['source']}"
+        )
+        monkeypatch.setattr(
+            rdb,
+            "execute_query",
+            lambda **kw: pd.DataFrame(
+                {"rowupdate": ["2024-01-01"], "extra": [1]}
+            ),
+        )
+
+        out = mgr.query_new("nasa", verbose=False)
+        assert isinstance(out, pd.DataFrame)
+        assert "rowupdate" in out.columns
+
+        with pytest.raises(ValueError):
+            mgr.query_new("invalid")
+
+        assert rdb.query_new_rows("eu") is not None
+
+
+class TestBinaryOutdated:
+    @pytest.mark.parametrize("source", ["p", "s", True, False, "both"])
+    def test_check_binary_outdated_all_paths(
+        self, monkeypatch, source, capsys
+    ):
+        """Cover every logical path in check_binary_outdated."""
+        # --- Mock global constants
+        monkeypatch.setattr(
+            "resokit.datasets.databases.BINARIES_FILENAMES",
+            {"p": "filep", "s": "files"},
+        )
+        monkeypatch.setattr(
+            "resokit.datasets.databases.DATASET_FILENAMES",
+            {"planets": "planets.csv"},
+        )
+
+        # --- Mock _binary_manager.load behavior
+        class DummyManager:
+            def __init__(self):
+                self.calls = 0
+
+            def load(self, source, ret_header):
+                self.calls += 1
+                if ret_header:
+                    return "header\nrow1\nrow2"
+                else:
+                    return pd.DataFrame({"a": [1, 2]})
+
+        dummy = DummyManager()
+        monkeypatch.setattr(rdb, "_binary_manager", dummy)
+
+        # --- Mock check_outdated_binary
+        monkeypatch.setattr(rdb, "check_outdated_binary", lambda **k: 10)
+
+        result = rdb.check_binary_outdated(which=source, verbose=False)
+        # both → tuple, others → bool
+        if source in ("both",):
+            assert isinstance(result, tuple)
+        else:
+            assert result is True
+
+        monkeypatch.setattr(rdb, "check_outdated_binary", lambda **k: 5)
+        assert rdb.check_binary_outdated(which="p", verbose=False) is False
+
+        monkeypatch.setattr(rdb, "check_outdated_binary", lambda **k: 0)
+        assert rdb.check_binary_outdated(which="p", verbose=False) is True
+
+        monkeypatch.setattr(rdb, "check_outdated_binary", lambda **k: 1)
+        assert rdb.check_binary_outdated(which="p", verbose=False) is False
+
+        def bad_load(*a, **k):
+            raise FileNotFoundError("missing")
+
+        monkeypatch.setattr(dummy, "load", bad_load)
+        assert (
+            rdb.check_binary_outdated(which="p", verbose=False, soft=True)
+            is True
+        )
+        with pytest.raises(FileNotFoundError):
+            rdb.check_binary_outdated(which="p", verbose=False, soft=False)
+
+        with pytest.raises(ValueError):
+            rdb.check_binary_outdated(which="invalid", verbose=False)
+
+        rdb.BINARIES_FILENAMES = {"p": "filep", "s": "files"}
+        rdb.DATASET_FILENAMES = {"invalid": "something"}
+        with pytest.raises(ValueError):
+            rdb.check_binary_outdated(which="invalid", verbose=True)
+
+        cap = capsys.readouterr()
+        assert "dataset" in cap.out or cap.out == ""

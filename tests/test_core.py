@@ -331,7 +331,6 @@ class TestResokitdataframe:
         rdf = core.ResokitDataFrame(data=fake_df, source="user", metadata={})
         rdf.set_column("name", "new", silent=False)
 
-
     def test_resokit_dataframe_single_object_must_be_series(self):
         # If only one object, a Series or df must be passed
         df1 = pd.DataFrame({"name": ["single"], "x": [1.0]})
@@ -558,7 +557,9 @@ class TestStaticplanet:
         html = pl._repr_html_()
         assert isinstance(html, str)
 
-    def test_static_planet_invalid_err_method(self, simple_planet, patch_units_and_estimators):
+    def test_static_planet_invalid_err_method(
+        self, simple_planet, patch_units_and_estimators
+    ):
         pl = simple_planet
         # invalid err_method should raise ValueError
         pl.estimate_mass(err_method="bad")

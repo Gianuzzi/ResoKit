@@ -286,7 +286,7 @@ def patch_download(monkeypatch):
     )
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def load_eu_data(sample_eu_csv_path):
     # load small test data
     rk.datasets.load(
@@ -299,13 +299,18 @@ def load_eu_data(sample_eu_csv_path):
     yield
 
 
-@pytest.fixture(scope="class")
+@pytest.fixture(scope="module")
 def load_binary_data(sample_bin_p_txt_path):
     # load small test data
     rk.datasets.load_binary(
         which="p", from_file=sample_bin_p_txt_path, verbose=False
     )
     yield
+
+
+@pytest.fixture(scope="session")
+def triplet_plot_path():
+    return Path(__file__).parent / "data" / "test_image.png"
 
 
 class MySharedK11:
@@ -640,6 +645,11 @@ def k11():
     return cls
 
 
+@pytest.fixture(scope="class")
+def my_k47(load_binary_data, load_eu_data):
+    return rk.load.from_eu("Kepler 47", exact_match=False)
+
+
 @pytest.fixture
 def planet_series():
     return Series(
@@ -684,12 +694,24 @@ def simple_system(star_series, planet_series):
     p1_series["P"] = 10.0
     p1_series["P_err_min"] = 1.0
     p1_series["P_err_max"] = 2.0
+    p1_series["a"] = 22.3
+    p1_series["e"] = 0.2
+    p1_series["inc"] = 58
+    p1_series["M"] = 43
+    p1_series["w"] = 765
+    p1_series["O"] = 63
     p1 = rk.core.StaticPlanet(data=p1_series, source="user", metadata={})
     p2_series = planet_series.copy()
     p2_series["name"] = "pl2"
     p2_series["P"] = 20.0
     p2_series["P_err_min"] = 2.0
     p2_series["P_err_max"] = 1.0
+    p2_series["a"] = 4.3
+    p2_series["e"] = 0.7
+    p2_series["inc"] = 3.7
+    p2_series["M"] = 12
+    p2_series["w"] = 34
+    p2_series["O"] = 123
     p2 = rk.core.StaticPlanet(data=p2_series, source="user", metadata={})
     sys = rk.core.StaticSystem(
         star=st, planets=[p1, p2], name="sys1", metadata={}
