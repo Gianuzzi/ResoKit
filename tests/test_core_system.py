@@ -531,6 +531,7 @@ class FakeSim:
 
 class TestToRebound:
     rebound = pytest.importorskip("rebound")
+
     def test_to_rebound_single(self, simple_system, capsys):
         sys = simple_system
         sim = sys.to_rebound(sim=None, fillna=True, units=True, verbose=True)
