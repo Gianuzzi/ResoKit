@@ -153,7 +153,7 @@ _NASA_MAPPING = MappingProxyType(
         "sy_pnum": "n_planets",
         "pl_controv_flag": "controversial",
         "default_flag": "default_set",
-        "circumbinary_flag": "circumbinary",
+        "cb_flag": "circumbinary",
     }
 )
 
