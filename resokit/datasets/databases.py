@@ -2272,7 +2272,11 @@ def update(
         load_kwargs = {}
 
     # Load the dataset
-    load(source=source, **load_kwargs)
+    if source in ["all", "both"]:
+        load(source="eu", **load_kwargs)
+        load(source="nasa", **load_kwargs)
+    else:
+        load(source=source, **load_kwargs)
 
     # Now update it
     return download(
