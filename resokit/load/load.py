@@ -725,7 +725,9 @@ def from_binary(
 
     # Add the period
     if add_period:
-        row["P"] = calc_period(row["a"], row["star0_mass"], row["star1_mass"])
+        row["P"] = calc_period(
+            row["a"], row["star0_mass"] + row["star1_mass"], 0.0
+        )
 
     # Rename the stars if requested
     if rename is not None:
