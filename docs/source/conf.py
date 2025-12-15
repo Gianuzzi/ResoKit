@@ -68,7 +68,7 @@ html_context = {
     "display_github": True,
     "github_user": "Gianuzzi",
     "github_repo": "ResoKit",
-    "github_version": "ema",  # Version
+    "github_version": "main",  # Version
     "conf_py_path": "/docs/source/",  # Path in the checkout to the docs root
 }
 

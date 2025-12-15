@@ -1,6 +1,6 @@
 # Welcome to **ResoKit**
 
-![logo](https://github.com/gianuzzi/resokit/raw/ema/docs/source/_static/resokit_logo.png)
+![logo](https://github.com/gianuzzi/resokit/raw/main/docs/source/_static/resokit_logo.png)
 
 <!-- BODY -->
 
