@@ -32,7 +32,6 @@ from resokit.core import (
 )
 from resokit.utils.parser import DEFAULT_METADATA, assert_module_imported
 
-
 try:
     from astropy.table import Table
 

@@ -27,7 +27,6 @@ import resokit.utils as rutils
 from resokit import core
 from resokit.load import from_eu
 
-
 # ============================================================================
 # CONSTANTS
 # ============================================================================

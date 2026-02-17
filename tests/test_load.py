@@ -17,7 +17,6 @@ import pytest
 import resokit.load as rio
 from resokit.core import StaticBinaryStar, StaticSystem
 
-
 # ============================================================================
 # TESTS
 # ============================================================================
