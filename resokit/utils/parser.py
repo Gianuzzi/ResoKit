@@ -457,7 +457,7 @@ def parse_name(name: str, force: bool = False) -> str:
         Name in a more versatile format.
     """
     # Remove the trailing whitespaces
-    name = name.strip()
+    name = str(name).strip()
 
     # Remove the trailing " A" or " B" or " AB" or " (AB)" or "(AB)"
     # Only if it is at the end of the name
