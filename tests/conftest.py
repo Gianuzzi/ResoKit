@@ -133,7 +133,7 @@ def mock_requests_eu_html_success(monkeypatch):
     """Mock requests.get with a valid <div class='stat'> number."""
     html = """
         <html><body>
-        <p>Last update: June 1, 2020 currently 5,435 planets</p>
+        <p>Last update: June 1, 2020 currently 5435 pextrasolar objects</p>
         </body></html>
         """
 

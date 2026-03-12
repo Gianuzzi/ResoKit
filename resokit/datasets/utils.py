@@ -1143,7 +1143,7 @@ def _check_outdated_eu(
         # Extract the date and number of planets using regex
         aux = (
             r"Last\s+update[d]?\s*:\s*([\w\.]+\s+\d{1,2},\s+\d{4})"
-            + r"\s+currently\s+([\d,]+)\s+planets"
+            + r"\s+currently\s+([\d]+)\s+"
         )
         match = re.search(aux, text)
 
