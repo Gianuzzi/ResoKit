@@ -362,6 +362,13 @@ class ResoKitDataset:
             print(f"Dataset saved to {file_path}.")
         return
 
+    def list_systems(self):
+        """Yield the systems in the dataset."""
+        if self.dataset.empty:
+            return
+        for star_name in self.dataset.star_name.unique():
+            yield self.dataset[self.dataset.star_name == star_name]
+
 
 # =============================================================================
 # HELPER FUNCTIONS

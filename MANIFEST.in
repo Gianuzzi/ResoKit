@@ -10,3 +10,4 @@ exclude tox.ini
 exclude resokit/_version.py
 recursive-exclude docs *
 recursive-exclude tests *
+global-exclude .ipynb_checkpoints
