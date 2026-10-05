@@ -362,12 +362,42 @@ class ResoKitDataset:
             print(f"Dataset saved to {file_path}.")
         return
 
-    def list_systems(self):
-        """Yield the systems in the dataset."""
+    def list_systems(self, as_resokit: bool = True) -> list:
+        """Yield the systems in the dataset.
+
+        Parameters
+        ----------
+        as_resokit : bool, optional. Default: True.
+            Whether to return the systems as ResoKit objects.
+
+        Yields
+        ------
+        system : StaticSystem or pd.DataFrame
+            The systems in the dataset.
+        """
         if self.dataset.empty:
             return
+
+        if as_resokit:
+            from resokit.core import df_to_resokit, resokit_to_system  # noqa
+
         for star_name in self.dataset.star_name.unique():
-            yield self.dataset[self.dataset.star_name == star_name]
+            df = self.dataset[self.dataset.star_name == star_name].copy()
+            if df.empty:
+                continue
+            if as_resokit:
+                reso = df_to_resokit(
+                    df=df,
+                    source=self.source,
+                    drop=False,
+                    copy=False,
+                    return_df=False,
+                    metadata=None,
+                )
+                # Return StaticSystem
+                yield resokit_to_system(reso, verbose=False)
+            else:
+                yield df
 
 
 # =============================================================================
