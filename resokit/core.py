@@ -4063,7 +4063,7 @@ class StaticSystem:
             sim.add(
                 m=self.star.star0.mass * MKS["ms"] / units[0],
                 r=self.star.star0.radius * MKS["rs"] / units[1],
-                hash=self.star.star0.name,
+                name=self.star.star0.name,
             )
             # Define the "center" for the planets
             center = sim.particles[self.star.star0.name]
@@ -4077,14 +4077,14 @@ class StaticSystem:
                     ),
                     a=self.star.a * MKS["au"] / units[1],
                     e=self.star.e,
-                    hash=self.star.star1.name,
+                    name=self.star.star1.name,
                 )
                 # Redefine the "center" for the planets
                 # Here we create a new particle at the center of mass
                 sim.add(
                     m=self.star.total_mass_ * MKS["ms"] / units[0],
                     r=0.0,
-                    hash="center",
+                    name="center",
                 )
                 center = sim.particles["center"]
         else:  # Single star
@@ -4095,7 +4095,7 @@ class StaticSystem:
                     if hasattr(self.star, "radius")
                     else 0.0
                 ),
-                hash=self.star.name,
+                name=self.star.name,
             )
             # Define the "center" for the planets
             center = sim.particles[self.star.name]
@@ -4149,7 +4149,7 @@ class StaticSystem:
                 inc=convert(planet.inc, from_units="deg", to_units="rad"),
                 omega=convert(planet.w, from_units="deg", to_units="rad"),
                 M=rng.uniform(0, 2 * pi),  # Random mean anomaly
-                hash=planet.name,
+                name=planet.name,
                 primary=center,  # Our center
             )
         if verbose:
@@ -4166,7 +4166,7 @@ class StaticSystem:
                 ),
                 a=self.star.a * MKS["au"] / units[1],
                 e=self.star.e,
-                hash=self.star.star1.name,
+                name=self.star.star1.name,
                 primary=center,  # Our center
             )
             if verbose:
@@ -4174,7 +4174,7 @@ class StaticSystem:
 
         # Remove center particle if necessary
         if self.is_binary_ and self.is_circumbinary:
-            sim.remove(hash="center")
+            sim.remove(name="center")
 
         return sim
 

@@ -520,12 +520,12 @@ class FakeSim:
 
     def add(self, **kwargs):
         self.added.append(kwargs)
-        if "hash" in kwargs:
-            self.particles[kwargs["hash"]] = core.rng
+        if "name" in kwargs:
+            self.particles[kwargs["name"]] = core.rng
 
-    def remove(self, hashh):
-        self.removed.append(hashh)
-        self.particles.pop(hashh, None)
+    def remove(self, nameh):
+        self.removed.append(nameh)
+        self.particles.pop(nameh, None)
 
 
 class TestToRebound:
@@ -550,8 +550,8 @@ class TestToRebound:
         )
         assert isinstance(result, FakeSim)
         # Should have two stars and one planet
-        hashes = [a["hash"] for a in fake_sim.added]
-        assert "st1" in hashes and "pl1" in hashes and "pl2" in hashes
+        namees = [a["name"] for a in fake_sim.added]
+        assert "st1" in namees and "pl1" in namees and "pl2" in namees
 
     def test_to_rebound_fillna_false(self, simple_system):
         sys = simple_system
@@ -568,5 +568,5 @@ class TestToRebound:
             sim=fake_sim, fillna=False, units=True, verbose=False
         )
         assert isinstance(res, FakeSim)
-        hashes = [a["hash"] for a in fake_sim.added]
-        assert "nuevo" in hashes
+        namees = [a["name"] for a in fake_sim.added]
+        assert "nuevo" in namees
