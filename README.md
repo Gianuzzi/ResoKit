@@ -3,8 +3,8 @@
 ![logo](https://github.com/gianuzzi/resokit/raw/main/docs/source/_static/resokit_logo.png)
 
 <!-- BODY -->
-
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://badge.fury.io/py/uttrs)
+[![PyPI](https://img.shields.io/pypi/v/resokit.svg)](https://pypi.org/project/resokit/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-round&logo=python&logoColor=white)](https://python.org)
 [![ResoKit CI](https://github.com/Gianuzzi/ResoKit/actions/workflows/CI.yml/badge.svg)](https://github.com/Gianuzzi/ResoKit/actions/workflows/CI.yml)
 [![Documentation Status](https://readthedocs.org/projects/resokit/badge/?version=latest)](https://resokit.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://tldrlegal.com/license/mit-license)
