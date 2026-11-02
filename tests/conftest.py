@@ -267,6 +267,11 @@ def sample_bin_p_txt_path():
 
 
 @pytest.fixture(scope="session")
+def sample_bin_s_txt_path():
+    return Path(__file__).parent / "data" / "sample_bin_s.txt"
+
+
+@pytest.fixture(scope="session")
 def mock_csv_data():
     return """name,star_name,orbital_period,eccentricity,mass
 109 Psc b,109 Psc,1075.4,0.104,5.743

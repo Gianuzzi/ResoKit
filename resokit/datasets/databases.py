@@ -34,7 +34,10 @@ from resokit.core import MetaData, ResokitDataFrame, df_to_resokit
 from resokit.datasets.utils import (
     BINARIES_COLUMNS,
     BINARIES_FILENAMES,
+    BINARIES_MULTIPLE_COLUMN,
+    BINARIES_N_SYSTEM_COLUMNS,
     BINARIES_URLS,
+    BINARIES_WIDTHS,
     DATASETS_DIR,
     DATASET_DTYPES,
     DATASET_FILENAMES,
@@ -1561,16 +1564,23 @@ class BinaryDatasetManager:
 
     @staticmethod
     def _extract_header_and_data(
-        lines: List[str], circumbinary: bool, inferr: bool
+        lines: List[str], letter: str, inferr: bool
     ) -> Tuple[str, pd.DataFrame]:
         """Extract header and data from lines of the dataset.
+
+        Each system has a first line with the binary (system) data and
+        the data of one planet. If the system has more than one planet,
+        there is an additional line for each additional planet, with the
+        system columns left blank. The returned DataFrame has one row per
+        planet, with the system columns filled for every row, and a
+        MultiIndex (`system`, `planet`).
 
         Parameters
         ----------
         lines : List[str]
             Lines of the dataset.
-        circumbinary : bool
-            Whether the dataset is circumbinary.
+        letter : str
+            Which dataset: 'p' (circumbinary) or 's' (simple).
         inferr : bool
             Whether the width of the columns is inferred.
             If False, the width of the columns is fixed.
@@ -1583,43 +1593,121 @@ class BinaryDatasetManager:
             data : pd.DataFrame
                 The dataset as a pandas DataFrame.
         """
-        # Find the index of the last line that starts with "Note:"
-        # (or any number of hyphens)
-        separator_index = len(lines)
+        # Find the index of the last line made of hyphens.
+        # The data starts after it.
+        separator_index = None
         for i, line in enumerate(reversed(lines)):
-            stripped = line.strip()
-            if stripped.startswith("Note:") or stripped.startswith("-"):
+            if line.strip().startswith("---"):
                 separator_index = len(lines) - i
                 break
 
         # Check if the separator was found
-        if separator_index == len(lines):
+        if separator_index is None or separator_index == len(lines):
             raise ValueError("Separator line not found.")
 
-        # The header is everything before the separator line
+        # The header is everything before (and including) the separator line
         header = "".join(lines[:separator_index]).strip()
 
-        # The data starts after the last "Note:" line, so we extract the data
+        # Some lines may contain a tab instead of a single space
         data_lines = [
-            line.replace("\t", " ") for line in lines[separator_index:]
+            line.replace("\t", " ").rstrip("\r\n") + "\n"
+            for line in lines[separator_index:]
+            if line.strip()
         ]
 
         # Define widths for fixed-width formatted data
+        columns = BINARIES_COLUMNS[letter]
         kwargs = {}
         if inferr:
             kwargs["colspecs"] = "infer"
-        elif circumbinary:
-            kwargs["widths"] = [15, 10, 6, 6, 8, 2, 7, 7, 2, 10, 6, 9, 8, 8]
         else:
-            kwargs["widths"] = [15, 10, 6, 6, 8, 2, 8, 7, 2, 8, 6, 9, 7, 8]
+            kwargs["widths"] = BINARIES_WIDTHS[letter]
 
         # Use pandas to read the fixed-width formatted data
-        # starting after the header
+        # starting after the header. Names and IDs are kept as strings
+        str_cols = ["star0_name", "alternate_name", "gaia_id"]
         data = pd.read_fwf(
-            StringIO("".join(data_lines)), header=None, **kwargs
+            StringIO("".join(data_lines)),
+            header=None,
+            names=columns,
+            dtype={col: "string" for col in str_cols if col in columns},
+            skip_blank_lines=True,
+            **kwargs,
+        )
+
+        # Identify the systems: The first line of each system has a name
+        system_cols = columns[: BINARIES_N_SYSTEM_COLUMNS[letter]]
+        is_first = data["star0_name"].notna()
+        if len(data) > 0 and not is_first.iloc[0]:
+            raise ValueError("First data line does not define a system.")
+        system = is_first.cumsum() - 1
+        planet = data.groupby(system).cumcount()
+
+        # Fill the system columns of the additional planets
+        data[system_cols] = data[system_cols].ffill()
+
+        # Integer columns
+        for col in ["disc_method", "nplanets"]:
+            data[col] = data[col].astype("Int64")
+
+        # The "*" suffix indicates a system of higher multiplicity
+        names = data["star0_name"].str.strip()
+        data[BINARIES_MULTIPLE_COLUMN] = names.str.endswith("*")
+        data["star0_name"] = names.str.rstrip("*").str.strip()
+
+        # Set the (system, planet) index
+        data.index = pd.MultiIndex.from_arrays(
+            [system.to_numpy(), planet.to_numpy()],
+            names=["system", "planet"],
         )
 
         return header, data
+
+    @staticmethod
+    def _format_data(
+        data: pd.DataFrame,
+        planets: bool,
+        clean: bool,
+        rename_columns: bool,
+    ) -> pd.DataFrame:
+        """Format the stored (one row per planet) binary data.
+
+        Parameters
+        ----------
+        data : pd.DataFrame
+            The stored dataset, with one row per planet.
+        planets : bool
+            If True, return one row per planet, indexed by
+            (`system`, `planet`). If False, return one row per system
+            (with the data of the first listed planet), indexed by `system`.
+        clean : bool
+            If True, replace the unknown values with NaN.
+        rename_columns : bool
+            If True, keep the named columns. If False, use integer
+            column labels (the position of the column).
+
+        Returns
+        -------
+        pd.DataFrame
+            The formatted dataset.
+        """
+        if planets:
+            df = data.copy()
+        else:
+            df = data.xs(0, level="planet").copy()
+
+        # Clean if requested
+        if clean:
+            df.loc[df["e"] > 98, "e"] = np.nan  # eccentricity
+            df.loc[df["imut"] > 998, "imut"] = np.nan  # imutual
+            if "gaia_id" in df.columns:
+                df.loc[df["gaia_id"] == "0", "gaia_id"] = pd.NA
+
+        # Rename columns if requested
+        if not rename_columns:
+            df.columns = range(len(df.columns))
+
+        return df
 
     def load(
         self,
@@ -1632,6 +1720,7 @@ class BinaryDatasetManager:
         inferr: bool = False,
         clean: bool = True,
         verbose: bool = True,
+        planets: bool = False,
     ) -> Union[pd.DataFrame, str]:
         """Read the provided multi-star system dataset."""
         # Check the source
@@ -1686,15 +1775,12 @@ class BinaryDatasetManager:
             elif not self._datasets[letter].empty:
                 if verbose:
                     print(f"Loading the type-{letter} dataset from memory.")
-                df = self._datasets[letter].copy()
-                # Clean if requested
-                if clean:
-                    df.loc[df[7] > 98, 7] = pd.NA  # eccentricity
-                    df.loc[df[13] > 998, 13] = pd.NA  # imutual
-                # Rename columns if requested
-                if rename_columns:
-                    df.columns = BINARIES_COLUMNS
-                return df
+                return self._format_data(
+                    self._datasets[letter],
+                    planets=planets,
+                    clean=clean,
+                    rename_columns=rename_columns,
+                )
 
         # Load the dataset from the file
         if file_path is not None:
@@ -1708,7 +1794,7 @@ class BinaryDatasetManager:
 
         # Extract header and data from lines
         header, data = self._extract_header_and_data(
-            lines=lines, circumbinary=circumbinary, inferr=inferr
+            lines=lines, letter=letter, inferr=inferr
         )
 
         # Store the data and header in memory
@@ -1717,20 +1803,16 @@ class BinaryDatasetManager:
         if verbose:
             print(f"Stored the type-{letter} dataset and header into memory.")
 
-        # Clean data
-        if clean:
-            data.loc[data[7] > 98, 7] = pd.NA  # eccentricity
-            data.loc[data[13] > 998, 13] = pd.NA  # imutual
-
-        # Rename columns
-        if rename_columns:
-            data.columns = BINARIES_COLUMNS
-
         # Return the header if requested
         if ret_header:
             return header
 
-        return data
+        return self._format_data(
+            data,
+            planets=planets,
+            clean=clean,
+            rename_columns=rename_columns,
+        )
 
     def download(
         self,
@@ -1744,6 +1826,7 @@ class BinaryDatasetManager:
         verbose: bool = True,
         chunk_size: int = 1024,
         print_size: float = 0.00001,
+        planets: bool = False,
     ) -> Union[Path, pd.DataFrame, None]:
         """Download a dataset from a specified source and save it locally."""
         # Check the source
@@ -1843,25 +1926,24 @@ class BinaryDatasetManager:
         if to_memory or return_data:
             header, df = self._extract_header_and_data(
                 lines=StringIO(data.decode(encoding="utf-8")).readlines(),
-                circumbinary=circumbinary,
+                letter=letter,
                 inferr=False,
             )
             if to_memory:
                 # Store the data in memory
                 self._headers[letter] = header
-                self._datasets[letter] = df
+                self._datasets[letter] = df.copy(deep=True)
                 if verbose:
                     print(f" Stored the type-{letter} dataset in memory.")
 
         # Return the data
         if return_data:
-            # Try to rename the columns
-            try:
-                df.columns = BINARIES_COLUMNS
-            except ValueError:
-                if verbose:
-                    print("Columns could not be renamed.")
-            return df
+            return self._format_data(
+                df,
+                planets=planets,
+                clean=False,
+                rename_columns=True,
+            )
 
         # Return the path
         if len(fpaths) > 0:
@@ -2344,6 +2426,7 @@ def load_binary(
     inferr: bool = False,
     clean: bool = True,
     verbose: bool = True,
+    planets: bool = False,
 ) -> Union[pd.DataFrame, str]:
     """Load a binary dataset.
 
@@ -2376,6 +2459,11 @@ def load_binary(
         If True, replace the unknown values with NaN.
     verbose : bool, optional. Default: True.
         If True, print the header and messages.
+    planets : bool, optional. Default: False.
+        If False, return one row per system, indexed by `system`, with the
+        planet columns describing the first listed planet of the system
+        (the innermost for p-type, the outermost for s-type).
+        If True, return one row per planet, indexed by (`system`, `planet`).
 
     Returns
     -------
@@ -2401,6 +2489,7 @@ def load_binary(
         inferr=inferr,
         clean=clean,
         verbose=verbose,
+        planets=planets,
     )
 
 
@@ -2415,6 +2504,7 @@ def download_binary(
     verbose: bool = True,
     chunk_size: int = 1024,
     print_size: float = 0.00001,
+    planets: bool = False,
 ) -> Union[Path, pd.DataFrame, None, dict]:
     """Download a binary dataset from a specified source and save it locally.
 
@@ -2456,6 +2546,10 @@ def download_binary(
         Default is 1024 bytes (1 KB).
     print_size: float, optional. Default: 0.15.
         Update frequency for the download progress bar.
+    planets : bool, optional. Default: False.
+        Only used if `return_data` is `True`.
+        If False, return one row per system.
+        If True, return one row per planet.
 
     Returns
     -------
@@ -2476,6 +2570,7 @@ def download_binary(
             verbose=verbose,
             chunk_size=chunk_size,
             print_size=print_size,
+            planets=planets,
         )
         p = download_binary(
             which="circumbinary",
@@ -2488,6 +2583,7 @@ def download_binary(
             verbose=verbose,
             chunk_size=chunk_size,
             print_size=print_size,
+            planets=planets,
         )
         if return_data:
             return {"s": s, "p": p}
@@ -2503,6 +2599,7 @@ def download_binary(
         verbose=verbose,
         chunk_size=chunk_size,
         print_size=print_size,
+        planets=planets,
     )
 
 
@@ -2578,6 +2675,8 @@ def check_outdated(
         if verbose:
             print("")  # A space between prints
         nasa = check_outdated(which="nasa", verbose=verbose, soft=soft)
+        if verbose:
+            print("")  # A space between prints
         return eu, nasa
     if which == "all":
         both = check_outdated(which="both", verbose=verbose, soft=soft)
@@ -2718,6 +2817,8 @@ def check_binary_outdated(
         if verbose:
             print("")  # A space between prints
         s = check_binary_outdated(which="s", verbose=verbose, soft=soft)
+        if verbose:
+            print("")  # A space between prints
         return p, s
     if which not in BINARIES_FILENAMES:
         if which in DATASET_FILENAMES:
@@ -2731,7 +2832,7 @@ def check_binary_outdated(
     # Check if the dataset is stored
     try:
         header = _binary_manager.load(source=which, ret_header=True)
-        df = _binary_manager.load(source=which, ret_header=False)
+        df = _binary_manager.load(source=which, ret_header=False, planets=True)
     except FileNotFoundError as error:
         if verbose:
             print(

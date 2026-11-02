@@ -532,29 +532,74 @@ QUERY_LENGTH_URL = {
 # No ZIP here, only txt
 
 # Filenames and URLs for the binaries datasets
-BINARIES_FILENAMES = {"p": "plan_circ.txt", "s": "plan_bin500aun.txt"}
+BINARIES_FILENAMES = {"p": "plan_circall.txt", "s": "plan_allbinallg.txt"}
 BINARIES_URLS = {
-    "p": "https://lesia.obspm.fr/perso/philippe-thebault/plan_circ.txt",
-    "s": "https://lesia.obspm.fr/perso/philippe-thebault/plan_bin500aun.txt",
+    "p": "https://lira.obspm.fr/perso/philippe-thebault/plan_circall.txt",
+    "s": "https://lira.obspm.fr/perso/philippe-thebault/plan_allbinallg.txt",
 }
 
-# Columns of the binaries datasets
-BINARIES_COLUMNS = [
-    "star0_name",
-    "alternate_name",
-    "star0_mass",
-    "star1_mass",
-    "dist",
-    "disc_method",
-    "a",
-    "e",
-    "nplanets",
+# System (binary) columns of the binaries datasets.
+# These are only present in the first line of each system.
+_BINARIES_SYSTEM_COLUMNS = {
+    "p": [
+        "star0_name",
+        "alternate_name",
+        "star0_mass",
+        "star1_mass",
+        "dist",
+        "disc_method",
+        "a",
+        "e",
+        "nplanets",
+    ],
+    "s": [
+        "star0_name",
+        "alternate_name",
+        "gaia_id",
+        "star0_mass",
+        "star1_mass",
+        "dist",
+        "disc_method",
+        "a",
+        "e",
+        "nplanets",
+    ],
+}
+
+# Planet columns of the binaries datasets.
+# There is one line per planet (additional planets in extra lines).
+_BINARIES_PLANET_COLUMNS = [
     "planet_a",
     "planet_e",
     "planet_mass",
     "planet_HW_crit",
     "imut",
 ]
+
+# Columns of the binaries datasets (as in the files)
+BINARIES_COLUMNS = MappingProxyType(
+    {
+        key: cols + _BINARIES_PLANET_COLUMNS
+        for key, cols in _BINARIES_SYSTEM_COLUMNS.items()
+    }
+)
+
+# Number of system columns (the rest are planet columns)
+BINARIES_N_SYSTEM_COLUMNS = MappingProxyType(
+    {key: len(cols) for key, cols in _BINARIES_SYSTEM_COLUMNS.items()}
+)
+
+# Fixed widths of the columns of the binaries datasets
+BINARIES_WIDTHS = MappingProxyType(
+    {
+        "p": [15, 10, 6, 6, 8, 2, 7, 7, 2, 10, 6, 9, 8, 8],
+        "s": [15, 10, 21, 6, 6, 8, 2, 11, 7, 2, 8, 6, 9, 10, 7],
+    }
+)
+
+# Extra column added when parsing: whether the system is of a higher
+# multiplicity (triple or more), indicated with a "*" suffix in the name
+BINARIES_MULTIPLE_COLUMN = "multiple"
 
 # Default key columns to use to match old and new rows
 DEFAULT_KEY_COLS = {

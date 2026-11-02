@@ -16,6 +16,7 @@ import pytest
 
 import resokit.datasets.databases as rdb
 from resokit.datasets.databases import (
+    BINARIES_COLUMNS,
     BINARIES_FILENAMES,
     DATASET_FILENAMES,
     DATASET_ZIPNAMES,
@@ -474,6 +475,76 @@ class TestDownloadAndLoadBinary:
 
         assert isinstance(df, pd.DataFrame)
 
+    def test_load_p_planets(self, sample_bin_p_txt_path):
+        systems = rdb.load_binary(
+            which="p",
+            from_memory=False,
+            from_file=sample_bin_p_txt_path,
+            dir_path=False,
+            verbose=False,
+        )
+        planets = rdb.load_binary(which="p", planets=True, verbose=False)
+
+        assert list(systems.columns) == list(BINARIES_COLUMNS["p"]) + [
+            "multiple"
+        ]
+        assert systems.index.name == "system"
+        assert planets.index.names == ["system", "planet"]
+        # One line per planet
+        assert len(planets) > len(systems)
+        assert (
+            planets.groupby(level="system").size() == systems["nplanets"]
+        ).all()
+
+        # Multi-planet system: system columns are repeated
+        idx = systems.index[systems["star0_name"] == "NNSer"][0]
+        nnser = planets.loc[idx]
+        assert len(nnser) == 3
+        assert (nnser["star0_name"] == "NNSer").all()
+        assert list(nnser["planet_a"]) == [3.39, 5.38, 6.43]
+
+        # Higher multiplicity "*" suffix removed from the name
+        bxtri = systems[systems["star0_name"] == "BX Tri"]
+        assert len(bxtri) == 1
+        assert bxtri["multiple"].iloc[0]
+
+        # Clean unknown values
+        assert systems["imut"].isna().all()
+
+    def test_load_s(self, sample_bin_s_txt_path):
+        raw = rdb.load_binary(
+            which="s",
+            from_memory=False,
+            from_file=sample_bin_s_txt_path,
+            dir_path=False,
+            clean=False,
+            verbose=False,
+        )
+        systems = rdb.load_binary(which="s", verbose=False)
+        planets = rdb.load_binary(which="s", planets=True, verbose=False)
+
+        assert list(systems.columns) == list(BINARIES_COLUMNS["s"]) + [
+            "multiple"
+        ]
+        # Line with a tab in it
+        hd42936 = systems.iloc[0]
+        assert hd42936["star0_name"] == "HD42936"
+        assert hd42936["alternate_name"] == "DMPP-3"
+        assert hd42936["gaia_id"] == "5266148569447305600"
+        assert hd42936["star0_mass"] == 0.9
+        assert hd42936["imut"] != hd42936["imut"]  # NaN
+        # Unknown values are kept when not cleaned
+        assert raw.iloc[0]["imut"] == 999.0
+        assert pd.isna(systems.loc[4, "gaia_id"])
+        assert raw.loc[4, "gaia_id"] == "0"
+        # Multi-planet system
+        idx = systems.index[systems["star0_name"] == "Kepler968"][0]
+        assert len(planets.loc[idx]) == 3
+        assert (planets.loc[idx]["a"] == 5.3).all()
+
+        # Do not leave the s-type dataset in memory for other tests
+        rdb.clear_memory("s", verbose=False)
+
     @pytest.mark.parametrize("source", ["p", "s"])
     def test_load_error(self, source, test_dir):
         wrong_filepath = test_dir / "wrong.csv"
@@ -607,7 +678,7 @@ class TestBinaryOutdated:
             def __init__(self):
                 self.calls = 0
 
-            def load(self, source, ret_header):
+            def load(self, source, ret_header, **kwargs):
                 self.calls += 1
                 if ret_header:
                     return "header\nrow1\nrow2"
