@@ -58,6 +58,7 @@ _units = {
         "day": 86400.0,  # day → s
         "year": 31557600.0,  # year → s
         "yr": 31557600,  # alias 2
+        "Gyr": 3.15576e16,  # Gyr → s
     },
     "angle": {
         "rad": 1.0,
