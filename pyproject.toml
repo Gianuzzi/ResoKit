@@ -9,7 +9,7 @@ authors = [
   {name = "Emmanuel Gianuzzi", email = "egianuzzi@unc.edu.ar"},
   {name = "Matías Cerioni", email = "matias.cerioni@unc.edu.ar"}
 ]
-license = {text = "MIT"}
+license = "MIT"
 readme = "README.md"
 description = "Miscellaneous tools for the analysis of planetary systems."
 keywords = ["resokit", "planetary systems", "resonances", "databases"]
@@ -17,7 +17,6 @@ classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Education",
   "Intended Audience :: Science/Research",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.10",
