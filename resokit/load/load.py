@@ -812,7 +812,7 @@ def check_if_binary(
                     + " Txt file not found.\n"
                     + " Try downloading with "
                     + "resokit.datasets.download_binary"
-                    + f"_dataset({which=}, to_file=True)"
+                    + f"({which=}, to_file=True)"
                 )
             if circumbinary:  # Try both...
                 continue
