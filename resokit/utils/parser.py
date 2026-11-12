@@ -89,6 +89,9 @@ _EU_MAPPING = MappingProxyType(
         "star_radius_error_min": "star_radius_err_min",
         "star_radius_error_max": "star_radius_err_max",
         # System/Star columns
+        "star_age": "star_age",
+        "star_age_error_min": "star_age_err_min",
+        "star_age_error_max": "star_age_err_max",
         "star_distance": "star_dist",
         "star_distance_error_min": "star_dist_err_min",
         "star_distance_error_max": "star_dist_err_max",
@@ -140,6 +143,9 @@ _NASA_MAPPING = MappingProxyType(
         "st_raderr1": "star_radius_err_min",
         "st_raderr2": "star_radius_err_max",
         # System/Star columns
+        "st_age": "star_age",
+        "st_ageerr1": "st_age_err_min",
+        "st_ageerr2": "st_age_err_max",
         "sy_dist": "star_dist",
         "sy_disterr1": "star_dist_err_min",
         "sy_disterr2": "star_dist_err_max",
@@ -207,6 +213,9 @@ RESO_SR_TYPES = MappingProxyType(
         "star_dist": "float64",
         "star_dist_err_min": "float64",
         "star_dist_err_max": "float64",
+        "star_age": "float64",
+        "star_age_err_min": "float64",
+        "star_age_err_max": "float64",
     }
 )
 
@@ -319,6 +328,8 @@ _EU_QUERY_MAPPING = MappingProxyType(
         "star_radius": "star_radius",
         "star_spec_type": "star_sp_type",
         "star_age": "star_age",
+        "star_age_error_min": "star_age_error_min",
+        "star_age_error_max": "star_age_error_max",
         "star_teff": "star_teff",
         "detected_disc": "star_detected_disc",
         "magnetic_field": "star_magnetic_field",
